@@ -16,7 +16,8 @@ const APP_CONFIG = Object.freeze({
     EXPORT: { name: 'Export_ID', aliases: [] },
     AUDIT: { name: 'Audit Log', aliases: [] },
     FILES: { name: 'Generated Files', aliases: [] },
-    ACCESS: { name: 'Config_Access', aliases: [] }
+    ACCESS: { name: 'Config_Access', aliases: [] },
+    SIGNATURE: { name: 'Signature_Config', aliases: [] }
   },
   ACTIVITY_TYPES: ['Edu Fair', 'Campus Visit', 'Penugasan Narasumber'],
   DOCUMENT_TYPES: [
@@ -207,6 +208,7 @@ const TRAVEL_HEADERS = Object.freeze([
 ]);
 
 const CC_HEADERS = Object.freeze(['Fakultas/Unit', 'Jabatan', 'Email']);
+const SIGNATURE_HEADERS = Object.freeze(['Nama', 'Jabatan', 'NIK']);
 const ACCESS_HEADERS = Object.freeze(['Email', 'Active', 'Role']);
 const AUDIT_HEADERS = Object.freeze([
   'Log ID', 'Timestamp', 'User', 'Action', 'Entity ID', 'Success', 'Details JSON'

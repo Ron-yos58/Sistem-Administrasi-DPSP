@@ -65,12 +65,15 @@ Jalankan migrasi hanya bila `Master Permohonan` sudah berisi data lama.
 1. Jalankan `previewLegacyMigration`.
 2. Baca execution log.
 3. Pastikan `ready: true`.
-4. Jalankan `migrateLegacyData` dengan parameter `MIGRATE`.
+4. Jalankan `migrateLegacyDataConfirmed` dari menu Run (wrapper tanpa parameter), atau panggil `migrateLegacyData('MIGRATE')` dari eksekusi terprogram.
+
+Jika data lama sudah terlanjur dimigrasi saat kolom `ID Permohonan` masih kosong, jalankan `repairMigratedMasterIds` sekali untuk mengisi ID pada `Master Permohonan` agar data muncul di Ringkasan/Permohonan.
 
 Migrasi:
 
-- membuat sheet backup tersembunyi,
+- membuat backup tersembunyi untuk Master, Pegawai, Perjadin, dan Dokumen,
 - menggabungkan ID duplikat menjadi satu permohonan,
+- membuat `LEGACY-xxxx` otomatis bila kolom ID Permohonan lama kosong,
 - memindahkan setiap surat ke `Dokumen Permohonan`,
 - membuat tanggal ISO dan `Participant Key`,
 - mempertahankan link Doc lama yang dapat dikenali.

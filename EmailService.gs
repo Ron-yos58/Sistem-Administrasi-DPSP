@@ -130,7 +130,9 @@ function buildEmailPreviewForDocument_(document) {
   const template = getEmailTemplate_(document.type, request.speakerStatus);
   const placeholders = buildEmailPlaceholders_(detail, document, routing);
   const subject = replaceTemplateTokens_(template.subject, placeholders, false);
-  const htmlBody = replaceTemplateTokens_(template.body, placeholders, true);
+  const isHtmlTemplate = isExplicitHtmlTemplate_(template.body);
+  const renderedBody = replaceTemplateTokens_(template.body, placeholders, isHtmlTemplate);
+  const htmlBody = isHtmlTemplate ? renderedBody : normalizeEmailHtml_(renderedBody);
 
   return {
     documentId: document.id,
@@ -146,6 +148,52 @@ function buildEmailPreviewForDocument_(document) {
     hasAttachment: Boolean(document.pdfId && driveFileExists_(document.pdfId)),
     attachmentUrl: document.pdfUrl || ''
   };
+}
+
+function normalizeEmailHtml_(html) {
+  const source = String(html || '').trim();
+  if (!source) return '';
+
+  // Keep explicit HTML templates unchanged.
+  if (isExplicitHtmlTemplate_(source)) return source;
+
+  let text = source
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n?/g, '\n')
+    .trim();
+
+  // Handle inline legacy templates where placeholders and salutations are stuck together.
+  text = text
+    .replace(/\s*Kepada\s+Yth\.?\s*:?[ \t]*/gi, 'Kepada Yth.:\n')
+    .replace(/\s*Dengan hormat,?/gi, '\n\nDengan hormat,')
+    .replace(/\s*Menanggapi surat/gi, '\n\nMenanggapi surat')
+    .replace(/\s*dengan ini kami menyampaikan/gi, '\n\nDengan ini kami menyampaikan')
+    .replace(/\s*Hari,\s*tanggal\s*:?/gi, '\n\nHari, tanggal:')
+    .replace(/\s*Waktu\s*:?/gi, '\nWaktu:')
+    .replace(/\s*Tempat\s*:?/gi, '\nTempat:')
+    .replace(/\s*Atas perhatian/gi, '\n\nAtas perhatian')
+    .replace(/\s*Hormat kami,?/gi, '\n\nHormat kami,')
+    .replace(/\s*Tembusan Yth\.?\s*:?/gi, '\n\nTembusan Yth.:')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  // Preserve manual paragraph separation from plain-text templates.
+  return text
+    .split(/\n\s*\n/)
+    .map(function(block) {
+      return '<p style="margin:0 0 12px 0;line-height:1.6">' +
+        escapeHtml_(block).replace(/\n/g, '<br>') +
+        '</p>';
+    })
+    .join('');
+}
+
+function isExplicitHtmlTemplate_(value) {
+  const text = String(value || '').trim();
+  if (!text || text.indexOf('<') === -1 || text.indexOf('>') === -1) return false;
+
+  // Only treat as HTML when common tags are present.
+  return /<(?:!doctype|html|head|body|title|style|script|p|div|span|br|hr|table|thead|tbody|tr|td|th|ul|ol|li|strong|em|b|i|u|h[1-6]|a|blockquote)\b|<\/[a-z][^>]*>/i.test(text);
 }
 
 function createEmailDraftInternal_(documentId, force, user) {

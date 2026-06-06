@@ -4,6 +4,7 @@
       bootstrap: null,
       requests: [],
       travel: [],
+      signers: [],
       currentDetail: null,
       currentTravel: null,
       activeView: 'dashboard'
@@ -87,6 +88,8 @@
       });
       document.getElementById('travelCostForm').addEventListener('submit', event => this.saveTravelCosts(event));
       document.getElementById('checkSystemButton').addEventListener('click', event => this.checkSystem(event.currentTarget));
+      document.getElementById('signerName').addEventListener('change', () => this.applySignerConfigFromForm_('name'));
+      document.getElementById('signerId').addEventListener('change', () => this.applySignerConfigFromForm_('nik'));
       document.querySelectorAll('[data-close-dialog]').forEach(button => {
         button.addEventListener('click', () => document.getElementById(button.dataset.closeDialog).close());
       });
@@ -118,7 +121,52 @@
         options.faculties.map(item => `
           <label><input type="checkbox" name="faculty" value="${this.escape(item)}"> ${this.escape(item)}</label>
         `).join('');
+      this.renderSignerOptions(options.signers || []);
       this.renderDocumentChoices([]);
+    },
+
+    renderSignerOptions(signers) {
+      this.state.signers = (signers || []).filter(item => item && (item.name || item.role || item.nik));
+      const select = document.getElementById('signerName');
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">Pilih penandatangan</option>' + this.state.signers.map(item => {
+        const label = [item.name, item.role, item.nik].filter(Boolean).join(' | ');
+        return `<option value="${this.escape(item.name || '')}" title="${this.escape(label)}">${this.escape(label)}</option>`;
+      }).join('');
+      if (currentValue) {
+        select.value = currentValue;
+      }
+    },
+
+    applySignerConfigFromForm_(source) {
+      const nameInput = document.getElementById('signerName');
+      const nikInput = document.getElementById('signerId');
+      const roleInput = document.getElementById('signerRole');
+      const name = nameInput.value.trim().toLowerCase();
+      const nik = nikInput.value.trim();
+      if (!name && !nik) {
+        roleInput.value = '';
+        this.updateReview();
+        return;
+      }
+
+      let match = null;
+      if (source === 'name' && name) {
+        match = this.state.signers.find(item => String(item.name || '').trim().toLowerCase() === name);
+      } else if (source === 'nik' && nik) {
+        match = this.state.signers.find(item => item.nik === nik);
+      } else {
+        match = this.state.signers.find(item =>
+          (name && String(item.name || '').trim().toLowerCase() === name) ||
+          (nik && item.nik === nik)
+        );
+      }
+      if (!match) return;
+
+      if (match.name) nameInput.value = match.name;
+      if (match.nik) nikInput.value = match.nik;
+      if (match.role) roleInput.value = match.role;
+      this.updateReview();
     },
 
     switchView(view) {

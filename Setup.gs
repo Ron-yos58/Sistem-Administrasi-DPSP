@@ -14,6 +14,7 @@ function setupSystem() {
     ensureSheet_(ss, 'AUDIT', AUDIT_HEADERS, report);
     ensureSheet_(ss, 'FILES', GENERATED_FILE_HEADERS, report);
     ensureSheet_(ss, 'ACCESS', ACCESS_HEADERS, report);
+    ensureSheet_(ss, 'SIGNATURE', SIGNATURE_HEADERS, report);
 
     seedExportFolder_();
     seedEmailTemplates_();
@@ -107,7 +108,7 @@ function seedEmailTemplates_() {
 }
 
 function formatSystemSheets_() {
-  ['MASTER', 'DOCUMENTS', 'EMPLOYEES', 'TRAVEL', 'CC', 'EMAIL_TEMPLATE', 'EXPORT', 'AUDIT', 'FILES', 'ACCESS']
+  ['MASTER', 'DOCUMENTS', 'EMPLOYEES', 'TRAVEL', 'CC', 'EMAIL_TEMPLATE', 'EXPORT', 'AUDIT', 'FILES', 'ACCESS', 'SIGNATURE']
     .forEach(function(key) {
       const sheet = getSheet_(key);
       const width = Math.max(1, sheet.getLastColumn());

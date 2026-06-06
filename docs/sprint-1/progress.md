@@ -13,3 +13,17 @@
 - [x] Migrasi legacy
 - [x] Dokumentasi
 - [x] Pemeriksaan sintaks
+- [x] Hotfix migrasi legacy (normalisasi tipe dokumen) dan perbaikan layout checkbox dokumen
+- [x] Hotfix migrasi: pembacaan data legacy tidak bergantung kolom A dan wrapper migrateLegacyDataConfirmed
+- [x] Hotfix migrasi: kolom Jenis Surat ditulis satu enum agar lolos data validation sheet lama
+- [x] Hotfix UI form: checkbox Jenis dan Keluaran tidak lagi ter-style seperti textbox
+- [x] Hotfix data sinkronisasi: list/detail Index pakai sumber dokumen dari Dokumen Permohonan
+- [x] Hotfix refresh: normalisasi startDate/endDate ke YYYY-MM-DD agar parser tidak gagal
+- [x] Hotfix migrasi visibility: isi ID Permohonan saat migrasi + utility repairMigratedMasterIds
+- [x] Hotfix tanggal legacy: normalisasi nilai non-ISO pada start/end date agar Muat Ulang tidak error
+- [x] Hotfix generate dokumen: buildDocumentFileName aman untuk nomor surat non-string
+- [x] Hotfix draft Gmail: template teks otomatis dirender paragraf agar tidak inline
+- [x] Hotfix draft Gmail lanjutan: auto-break untuk template legacy yang menempel (D3Dengan, Hari/Waktu/Tempat)
+- [x] Hotfix preview email: deteksi HTML diperketat agar template teks tidak salah bypass formatter <br>
+- [x] Fitur referensi penandatangan: tambah sheet Signature_Config (Nama, Jabatan, NIK) + autofill form
+- [x] UI penandatangan: ubah input nama menjadi dropdown pilihan dari Signature_Config

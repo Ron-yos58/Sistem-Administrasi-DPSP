@@ -240,8 +240,10 @@ function replaceDocumentPlaceholders_(doc, values) {
 }
 
 function buildDocumentFileName_(request, document) {
-  const safeNumber = document.number.replace(/[^A-Za-z0-9_-]+/g, '-');
-  const safeType = document.type.replace(/[^A-Za-z0-9 ]+/g, '').replace(/\s+/g, '-');
+  const rawNumber = text_(document && document.number);
+  const rawType = text_(document && document.type);
+  const safeNumber = rawNumber.replace(/[^A-Za-z0-9_-]+/g, '-');
+  const safeType = rawType.replace(/[^A-Za-z0-9 ]+/g, '').replace(/\s+/g, '-');
   return [request.id, safeType, safeNumber].filter(Boolean).join('_').slice(0, 180);
 }
 
