@@ -129,4 +129,24 @@ test('ready task requires document number and employee', () => {
   if (!failed) throw new Error('validation did not reject incomplete ready request');
 });
 
+test('readDataRows reads rows even when first column is blank', () => {
+  const sheet = {
+    getLastRow: () => 4,
+    getRange: () => ({
+      getValues: () => [
+        ['', 'Andi', '123'],
+        ['REQ-1', 'Budi', '456'],
+        ['', '', '']
+      ]
+    })
+  };
+  equal(
+    JSON.parse(JSON.stringify(context.readDataRows_(sheet, 3))),
+    [
+      ['', 'Andi', '123'],
+      ['REQ-1', 'Budi', '456']
+    ]
+  );
+});
+
 if (!process.exitCode) console.log('PASS pure behavior tests');

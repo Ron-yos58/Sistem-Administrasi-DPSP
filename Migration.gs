@@ -121,18 +121,27 @@ function migrateLegacyData(confirmText) {
     ];
 
     const groups = {};
+    const legacyRequestIdMap = {};
     sourceRows.forEach(function(row, index) {
+      const explicitId = text_(row[0]);
       const id = resolveLegacyRequestId_(row, index).id;
       if (!groups[id]) groups[id] = [];
       groups[id].push(row);
+      if (explicitId && explicitId !== id) legacyRequestIdMap[explicitId] = id;
     });
 
     const employeeRows = readDataRows_(getSheet_('EMPLOYEES'), EMPLOYEE_HEADERS.length);
     const employeesByRequest = {};
     employeeRows.forEach(function(row) {
-      const id = text_(row[0]);
+      const originalId = text_(row[0]);
+      const participantKey = text_(row[8]);
+      const participantRequestId = participantKey.indexOf('|') !== -1 ? participantKey.split('|')[0] : '';
+      const mappedId = legacyRequestIdMap[originalId] || legacyRequestIdMap[participantRequestId] || originalId;
+      const id = text_(mappedId);
+      if (id && id !== originalId) row[0] = id;
       if (!employeesByRequest[id]) employeesByRequest[id] = [];
       if (!row[8]) row[8] = inferParticipantKey_(id, row[2], row[1]);
+      else if (participantRequestId && participantRequestId !== id) row[8] = normalizeParticipantKeyForRequest_(id, row[8]);
       employeesByRequest[id].push({
         name: row[1],
         identifier: row[2],
@@ -319,6 +328,91 @@ function repairMigratedMasterIds() {
       message: 'ID Master berhasil diperbaiki.'
     };
   });
+}
+
+function repairMigratedEmployeeIds() {
+  const user = assertAuthorized_();
+  assertCanWrite_(user);
+
+  return withScriptLock_(function() {
+    const employeeSheet = getSheet_('EMPLOYEES');
+    const rows = readDataRows_(employeeSheet, EMPLOYEE_HEADERS.length);
+    if (!rows.length) return { ok: true, updated: 0, message: 'Data Pegawai kosong.' };
+
+    const mapping = buildLegacyEmployeeRequestIdMap_();
+    const validRequestIds = {};
+    readDataRows_(getSheet_('MASTER'), MASTER_HEADERS.length).forEach(function(row) {
+      const id = text_(row[0]);
+      if (id) validRequestIds[id] = true;
+    });
+
+    let updated = 0;
+    rows.forEach(function(row) {
+      const currentId = text_(row[0]);
+      const participantKey = text_(row[8]);
+      const participantRequestId = participantKey.indexOf('|') !== -1 ? participantKey.split('|')[0] : '';
+      const repairedId = validRequestIds[currentId]
+        ? currentId
+        : (mapping[currentId] || mapping[participantRequestId] || '');
+
+      if (!repairedId || repairedId === currentId) {
+        if (participantRequestId && validRequestIds[currentId] && participantRequestId !== currentId) {
+          row[8] = normalizeParticipantKeyForRequest_(currentId, participantKey);
+          updated += 1;
+        }
+        return;
+      }
+
+      row[0] = repairedId;
+      row[8] = participantKey ? normalizeParticipantKeyForRequest_(repairedId, participantKey) : inferParticipantKey_(repairedId, row[2], row[1]);
+      updated += 1;
+    });
+
+    if (!updated) {
+      return {
+        ok: true,
+        updated: 0,
+        totalRows: rows.length,
+        message: 'Tidak ada ID pegawai yang perlu diperbaiki.'
+      };
+    }
+
+    rewriteDataRows_(employeeSheet, rows, EMPLOYEE_HEADERS.length);
+    clearAppCache_();
+    logAudit_('REPAIR_MIGRATED_EMPLOYEE_IDS', '', true, {
+      updated: updated,
+      totalRows: rows.length
+    });
+
+    return {
+      ok: true,
+      updated: updated,
+      totalRows: rows.length,
+      message: 'ID Data Pegawai berhasil diperbaiki.'
+    };
+  });
+}
+
+function buildLegacyEmployeeRequestIdMap_() {
+  const backupSheet = findLatestMigrationBackupSheet_('Backup Master ');
+  if (!backupSheet) return {};
+
+  const rows = readLegacyMasterRows_(backupSheet, MASTER_HEADERS.length);
+  return rows.reduce(function(map, row, index) {
+    const oldId = text_(row[0]);
+    const resolvedId = resolveLegacyRequestId_(row, index).id;
+    if (oldId && resolvedId && oldId !== resolvedId) map[oldId] = resolvedId;
+    return map;
+  }, {});
+}
+
+function findLatestMigrationBackupSheet_(prefix) {
+  const sheets = getSpreadsheet_().getSheets().filter(function(sheet) {
+    return sheet.getName().indexOf(prefix) === 0;
+  }).sort(function(a, b) {
+    return b.getName().localeCompare(a.getName());
+  });
+  return sheets.length ? sheets[0] : null;
 }
 
 function createMigrationBackup_(ss, sourceSheet, label, stamp) {

@@ -13,7 +13,8 @@
         speakerSubtypes: APP_CONFIG.SPEAKER_SUBTYPES,
         speakerStatuses: APP_CONFIG.SPEAKER_STATUSES,
         faculties: APP_CONFIG.FACULTIES,
-        signers: getSignatureConfigsInternal_()
+        signers: getSignatureConfigsInternal_(),
+        employeeCatalog: getEmployeeCatalogInternal_()
       },
       summary: buildDashboardSummary_(),
       requests: requests.items,
@@ -268,6 +269,32 @@
       .filter(function(item) {
         return item.name || item.role || item.nik;
       });
+  }
+
+  function getEmployeeCatalogInternal_() {
+    const rows = readDataRows_(getSheet_('EMPLOYEES'), EMPLOYEE_HEADERS.length);
+    const seen = {};
+    return rows.map(function(row) {
+      return {
+        name: text_(row[1], 250),
+        identifier: text_(row[2], 100),
+        role: text_(row[3], 200),
+        unit: text_(row[4], 200),
+        email: text_(row[5], 250),
+        rank: text_(row[6], 200),
+        category: text_(row[7], 200)
+      };
+    }).filter(function(item) {
+      if (!item.name && !item.identifier && !item.email) return false;
+      const key = [item.identifier, item.email.toLowerCase(), item.name.toLowerCase(), item.unit.toLowerCase()]
+        .filter(Boolean)
+        .join('|');
+      if (!key || seen[key]) return false;
+      seen[key] = true;
+      return true;
+    }).sort(function(a, b) {
+      return a.name.localeCompare(b.name) || a.identifier.localeCompare(b.identifier);
+    });
   }
 
   function buildDashboardSummary_() {
@@ -806,7 +833,7 @@
   }
 
   function readDataRows_(sheet, width) {
-    const lastRow = lastNonEmptyRowInColumn_(sheet, 1);
+    const lastRow = Math.max(Number(sheet.getLastRow()) || 0, 1);
     if (lastRow < 2) return [];
     return sheet.getRange(2, 1, lastRow - 1, width).getValues()
       .filter(function(row) {
@@ -815,7 +842,7 @@
   }
 
   function rewriteDataRows_(sheet, rows, width) {
-    const oldRows = Math.max(lastNonEmptyRowInColumn_(sheet, 1) - 1, 0);
+    const oldRows = Math.max((Number(sheet.getLastRow()) || 1) - 1, 0);
     if (oldRows) sheet.getRange(2, 1, oldRows, width).clearContent();
     if (rows.length) sheet.getRange(2, 1, rows.length, width).setValues(rows);
   }

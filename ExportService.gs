@@ -23,10 +23,13 @@ function generateAndExportFinance(requestId, kind, format) {
 
   return withScriptLock_(function() {
     const generated = generateFinanceSheetInternal_(id, reportKind);
+    const exportOptions = reportKind === 'PERJADIN'
+      ? { paperSize: 'A4', orientation: 'PORTRAIT' }
+      : { paperSize: 'A4', orientation: 'LANDSCAPE' };
     return exportGeneratedSheetInternal_(
       generated.sheetName,
       exportFormat,
-      { paperSize: 'A4', orientation: 'LANDSCAPE' },
+      exportOptions,
       user
     );
   });
@@ -107,7 +110,7 @@ function exportSheetPdfBlob_(ss, sheet, options) {
     fitw: true,
     sheetnames: false,
     printtitle: false,
-    pagenumbers: true,
+    pagenumbers: false,
     gridlines: false,
     fzr: false,
     top_margin: 0.5,

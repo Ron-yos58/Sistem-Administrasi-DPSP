@@ -5,6 +5,7 @@
       requests: [],
       travel: [],
       signers: [],
+      employeeCatalog: [],
       currentDetail: null,
       currentTravel: null,
       activeView: 'dashboard'
@@ -65,6 +66,10 @@
           this.updateReview();
         }
       });
+      document.getElementById('employeeList').addEventListener('change', event => {
+        const picker = event.target.closest('[data-employee-picker]');
+        if (picker) this.applyEmployeeCatalogToCard_(picker.closest('.employee-card'), picker.value);
+      });
       document.getElementById('resetForm').addEventListener('click', () => this.resetForm());
       document.getElementById('applyRequestFilter').addEventListener('click', () => this.loadRequests());
       document.getElementById('requestSearch').addEventListener('keydown', event => {
@@ -122,6 +127,7 @@
           <label><input type="checkbox" name="faculty" value="${this.escape(item)}"> ${this.escape(item)}</label>
         `).join('');
       this.renderSignerOptions(options.signers || []);
+      this.state.employeeCatalog = options.employeeCatalog || [];
       this.renderDocumentChoices([]);
     },
 
@@ -306,11 +312,23 @@
 
     addEmployee(employee = {}) {
       const index = document.querySelectorAll('.employee-card').length + 1;
+      const pickerOptions = this.state.employeeCatalog.map((item, itemIndex) => {
+        const label = [item.name, item.identifier, item.unit].filter(Boolean).join(' | ');
+        const selected = this.employeeCatalogMatches_(item, employee) ? 'selected' : '';
+        return `<option value="${itemIndex}" ${selected}>${this.escape(label)}</option>`;
+      }).join('');
       const card = document.createElement('div');
       card.className = 'employee-card';
       card.innerHTML = `
         <button type="button" class="remove-employee" aria-label="Hapus orang">×</button>
         <input type="hidden" data-employee-field="participantKey" value="${this.escape(employee.participantKey || '')}">
+        <label class="field field-wide">
+          <span>Pilih dari database pegawai</span>
+          <select data-employee-picker>
+            <option value="">Isi manual / pilih orang lama</option>
+            ${pickerOptions}
+          </select>
+        </label>
         <div class="field-grid">
           <label class="field"><span>Nama *</span><input data-employee-field="name" value="${this.escape(employee.name || '')}" placeholder="Orang ${index}"></label>
           <label class="field"><span>NIP/NPM</span><input data-employee-field="identifier" value="${this.escape(employee.identifier || '')}"></label>
@@ -322,6 +340,35 @@
         </div>
       `;
       document.getElementById('employeeList').appendChild(card);
+      this.updateReview();
+    },
+
+    employeeCatalogMatches_(catalogItem, employee) {
+      if (!employee) return false;
+      const catalogIdentifier = String(catalogItem.identifier || '').trim().toLowerCase();
+      const employeeIdentifier = String(employee.identifier || '').trim().toLowerCase();
+      const catalogEmail = String(catalogItem.email || '').trim().toLowerCase();
+      const employeeEmail = String(employee.email || '').trim().toLowerCase();
+      const catalogName = String(catalogItem.name || '').trim().toLowerCase();
+      const employeeName = String(employee.name || '').trim().toLowerCase();
+      return Boolean(
+        (catalogIdentifier && catalogIdentifier === employeeIdentifier) ||
+        (catalogEmail && catalogEmail === employeeEmail) ||
+        (catalogName && catalogName === employeeName)
+      );
+    },
+
+    applyEmployeeCatalogToCard_(card, selectedIndex) {
+      if (!card) return;
+      const item = this.state.employeeCatalog[Number(selectedIndex)];
+      if (!item) return;
+      card.querySelector('[data-employee-field="name"]').value = item.name || '';
+      card.querySelector('[data-employee-field="identifier"]').value = item.identifier || '';
+      card.querySelector('[data-employee-field="email"]').value = item.email || '';
+      card.querySelector('[data-employee-field="role"]').value = item.role || '';
+      card.querySelector('[data-employee-field="unit"]').value = item.unit || '';
+      card.querySelector('[data-employee-field="rank"]').value = item.rank || '';
+      card.querySelector('[data-employee-field="category"]').value = item.category || '';
       this.updateReview();
     },
 

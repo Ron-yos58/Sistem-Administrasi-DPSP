@@ -27,3 +27,7 @@
 - [x] Hotfix preview email: deteksi HTML diperketat agar template teks tidak salah bypass formatter <br>
 - [x] Fitur referensi penandatangan: tambah sheet Signature_Config (Nama, Jabatan, NIK) + autofill form
 - [x] UI penandatangan: ubah input nama menjadi dropdown pilihan dari Signature_Config
+- [x] Penyelarasan output finance: sheet honor/perjadin dan default ekspor PDF dibuat mendekati layout legacy
+- [x] Hotfix migrasi pegawai: remap ID `Data Pegawai` ke ID permohonan hasil migrasi + utility repairMigratedEmployeeIds
+- [x] UI pegawai: tambah picker dari database pegawai agar orang lama bisa dipilih tanpa input ulang
+- [x] Hotfix picker pegawai: pembacaan Data Pegawai tidak lagi bergantung kolom A sehingga opsi orang lama tetap muncul saat ID Permohonan kosong

@@ -69,6 +69,8 @@ Jalankan migrasi hanya bila `Master Permohonan` sudah berisi data lama.
 
 Jika data lama sudah terlanjur dimigrasi saat kolom `ID Permohonan` masih kosong, jalankan `repairMigratedMasterIds` sekali untuk mengisi ID pada `Master Permohonan` agar data muncul di Ringkasan/Permohonan.
 
+Jika `Data Pegawai` hasil migrasi tidak tampil di UI karena masih memakai ID lama yang berbeda dengan `Master Permohonan`, jalankan `repairMigratedEmployeeIds` sekali. Utility ini memakai sheet backup `Backup Master ...` terbaru untuk meremap `Data Pegawai` ke ID permohonan hasil migrasi.
+
 Migrasi:
 
 - membuat backup tersembunyi untuk Master, Pegawai, Perjadin, dan Dokumen,
@@ -76,6 +78,7 @@ Migrasi:
 - membuat `LEGACY-xxxx` otomatis bila kolom ID Permohonan lama kosong,
 - memindahkan setiap surat ke `Dokumen Permohonan`,
 - membuat tanggal ISO dan `Participant Key`,
+- meremap `Data Pegawai` ke ID hasil migrasi bila ID lama berubah,
 - mempertahankan link Doc lama yang dapat dikenali.
 
 Migrasi menolak berjalan bila `Dokumen Permohonan` sudah berisi data.
