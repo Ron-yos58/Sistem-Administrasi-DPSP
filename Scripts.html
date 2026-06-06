@@ -1,0 +1,767 @@
+<script>
+  const App = {
+    state: {
+      bootstrap: null,
+      requests: [],
+      travel: [],
+      currentDetail: null,
+      currentTravel: null,
+      activeView: 'dashboard'
+    },
+
+    async init() {
+      this.bindEvents();
+      this.resetForm();
+      try {
+        const data = await this.server('getBootstrapData');
+        this.state.bootstrap = data;
+        this.state.requests = data.requests || [];
+        this.hydrateUser(data);
+        this.populateOptions(data.options);
+        this.renderDashboard(data.summary, this.state.requests);
+        this.renderRequests(this.state.requests);
+        this.renderReferences(data.references);
+        this.updateFormVisibility();
+      } catch (error) {
+        this.showGlobalError(error);
+      } finally {
+        document.getElementById('bootLoader').classList.add('is-done');
+      }
+    },
+
+    server(method, ...args) {
+      return new Promise((resolve, reject) => {
+        const runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(error => reject(new Error(error && error.message ? error.message : String(error))));
+        runner[method](...args);
+      });
+    },
+
+    bindEvents() {
+      document.querySelectorAll('[data-view], [data-view-target]').forEach(button => {
+        button.addEventListener('click', () => this.switchView(button.dataset.view || button.dataset.viewTarget));
+      });
+      document.getElementById('menuToggle').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.toggle('is-open');
+      });
+      document.getElementById('refreshButton').addEventListener('click', () => this.refreshAll());
+      document.getElementById('activityType').addEventListener('change', () => this.updateFormVisibility());
+      document.getElementById('speakerSubtype').addEventListener('change', () => this.updateFormVisibility());
+      document.getElementById('documentChoices').addEventListener('change', () => {
+        this.updateFormVisibility(false);
+        this.updateReview();
+      });
+      document.getElementById('speakerStatusChoices').addEventListener('change', () => this.updateReview());
+      document.getElementById('facultyChoices').addEventListener('change', () => this.updateReview());
+      document.getElementById('requestForm').addEventListener('input', () => this.updateReview());
+      document.getElementById('requestForm').addEventListener('submit', event => this.saveRequest(event));
+      document.getElementById('addEmployee').addEventListener('click', () => this.addEmployee());
+      document.getElementById('employeeList').addEventListener('click', event => {
+        const button = event.target.closest('.remove-employee');
+        if (button) {
+          button.closest('.employee-card').remove();
+          this.updateReview();
+        }
+      });
+      document.getElementById('resetForm').addEventListener('click', () => this.resetForm());
+      document.getElementById('applyRequestFilter').addEventListener('click', () => this.loadRequests());
+      document.getElementById('requestSearch').addEventListener('keydown', event => {
+        if (event.key === 'Enter') this.loadRequests();
+      });
+      document.getElementById('requestTableBody').addEventListener('click', event => {
+        const button = event.target.closest('[data-request-id]');
+        if (button) this.openRequestDetail(button.dataset.requestId);
+      });
+      document.getElementById('recentRequests').addEventListener('click', event => {
+        const button = event.target.closest('[data-request-id]');
+        if (button) this.openRequestDetail(button.dataset.requestId);
+      });
+      document.getElementById('closeDrawer').addEventListener('click', () => this.closeDrawer());
+      document.getElementById('drawerBackdrop').addEventListener('click', () => this.closeDrawer());
+      document.getElementById('drawerBody').addEventListener('click', event => this.handleDetailAction(event));
+      document.getElementById('syncTravelButton').addEventListener('click', event => this.syncTravel(event.currentTarget));
+      document.getElementById('travelTableBody').addEventListener('click', event => {
+        const button = event.target.closest('[data-travel-key]');
+        if (button) this.openTravelModal(button.dataset.travelKey);
+      });
+      document.getElementById('travelCostForm').addEventListener('submit', event => this.saveTravelCosts(event));
+      document.getElementById('checkSystemButton').addEventListener('click', event => this.checkSystem(event.currentTarget));
+      document.querySelectorAll('[data-close-dialog]').forEach(button => {
+        button.addEventListener('click', () => document.getElementById(button.dataset.closeDialog).close());
+      });
+    },
+
+    hydrateUser(data) {
+      const email = data.user.email || 'Pengguna';
+      document.getElementById('userEmail').textContent = email;
+      document.getElementById('userRole').textContent = data.user.role || 'USER';
+      document.getElementById('userInitial').textContent = email.charAt(0).toUpperCase();
+      document.getElementById('appVersion').textContent = 'v' + data.app.version;
+    },
+
+    populateOptions(options) {
+      const typeSelect = document.getElementById('activityType');
+      typeSelect.innerHTML = '<option value="">Pilih tipe kegiatan</option>' +
+        options.activityTypes.map(item => `<option value="${this.escape(item)}">${this.escape(item)}</option>`).join('');
+      document.getElementById('requestTypeFilter').innerHTML =
+        '<option value="">Semua tipe</option>' +
+        options.activityTypes.map(item => `<option value="${this.escape(item)}">${this.escape(item)}</option>`).join('');
+      document.getElementById('speakerSubtype').innerHTML =
+        '<option value="">Pilih sub-tipe</option>' +
+        options.speakerSubtypes.map(item => `<option value="${this.escape(item)}">${this.escape(item)}</option>`).join('');
+      document.getElementById('speakerStatusChoices').innerHTML =
+        options.speakerStatuses.map(item => `
+          <label><input type="radio" name="speakerStatus" value="${this.escape(item)}"> ${this.escape(item)}</label>
+        `).join('');
+      document.getElementById('facultyChoices').innerHTML =
+        options.faculties.map(item => `
+          <label><input type="checkbox" name="faculty" value="${this.escape(item)}"> ${this.escape(item)}</label>
+        `).join('');
+      this.renderDocumentChoices([]);
+    },
+
+    switchView(view) {
+      const titles = {
+        dashboard: ['OPERASIONAL DPSP', 'Ringkasan'],
+        requests: ['DATA PERMOHONAN', 'Permohonan'],
+        form: ['FORMULIR TERPADU', document.getElementById('requestId').value ? 'Edit Permohonan' : 'Buat Permohonan'],
+        finance: ['HONOR DAN PERJADIN', 'Data Keuangan'],
+        references: ['KONFIGURASI', 'Data Referensi']
+      };
+      this.state.activeView = view;
+      document.querySelectorAll('.view').forEach(item => item.classList.remove('is-active'));
+      document.getElementById('view-' + view).classList.add('is-active');
+      document.querySelectorAll('[data-view]').forEach(item => item.classList.toggle('is-active', item.dataset.view === view));
+      document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('is-active', item.dataset.view === view));
+      document.getElementById('pageEyebrow').textContent = titles[view][0];
+      document.getElementById('pageTitle').textContent = titles[view][1];
+      document.getElementById('sidebar').classList.remove('is-open');
+      if (view === 'finance') this.loadTravel();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    renderDashboard(summary, requests) {
+      const metrics = [
+        ['Total aktif', summary.total, 'Semua permohonan'],
+        ['Draft', summary.drafts, 'Perlu dilengkapi'],
+        ['Dokumen antre', summary.documentsPending, 'Siap dibuat atau gagal'],
+        ['Email antre', summary.emailsPending, 'Siap menjadi draft']
+      ];
+      document.getElementById('metricGrid').innerHTML = metrics.map(item => `
+        <article class="metric-card">
+          <span class="metric-label">${this.escape(item[0])}</span>
+          <strong>${Number(item[1] || 0)}</strong>
+          <span>${this.escape(item[2])}</span>
+        </article>
+      `).join('');
+      document.getElementById('recentRequests').innerHTML = requests.slice(0, 6).map(item => `
+        <div class="request-row">
+          <div><strong>${this.escape(item.activityName || item.id)}</strong><small>${this.escape(item.id)} · ${this.escape(item.partnerName)}</small></div>
+          <div><span>${this.escape(item.dateDisplay || '-')}</span><small>${this.escape(item.activityType)}</small></div>
+          <button class="button button-secondary button-small" data-request-id="${this.escape(item.id)}">Buka</button>
+        </div>
+      `).join('') || '<div class="empty-state"><strong>Belum ada permohonan</strong><span>Mulai dari formulir baru.</span></div>';
+    },
+
+    renderRequests(items) {
+      const body = document.getElementById('requestTableBody');
+      body.innerHTML = items.map(item => `
+        <tr>
+          <td data-label="ID"><span class="table-primary">${this.escape(item.id)}</span><span class="table-secondary">${this.escape(item.updatedBy || item.createdBy || '-')}</span></td>
+          <td data-label="Kegiatan"><span class="table-primary">${this.escape(item.activityName || '-')}</span><span class="table-secondary">${this.escape(item.activityType)}</span></td>
+          <td data-label="Mitra">${this.escape(item.partnerName || '-')}</td>
+          <td data-label="Tanggal">${this.escape(item.dateDisplay || '-')}</td>
+          <td data-label="Dokumen"><span class="table-primary">${this.escape(item.documentTypes.join(', ') || '-')}</span></td>
+          <td data-label="Status">${this.statusBadge(item.status)}</td>
+          <td data-label="Aksi"><button class="button button-secondary button-small" data-request-id="${this.escape(item.id)}">Detail</button></td>
+        </tr>
+      `).join('');
+      document.getElementById('requestEmpty').classList.toggle('is-hidden', items.length > 0);
+    },
+
+    renderReferences(references) {
+      const rows = (references && references.cc) || [];
+      document.getElementById('referenceTableBody').innerHTML = rows.map(item => `
+        <tr><td data-label="Unit">${this.escape(item.unit)}</td><td data-label="Jabatan">${this.escape(item.role)}</td><td data-label="Email">${this.escape(item.email)}</td></tr>
+      `).join('');
+    },
+
+    async loadRequests() {
+      const filters = {
+        query: document.getElementById('requestSearch').value,
+        activityType: document.getElementById('requestTypeFilter').value,
+        status: document.getElementById('requestStatusFilter').value,
+        limit: 250
+      };
+      try {
+        const result = await this.server('listRequests', filters);
+        this.state.requests = result.items;
+        this.renderRequests(result.items);
+      } catch (error) {
+        this.toast(error.message, true);
+      }
+    },
+
+    allowedDocuments() {
+      const type = document.getElementById('activityType').value;
+      const subtype = document.getElementById('speakerSubtype').value;
+      const descriptions = {
+        'Surat Tugas': 'Penugasan petugas atau narasumber',
+        'Surat Balasan Campus Visit': 'Balasan resmi kepada mitra',
+        'Surat Rekomendasi Campus Visit - SU': 'Rekomendasi kepada Sekretaris Universitas',
+        'Surat izin pimpinan - Campus Visit': 'Permohonan izin kepada pimpinan',
+        'Surat Permohonan Narasumber kepada Dekan': 'Permohonan penugasan atau pencarian dosen'
+      };
+      let types = [];
+      if (type === 'Edu Fair') types = ['Surat Tugas'];
+      if (type === 'Campus Visit') types = ['Surat Tugas', 'Surat Balasan Campus Visit', 'Surat Rekomendasi Campus Visit - SU', 'Surat izin pimpinan - Campus Visit'];
+      if (type === 'Penugasan Narasumber') {
+        types = subtype === 'Promosi' ? ['Surat Tugas'] : ['Surat Tugas', 'Surat Permohonan Narasumber kepada Dekan'];
+      }
+      return types.map(typeName => ({ type: typeName, description: descriptions[typeName] }));
+    },
+
+    renderDocumentChoices(selectedDocuments) {
+      const selected = {};
+      (selectedDocuments || this.collectDocuments()).forEach(item => selected[item.type] = item);
+      const allowed = this.allowedDocuments();
+      document.getElementById('documentChoices').innerHTML = allowed.map((item, index) => {
+        const checked = selected[item.type] || (allowed.length === 1 && index === 0);
+        const number = selected[item.type] ? selected[item.type].number : '';
+        return `
+          <label class="choice-card">
+            <input type="checkbox" name="documentType" value="${this.escape(item.type)}" ${checked ? 'checked' : ''}>
+            <strong>${this.escape(item.type)}</strong>
+            <small>${this.escape(item.description)}</small>
+            <span class="document-number"><input type="text" data-document-number="${this.escape(item.type)}" value="${this.escape(number)}" placeholder="Nomor surat"></span>
+          </label>
+        `;
+      }).join('') || '<p class="helper-text">Pilih tipe kegiatan untuk menampilkan dokumen.</p>';
+    },
+
+    updateFormVisibility(rerenderDocuments = true) {
+      const type = document.getElementById('activityType').value;
+      const subtype = document.getElementById('speakerSubtype').value;
+      const oldDocuments = this.collectDocuments();
+      document.querySelectorAll('.speaker-only').forEach(item => item.classList.toggle('is-hidden', type !== 'Penugasan Narasumber'));
+      if (rerenderDocuments) this.renderDocumentChoices(oldDocuments);
+      const selectedTypes = this.collectDocuments().map(item => item.type);
+      const hasSpeakerRequest = type === 'Penugasan Narasumber' &&
+        subtype !== 'Promosi' &&
+        selectedTypes.includes('Surat Permohonan Narasumber kepada Dekan');
+      document.querySelectorAll('.speaker-request-only').forEach(item => item.classList.toggle('is-hidden', !hasSpeakerRequest));
+      const needsIncoming = selectedTypes.some(item => item !== 'Surat Tugas');
+      document.getElementById('incomingFields').classList.toggle('is-hidden', !needsIncoming);
+      this.updateReview();
+    },
+
+    addEmployee(employee = {}) {
+      const index = document.querySelectorAll('.employee-card').length + 1;
+      const card = document.createElement('div');
+      card.className = 'employee-card';
+      card.innerHTML = `
+        <button type="button" class="remove-employee" aria-label="Hapus orang">×</button>
+        <input type="hidden" data-employee-field="participantKey" value="${this.escape(employee.participantKey || '')}">
+        <div class="field-grid">
+          <label class="field"><span>Nama *</span><input data-employee-field="name" value="${this.escape(employee.name || '')}" placeholder="Orang ${index}"></label>
+          <label class="field"><span>NIP/NPM</span><input data-employee-field="identifier" value="${this.escape(employee.identifier || '')}"></label>
+          <label class="field"><span>Email</span><input type="email" data-employee-field="email" value="${this.escape(employee.email || '')}"></label>
+          <label class="field"><span>Jabatan</span><input data-employee-field="role" value="${this.escape(employee.role || '')}"></label>
+          <label class="field"><span>Prodi / Unit</span><input data-employee-field="unit" value="${this.escape(employee.unit || '')}"></label>
+          <label class="field"><span>Pangkat penunjang</span><input data-employee-field="rank" value="${this.escape(employee.rank || '')}"></label>
+          <label class="field"><span>Kategori penerima tugas</span><input data-employee-field="category" value="${this.escape(employee.category || '')}"></label>
+        </div>
+      `;
+      document.getElementById('employeeList').appendChild(card);
+      this.updateReview();
+    },
+
+    collectEmployees() {
+      return Array.from(document.querySelectorAll('.employee-card')).map(card => {
+        const item = {};
+        card.querySelectorAll('[data-employee-field]').forEach(input => item[input.dataset.employeeField] = input.value.trim());
+        return item;
+      }).filter(item => item.name || item.identifier || item.email);
+    },
+
+    collectDocuments() {
+      return Array.from(document.querySelectorAll('input[name="documentType"]:checked')).map(input => ({
+        type: input.value,
+        number: document.querySelector(`[data-document-number="${CSS.escape(input.value)}"]`)?.value.trim() || ''
+      }));
+    },
+
+    collectForm(status) {
+      const checked = selector => Array.from(document.querySelectorAll(selector + ':checked')).map(input => input.value);
+      return {
+        id: document.getElementById('requestId').value,
+        revision: document.getElementById('requestRevision').value,
+        clientToken: document.getElementById('clientToken').value,
+        status,
+        activityType: document.getElementById('activityType').value,
+        speakerSubtype: document.getElementById('speakerSubtype').value,
+        speakerStatus: document.querySelector('input[name="speakerStatus"]:checked')?.value || '',
+        faculties: checked('input[name="faculty"]'),
+        documents: this.collectDocuments(),
+        incomingNumber: document.getElementById('incomingNumber').value,
+        incomingDate: document.getElementById('incomingDate').value,
+        incomingSender: document.getElementById('incomingSender').value,
+        incomingSubject: document.getElementById('incomingSubject').value,
+        activityName: document.getElementById('activityName').value,
+        partnerName: document.getElementById('partnerName').value,
+        partnerAddress: document.getElementById('partnerAddress').value,
+        partnerEmail: document.getElementById('partnerEmail').value,
+        letterDate: document.getElementById('letterDate').value,
+        startDate: document.getElementById('startDate').value,
+        endDate: document.getElementById('endDate').value,
+        activityTime: document.getElementById('activityTime').value,
+        activityPlace: document.getElementById('activityPlace').value,
+        signerName: document.getElementById('signerName').value,
+        signerId: document.getElementById('signerId').value,
+        signerRole: document.getElementById('signerRole').value,
+        honor: document.getElementById('honor').value,
+        travel: document.getElementById('travel').value,
+        employees: this.collectEmployees()
+      };
+    },
+
+    updateReview() {
+      const type = document.getElementById('activityType').value || 'Belum dipilih';
+      const name = document.getElementById('activityName').value || 'Permohonan baru';
+      const documents = this.collectDocuments();
+      const employees = this.collectEmployees();
+      const start = document.getElementById('startDate').value;
+      const end = document.getElementById('endDate').value;
+      document.getElementById('reviewTitle').textContent = name;
+      document.getElementById('reviewContent').innerHTML = [
+        ['Tipe kegiatan', type],
+        ['Dokumen', documents.map(item => item.type).join(', ') || 'Belum dipilih'],
+        ['Tanggal', [start, end && end !== start ? end : ''].filter(Boolean).join(' s.d. ') || 'Belum diisi'],
+        ['Petugas / narasumber', employees.length + ' orang'],
+        ['Honor', document.getElementById('honor').value],
+        ['Perjalanan dinas', document.getElementById('travel').value]
+      ].map(item => `<div class="review-line"><span>${this.escape(item[0])}</span><strong>${this.escape(item[1])}</strong></div>`).join('');
+    },
+
+    async saveRequest(event) {
+      event.preventDefault();
+      const submitter = event.submitter;
+      const status = submitter?.dataset.saveStatus || 'DRAFT';
+      const payload = this.collectForm(status);
+      this.setBusy(submitter, true, 'Menyimpan...');
+      try {
+        const result = await this.server('saveRequest', payload);
+        document.getElementById('requestId').value = result.id;
+        document.getElementById('requestRevision').value = result.revision;
+        this.toast('Permohonan ' + result.id + ' tersimpan.');
+        await this.refreshAll(false);
+        await this.openRequestDetail(result.id);
+      } catch (error) {
+        this.toast(error.message, true);
+        this.focusFirstInvalid();
+      } finally {
+        this.setBusy(submitter, false);
+      }
+    },
+
+    resetForm() {
+      document.getElementById('requestForm').reset();
+      document.getElementById('requestId').value = '';
+      document.getElementById('requestRevision').value = '';
+      document.getElementById('clientToken').value = this.uuid();
+      document.getElementById('employeeList').innerHTML = '';
+      this.addEmployee();
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('letterDate').value = today;
+      this.renderDocumentChoices([]);
+      this.updateFormVisibility();
+    },
+
+    async openRequestDetail(requestId) {
+      document.getElementById('drawerTitle').textContent = requestId;
+      document.getElementById('drawerBody').innerHTML = '<div class="skeleton" style="height:180px;border-radius:14px"></div>';
+      document.getElementById('detailDrawer').classList.add('is-open');
+      document.getElementById('detailDrawer').setAttribute('aria-hidden', 'false');
+      document.getElementById('drawerBackdrop').classList.remove('is-hidden');
+      try {
+        const detail = await this.server('getRequestDetail', requestId);
+        this.state.currentDetail = detail;
+        this.renderDetail(detail);
+      } catch (error) {
+        document.getElementById('drawerBody').innerHTML = `<div class="notice notice-error">${this.escape(error.message)}</div>`;
+      }
+    },
+
+    closeDrawer() {
+      document.getElementById('detailDrawer').classList.remove('is-open');
+      document.getElementById('detailDrawer').setAttribute('aria-hidden', 'true');
+      document.getElementById('drawerBackdrop').classList.add('is-hidden');
+    },
+
+    renderDetail(detail) {
+      const request = detail.request;
+      document.getElementById('drawerTitle').textContent = request.id;
+      const documents = detail.documents.map(doc => `
+        <div class="document-item">
+          <div class="document-item-head">
+            <div><strong>${this.escape(doc.type)}</strong><small>${this.escape(doc.number || 'Nomor surat belum diisi')}</small></div>
+            ${this.statusBadge(doc.status)}
+          </div>
+          <div class="document-actions">
+            <button class="button button-primary button-small" data-action="generate-doc" data-document-id="${this.escape(doc.id)}">Buat dokumen</button>
+            <button class="button button-secondary button-small" data-action="preview-email" data-document-id="${this.escape(doc.id)}">Preview email</button>
+            <button class="button button-secondary button-small" data-action="draft-email" data-document-id="${this.escape(doc.id)}">Buat draft</button>
+            ${doc.docUrl ? `<a class="button button-secondary button-small" href="${this.escape(doc.docUrl)}" target="_blank">Buka Doc</a>` : ''}
+            ${doc.pdfUrl ? `<a class="button button-secondary button-small" href="${this.escape(doc.pdfUrl)}" target="_blank">PDF</a>` : ''}
+          </div>
+        </div>
+      `).join('');
+      const employees = detail.employees.map(item => `<li>${this.escape(item.name)}${item.identifier ? ' · ' + this.escape(item.identifier) : ''}${item.email ? ' · ' + this.escape(item.email) : ''}</li>`).join('');
+      document.getElementById('drawerBody').innerHTML = `
+        <div class="detail-hero">
+          <p class="eyebrow">${this.escape(request.activityType)}</p>
+          <h3>${this.escape(request.activityName)}</h3>
+          <p>${this.escape(request.partnerName)} · ${this.escape(request.dateDisplay || '-')}</p>
+        </div>
+        <div class="document-actions">
+          <button class="button button-primary" data-action="process-all">Buat dokumen & draft</button>
+          <button class="button button-secondary" data-action="edit-request">Edit data</button>
+          <button class="button button-secondary" data-action="generate-finance" data-kind="HONOR">Sheet honor</button>
+          <button class="button button-secondary" data-action="generate-finance" data-kind="PERJADIN">Sheet perjadin</button>
+          <button class="button button-secondary" data-action="export-finance" data-kind="HONOR" data-format="PDF">PDF honor</button>
+          <button class="button button-secondary" data-action="export-finance" data-kind="HONOR" data-format="XLSX">Excel honor</button>
+          <button class="button button-secondary" data-action="export-finance" data-kind="PERJADIN" data-format="PDF">PDF perjadin</button>
+          <button class="button button-secondary" data-action="export-finance" data-kind="PERJADIN" data-format="XLSX">Excel perjadin</button>
+        </div>
+        <section class="detail-section">
+          <h3>Ringkasan</h3>
+          <div class="detail-grid">
+            <div><span>Status</span><strong>${this.escape(request.status)}</strong></div>
+            <div><span>Revision</span><strong>${request.revision}</strong></div>
+            <div><span>Tempat</span><strong>${this.escape(request.activityPlace || '-')}</strong></div>
+            <div><span>Waktu</span><strong>${this.escape(request.activityTime || '-')}</strong></div>
+            <div><span>Honor</span><strong>${this.escape(request.honor)}</strong></div>
+            <div><span>Perjadin</span><strong>${this.escape(request.travel)}</strong></div>
+          </div>
+        </section>
+        <section class="detail-section"><h3>Dokumen</h3><div class="document-list">${documents || '<p>Belum ada dokumen.</p>'}</div></section>
+        <section class="detail-section"><h3>Petugas / Narasumber</h3><ol>${employees || '<li>Belum ada data.</li>'}</ol></section>
+        <section class="detail-section">
+          <h3>Penerima email gabungan</h3>
+          <p><strong>To:</strong><br>${this.escape(request.emailTo || '-').replace(/\n/g, '<br>')}</p>
+          <p><strong>CC:</strong><br>${this.escape(request.emailCc || '-').replace(/\n/g, '<br>')}</p>
+          ${request.emailNote ? `<div class="notice notice-error">${this.escape(request.emailNote)}</div>` : ''}
+        </section>
+        <button class="button button-danger button-full" data-action="archive-request">Arsipkan permohonan</button>
+      `;
+    },
+
+    async handleDetailAction(event) {
+      const button = event.target.closest('[data-action]');
+      if (!button || !this.state.currentDetail) return;
+      const request = this.state.currentDetail.request;
+      const action = button.dataset.action;
+      try {
+        if (action === 'edit-request') {
+          this.fillForm(this.state.currentDetail);
+          this.closeDrawer();
+          this.switchView('form');
+          return;
+        }
+        if (action === 'archive-request') {
+          if (!confirm('Arsipkan permohonan ' + request.id + '? Data tidak dihapus.')) return;
+          this.setBusy(button, true, 'Mengarsipkan...');
+          await this.server('archiveRequest', request.id, request.revision);
+          this.toast('Permohonan diarsipkan.');
+          this.closeDrawer();
+          await this.refreshAll(false);
+          return;
+        }
+        if (action === 'generate-doc') {
+          this.setBusy(button, true, 'Membuat...');
+          await this.server('generateDocument', button.dataset.documentId, false);
+          this.toast('Dokumen dan PDF siap.');
+        }
+        if (action === 'preview-email') {
+          await this.openEmailPreview(button.dataset.documentId);
+          return;
+        }
+        if (action === 'draft-email') {
+          this.setBusy(button, true, 'Membuat draft...');
+          await this.server('createEmailDraft', button.dataset.documentId, false);
+          this.toast('Draft Gmail siap.');
+        }
+        if (action === 'process-all') {
+          this.setBusy(button, true, 'Memproses...');
+          const result = await this.server('processRequest', request.id);
+          if (!result.ok) throw new Error(result.errors.map(item => item.type + ': ' + item.error).join('\n'));
+          this.toast('Semua dokumen dan draft selesai.');
+        }
+        if (action === 'generate-finance') {
+          const outputWindow = window.open('', '_blank');
+          this.setBusy(button, true, 'Membuat sheet...');
+          const result = await this.server('generateFinanceSheet', request.id, button.dataset.kind);
+          if (outputWindow) outputWindow.location = result.url;
+          else window.open(result.url, '_blank');
+          this.toast('Sheet ' + button.dataset.kind.toLowerCase() + ' siap.');
+        }
+        if (action === 'export-finance') {
+          const outputWindow = window.open('', '_blank');
+          this.setBusy(button, true, 'Mengekspor...');
+          const result = await this.server(
+            'generateAndExportFinance',
+            request.id,
+            button.dataset.kind,
+            button.dataset.format
+          );
+          if (outputWindow) outputWindow.location = result.url;
+          else window.open(result.url, '_blank');
+          this.toast(result.format + ' siap.');
+        }
+        await this.openRequestDetail(request.id);
+      } catch (error) {
+        this.toast(error.message, true);
+      } finally {
+        this.setBusy(button, false);
+      }
+    },
+
+    fillForm(detail) {
+      this.resetForm();
+      const request = detail.request;
+      const values = {
+        requestId: request.id,
+        requestRevision: request.revision,
+        clientToken: request.clientToken,
+        activityType: request.activityType,
+        speakerSubtype: request.speakerSubtype,
+        incomingNumber: request.incomingNumber,
+        incomingDate: request.incomingDate,
+        incomingSender: request.incomingSender,
+        incomingSubject: request.incomingSubject,
+        activityName: request.activityName,
+        partnerName: request.partnerName,
+        partnerAddress: request.partnerAddress,
+        partnerEmail: request.partnerEmail,
+        letterDate: request.letterDate,
+        startDate: request.startDate,
+        endDate: request.endDate,
+        activityTime: request.activityTime,
+        activityPlace: request.activityPlace,
+        signerName: request.signerName,
+        signerId: request.signerId,
+        signerRole: request.signerRole,
+        honor: request.honor,
+        travel: request.travel
+      };
+      Object.keys(values).forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = values[id] == null ? '' : values[id];
+      });
+      this.renderDocumentChoices(detail.documents);
+      const statusInput = document.querySelector(`input[name="speakerStatus"][value="${CSS.escape(request.speakerStatus || '')}"]`);
+      if (statusInput) statusInput.checked = true;
+      document.querySelectorAll('input[name="faculty"]').forEach(input => input.checked = request.faculties.includes(input.value));
+      document.getElementById('employeeList').innerHTML = '';
+      detail.employees.forEach(employee => this.addEmployee(employee));
+      if (!detail.employees.length) this.addEmployee();
+      this.updateFormVisibility(false);
+      this.updateReview();
+    },
+
+    async openEmailPreview(documentId) {
+      const modal = document.getElementById('emailModal');
+      document.getElementById('emailModalTitle').textContent = 'Memuat...';
+      document.getElementById('emailModalBody').innerHTML = '<div class="skeleton" style="height:180px;border-radius:14px"></div>';
+      modal.showModal();
+      try {
+        const preview = await this.server('previewEmail', documentId);
+        document.getElementById('emailModalTitle').textContent = preview.type;
+        document.getElementById('emailModalBody').innerHTML = `
+          <div class="email-envelope">
+            <div><span>To</span>${this.escape(preview.to.join(', '))}</div>
+            <div><span>CC</span>${this.escape(preview.cc.join(', ') || '-')}</div>
+            <div><span>Subjek</span><strong>${this.escape(preview.subject)}</strong></div>
+            <div><span>Lampiran</span>${preview.hasAttachment ? 'PDF siap' : 'PDF belum dibuat'}</div>
+          </div>
+          ${preview.notes.length ? `<div class="notice notice-error">${this.escape(preview.notes.join('\n'))}</div>` : ''}
+          <div class="email-preview">${preview.htmlBody}</div>
+        `;
+      } catch (error) {
+        document.getElementById('emailModalBody').innerHTML = `<div class="notice notice-error">${this.escape(error.message)}</div>`;
+      }
+    },
+
+    async loadTravel() {
+      try {
+        const result = await this.server('listTravelData', {});
+        this.state.travel = result.items;
+        this.renderTravel(result.items);
+      } catch (error) {
+        this.toast(error.message, true);
+      }
+    },
+
+    renderTravel(items) {
+      document.getElementById('travelTableBody').innerHTML = items.map(item => `
+        <tr>
+          <td data-label="Permohonan">${this.escape(item.requestId)}</td>
+          <td data-label="Nama"><span class="table-primary">${this.escape(item.name)}</span><span class="table-secondary">${this.escape(item.identifier || '-')}</span></td>
+          <td data-label="Kategori">${this.escape(item.category || '-')}</td>
+          <td data-label="Tempat">${this.escape(item.place || '-')}</td>
+          <td data-label="Total">${this.currency(item.total)}</td>
+          <td data-label="Aksi"><button class="button button-secondary button-small" data-travel-key="${this.escape(item.participantKey)}">Edit biaya</button></td>
+        </tr>
+      `).join('');
+      document.getElementById('travelEmpty').classList.toggle('is-hidden', items.length > 0);
+    },
+
+    async syncTravel(button) {
+      this.setBusy(button, true, 'Sinkronisasi...');
+      try {
+        const result = await this.server('syncTravelData', '');
+        this.toast(result.synced + ' data perjadin disinkronkan.');
+        await this.loadTravel();
+      } catch (error) {
+        this.toast(error.message, true);
+      } finally {
+        this.setBusy(button, false);
+      }
+    },
+
+    openTravelModal(participantKey) {
+      const item = this.state.travel.find(row => row.participantKey === participantKey);
+      if (!item) return;
+      this.state.currentTravel = item;
+      const labels = ['Uang kegiatan', 'Uang saku', 'Uang makan', 'Uang penginapan', 'Transportasi dalam kota', 'Transportasi antar kota', 'Transportasi antar negara PP', 'Aplikasi visa', 'Asuransi perjalanan', 'Fiskal & pajak bandara', 'Uang harian'];
+      document.getElementById('travelModalTitle').textContent = item.name;
+      document.getElementById('travelModalBody').innerHTML = `
+        <div class="cost-grid">
+          ${labels.map((label, index) => `<label class="field"><span>${this.escape(label)}</span><input type="number" min="0" step="1000" data-cost-index="${index}" value="${Number(item.costs[index] || 0)}"></label>`).join('')}
+        </div>
+      `;
+      document.getElementById('travelModal').showModal();
+    },
+
+    async saveTravelCosts(event) {
+      event.preventDefault();
+      const button = event.submitter;
+      const item = this.state.currentTravel;
+      if (!item) return;
+      const costs = Array.from(document.querySelectorAll('[data-cost-index]')).map(input => Number(input.value || 0));
+      this.setBusy(button, true, 'Menyimpan...');
+      try {
+        await this.server('saveTravelCosts', { participantKey: item.participantKey, costs });
+        document.getElementById('travelModal').close();
+        this.toast('Biaya perjadin tersimpan.');
+        await this.loadTravel();
+      } catch (error) {
+        this.toast(error.message, true);
+      } finally {
+        this.setBusy(button, false);
+      }
+    },
+
+    async checkSystem(button) {
+      this.setBusy(button, true, 'Memeriksa...');
+      try {
+        const status = await this.server('getSystemStatus');
+        document.getElementById('systemStatus').innerHTML = Object.keys(status.checks).map(key => {
+          const item = status.checks[key];
+          return `<div class="system-check"><span>${this.escape(item.name || item.expected)}</span>${this.statusBadge(item.ok ? 'READY' : 'ERROR')}</div>`;
+        }).join('');
+      } catch (error) {
+        this.toast(error.message, true);
+      } finally {
+        this.setBusy(button, false);
+      }
+    },
+
+    async refreshAll(showToast = true) {
+      const button = document.getElementById('refreshButton');
+      this.setBusy(button, true, 'Memuat...');
+      try {
+        const data = await this.server('getBootstrapData');
+        this.state.bootstrap = data;
+        this.state.requests = data.requests || [];
+        this.renderDashboard(data.summary, this.state.requests);
+        this.renderRequests(this.state.requests);
+        this.renderReferences(data.references);
+        if (showToast) this.toast('Data diperbarui.');
+      } catch (error) {
+        this.toast(error.message, true);
+      } finally {
+        this.setBusy(button, false);
+      }
+    },
+
+    statusBadge(status) {
+      const clean = String(status || 'PENDING').toUpperCase();
+      const className = clean === 'READY' ? 'ready' :
+        clean === 'GENERATED' ? 'generated' :
+        clean === 'DRAFTED' || clean === 'EMAIL DRAFTED' ? 'drafted' :
+        clean === 'ERROR' ? 'error' :
+        clean === 'DRAFT' ? 'draft' : 'pending';
+      return `<span class="status status-${className}">${this.escape(clean.replace(/_/g, ' '))}</span>`;
+    },
+
+    setBusy(button, busy, label) {
+      if (!button) return;
+      if (busy) {
+        button.dataset.originalText = button.textContent;
+        button.textContent = label || 'Memproses...';
+        button.disabled = true;
+      } else {
+        button.textContent = button.dataset.originalText || button.textContent;
+        button.disabled = false;
+      }
+    },
+
+    focusFirstInvalid() {
+      const invalid = document.querySelector('#requestForm :invalid');
+      if (invalid) {
+        invalid.focus();
+        invalid.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    },
+
+    showGlobalError(error) {
+      const box = document.getElementById('globalError');
+      box.textContent = error.message || String(error);
+      box.classList.remove('is-hidden');
+    },
+
+    toast(message, isError = false) {
+      const toast = document.createElement('div');
+      toast.className = 'toast' + (isError ? ' is-error' : '');
+      toast.textContent = message;
+      document.getElementById('toastRegion').appendChild(toast);
+      setTimeout(() => toast.remove(), 5200);
+    },
+
+    currency(value) {
+      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
+    },
+
+    escape(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    },
+
+    uuid() {
+      return window.crypto && crypto.randomUUID
+        ? crypto.randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, character => {
+            const random = Math.random() * 16 | 0;
+            return (character === 'x' ? random : (random & 3 | 8)).toString(16);
+          });
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => App.init());
+</script>

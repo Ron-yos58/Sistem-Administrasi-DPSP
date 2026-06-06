@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="theme-color" content="#015850">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,600;6..72,700&display=swap" rel="stylesheet">
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">D</div>
+          <div>
+            <strong>DPSP</strong>
+            <span>Sistem Surat</span>
+          </div>
+        </div>
+
+        <nav class="main-nav" aria-label="Navigasi utama">
+          <button class="nav-item is-active" data-view="dashboard">
+            <span class="nav-icon">⌂</span><span>Ringkasan</span>
+          </button>
+          <button class="nav-item" data-view="requests">
+            <span class="nav-icon">▤</span><span>Permohonan</span>
+          </button>
+          <button class="nav-item" data-view="form">
+            <span class="nav-icon">＋</span><span>Buat Permohonan</span>
+          </button>
+          <button class="nav-item" data-view="finance">
+            <span class="nav-icon">Rp</span><span>Honor & Perjadin</span>
+          </button>
+          <button class="nav-item" data-view="references">
+            <span class="nav-icon">◇</span><span>Data Referensi</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="user-chip">
+            <span class="avatar" id="userInitial">U</span>
+            <div>
+              <strong id="userEmail">Memuat...</strong>
+              <span id="userRole">-</span>
+            </div>
+          </div>
+          <div class="version" id="appVersion">v1.0.0</div>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <button class="icon-button menu-toggle" id="menuToggle" aria-label="Buka menu">☰</button>
+          <div>
+            <p class="eyebrow" id="pageEyebrow">OPERASIONAL DPSP</p>
+            <h1 id="pageTitle">Ringkasan</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="button button-secondary" id="refreshButton">Muat ulang</button>
+            <button class="button button-primary" data-view-target="form">Permohonan baru</button>
+          </div>
+        </header>
+
+        <main class="main-content">
+          <div class="notice notice-error is-hidden" id="globalError" role="alert"></div>
+
+          <section class="view is-active" id="view-dashboard">
+            <div class="hero-panel">
+              <div>
+                <p class="eyebrow">PUSAT KERJA SURAT</p>
+                <h2>Dokumen rapi. Penerima tepat. Proses terlacak.</h2>
+                <p>Kelola permohonan, dokumen, draft email, honor, dan perjalanan dinas dari satu alur.</p>
+              </div>
+              <button class="button button-accent" data-view-target="form">Buat permohonan</button>
+            </div>
+
+            <div class="metric-grid" id="metricGrid">
+              <div class="metric-card skeleton"></div>
+              <div class="metric-card skeleton"></div>
+              <div class="metric-card skeleton"></div>
+              <div class="metric-card skeleton"></div>
+            </div>
+
+            <div class="content-grid">
+              <article class="panel panel-wide">
+                <div class="panel-head">
+                  <div>
+                    <p class="eyebrow">TERBARU</p>
+                    <h3>Permohonan terkini</h3>
+                  </div>
+                  <button class="text-button" data-view-target="requests">Lihat semua</button>
+                </div>
+                <div id="recentRequests" class="request-list"></div>
+              </article>
+
+              <article class="panel focus-panel">
+                <p class="eyebrow">URUTAN KERJA</p>
+                <h3>Dari data ke draft Gmail</h3>
+                <ol class="workflow-list">
+                  <li><span>1</span><div><strong>Simpan data</strong><small>Permohonan dan petugas</small></div></li>
+                  <li><span>2</span><div><strong>Review penerima</strong><small>To dan CC dari Master CC</small></div></li>
+                  <li><span>3</span><div><strong>Buat dokumen</strong><small>Google Doc dan PDF</small></div></li>
+                  <li><span>4</span><div><strong>Buat draft</strong><small>Tinjau lalu kirim dari Gmail</small></div></li>
+                </ol>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" id="view-requests">
+            <div class="section-toolbar">
+              <div class="search-box">
+                <span aria-hidden="true">⌕</span>
+                <input id="requestSearch" type="search" placeholder="Cari ID, kegiatan, mitra, nomor surat">
+              </div>
+              <select id="requestTypeFilter" aria-label="Filter tipe kegiatan">
+                <option value="">Semua tipe</option>
+              </select>
+              <select id="requestStatusFilter" aria-label="Filter status">
+                <option value="">Semua status</option>
+                <option value="DRAFT">Draft</option>
+                <option value="READY">Siap</option>
+              </select>
+              <button class="button button-secondary" id="applyRequestFilter">Terapkan</button>
+            </div>
+
+            <div class="panel table-panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Kegiatan</th>
+                      <th>Mitra</th>
+                      <th>Tanggal</th>
+                      <th>Dokumen</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="requestTableBody"></tbody>
+                </table>
+              </div>
+              <div class="empty-state is-hidden" id="requestEmpty">
+                <strong>Belum ada data</strong>
+                <span>Buat permohonan pertama atau ubah filter.</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="view-form">
+            <form id="requestForm" novalidate>
+              <input type="hidden" id="requestId">
+              <input type="hidden" id="requestRevision">
+              <input type="hidden" id="clientToken">
+
+              <div class="form-layout">
+                <div class="form-main">
+                  <section class="form-card">
+                    <div class="step-heading"><span>01</span><div><h3>Jenis dan keluaran</h3><p>Tentukan kegiatan dan dokumen yang dibutuhkan.</p></div></div>
+                    <div class="field-grid">
+                      <label class="field">
+                        <span>Tipe kegiatan *</span>
+                        <select id="activityType" required></select>
+                      </label>
+                      <label class="field speaker-only is-hidden">
+                        <span>Sub-tipe narasumber *</span>
+                        <select id="speakerSubtype">
+                          <option value="">Pilih sub-tipe</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div class="field">
+                      <span>Dokumen *</span>
+                      <div class="choice-grid" id="documentChoices"></div>
+                    </div>
+                  </section>
+
+                  <section class="form-card">
+                    <div class="step-heading"><span>02</span><div><h3>Mitra dan surat masuk</h3><p>Data sumber untuk surat keluar.</p></div></div>
+                    <div class="field-grid">
+                      <label class="field field-wide">
+                        <span>Nama kegiatan *</span>
+                        <input id="activityName" required maxlength="300">
+                      </label>
+                      <label class="field">
+                        <span>Nama mitra *</span>
+                        <input id="partnerName" required maxlength="300">
+                      </label>
+                      <label class="field">
+                        <span>Email mitra</span>
+                        <input id="partnerEmail" type="email">
+                      </label>
+                      <label class="field field-wide">
+                        <span>Alamat mitra</span>
+                        <textarea id="partnerAddress" rows="2"></textarea>
+                      </label>
+                    </div>
+                    <div class="conditional-block" id="incomingFields">
+                      <p class="block-label">Surat masuk</p>
+                      <div class="field-grid">
+                        <label class="field"><span>Nomor surat masuk</span><input id="incomingNumber"></label>
+                        <label class="field"><span>Tanggal surat masuk</span><input id="incomingDate" type="date"></label>
+                        <label class="field"><span>Pengirim surat masuk</span><input id="incomingSender"></label>
+                        <label class="field"><span>Perihal surat masuk</span><input id="incomingSubject"></label>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="form-card">
+                    <div class="step-heading"><span>03</span><div><h3>Waktu dan penandatangan</h3><p>Jadwal kegiatan serta pejabat penanda tangan.</p></div></div>
+                    <div class="field-grid">
+                      <label class="field"><span>Tanggal surat dibuat *</span><input id="letterDate" type="date" required></label>
+                      <label class="field"><span>Waktu kegiatan</span><input id="activityTime" placeholder="09.00 - 12.00 WIB"></label>
+                      <label class="field"><span>Tanggal mulai *</span><input id="startDate" type="date" required></label>
+                      <label class="field"><span>Tanggal selesai</span><input id="endDate" type="date"></label>
+                      <label class="field field-wide"><span>Tempat kegiatan *</span><input id="activityPlace" required></label>
+                      <label class="field"><span>Nama penandatangan</span><input id="signerName"></label>
+                      <label class="field"><span>NIK penandatangan</span><input id="signerId"></label>
+                      <label class="field field-wide"><span>Jabatan penandatangan</span><input id="signerRole"></label>
+                    </div>
+                  </section>
+
+                  <section class="form-card speaker-request-only is-hidden">
+                    <div class="step-heading"><span>04</span><div><h3>Pencarian narasumber</h3><p>Atur status dan fakultas tujuan.</p></div></div>
+                    <div class="field">
+                      <span>Status narasumber *</span>
+                      <div class="segmented" id="speakerStatusChoices"></div>
+                    </div>
+                    <div class="field">
+                      <span>Fakultas tujuan *</span>
+                      <div class="check-list" id="facultyChoices"></div>
+                    </div>
+                  </section>
+
+                  <section class="form-card">
+                    <div class="step-heading"><span>05</span><div><h3>Petugas atau narasumber</h3><p>Data orang dipakai untuk surat, email, honor, dan perjadin.</p></div></div>
+                    <div id="employeeList" class="employee-list"></div>
+                    <button class="button button-secondary" type="button" id="addEmployee">Tambah orang</button>
+                  </section>
+
+                  <section class="form-card">
+                    <div class="step-heading"><span>06</span><div><h3>Keuangan</h3><p>Tandai tindak lanjut honor dan perjalanan dinas.</p></div></div>
+                    <div class="field-grid">
+                      <label class="field"><span>Honor</span><select id="honor"><option>Tidak</option><option>Ya</option></select></label>
+                      <label class="field"><span>Perjalanan dinas</span><select id="travel"><option>Tidak</option><option>Ya</option></select></label>
+                    </div>
+                    <p class="helper-text">Jika Perjalanan Dinas = Ya, pangkat dan kategori setiap orang wajib diisi.</p>
+                  </section>
+                </div>
+
+                <aside class="form-review">
+                  <div class="review-card">
+                    <p class="eyebrow">REVIEW</p>
+                    <h3 id="reviewTitle">Permohonan baru</h3>
+                    <div id="reviewContent" class="review-content"></div>
+                  </div>
+                </aside>
+              </div>
+
+              <div class="form-actions">
+                <button class="button button-secondary" type="button" id="resetForm">Reset</button>
+                <div>
+                  <button class="button button-secondary" type="submit" data-save-status="DRAFT">Simpan draft</button>
+                  <button class="button button-primary" type="submit" data-save-status="READY">Simpan & tandai siap</button>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <section class="view" id="view-finance">
+            <div class="section-toolbar">
+              <div>
+                <p class="eyebrow">DATA TURUNAN</p>
+                <h2>Perjalanan dinas</h2>
+              </div>
+              <button class="button button-primary" id="syncTravelButton">Sinkronkan data</button>
+            </div>
+            <div class="panel table-panel">
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead><tr><th>Permohonan</th><th>Nama</th><th>Kategori</th><th>Tempat</th><th>Total</th><th></th></tr></thead>
+                  <tbody id="travelTableBody"></tbody>
+                </table>
+              </div>
+              <div class="empty-state is-hidden" id="travelEmpty"><strong>Belum ada data perjadin</strong><span>Sinkronkan permohonan dengan Perjalanan Dinas = Ya.</span></div>
+            </div>
+          </section>
+
+          <section class="view" id="view-references">
+            <div class="content-grid">
+              <article class="panel panel-wide">
+                <div class="panel-head"><div><p class="eyebrow">ROUTING EMAIL</p><h3>Master penerima dan CC</h3></div></div>
+                <div class="table-scroll">
+                  <table class="data-table">
+                    <thead><tr><th>Fakultas / Unit</th><th>Jabatan</th><th>Email</th></tr></thead>
+                    <tbody id="referenceTableBody"></tbody>
+                  </table>
+                </div>
+              </article>
+              <article class="panel">
+                <p class="eyebrow">STATUS SISTEM</p>
+                <h3>Validasi struktur</h3>
+                <div id="systemStatus" class="system-checks"></div>
+                <button class="button button-secondary button-full" id="checkSystemButton">Periksa sistem</button>
+              </article>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Navigasi mobile">
+      <button class="is-active" data-view="dashboard"><span>⌂</span>Ringkasan</button>
+      <button data-view="requests"><span>▤</span>Data</button>
+      <button class="mobile-create" data-view="form"><span>＋</span>Buat</button>
+      <button data-view="finance"><span>Rp</span>Biaya</button>
+      <button data-view="references"><span>◇</span>Lainnya</button>
+    </nav>
+
+    <div class="drawer-backdrop is-hidden" id="drawerBackdrop"></div>
+    <aside class="detail-drawer" id="detailDrawer" aria-hidden="true">
+      <div class="drawer-head">
+        <div><p class="eyebrow">DETAIL PERMOHONAN</p><h2 id="drawerTitle">-</h2></div>
+        <button class="icon-button" id="closeDrawer" aria-label="Tutup detail">×</button>
+      </div>
+      <div class="drawer-body" id="drawerBody"></div>
+    </aside>
+
+    <dialog class="modal" id="emailModal">
+      <div class="modal-head"><div><p class="eyebrow">PREVIEW EMAIL</p><h2 id="emailModalTitle">-</h2></div><button class="icon-button" data-close-dialog="emailModal">×</button></div>
+      <div class="modal-body" id="emailModalBody"></div>
+    </dialog>
+
+    <dialog class="modal" id="travelModal">
+      <div class="modal-head"><div><p class="eyebrow">KOMPONEN BIAYA</p><h2 id="travelModalTitle">-</h2></div><button class="icon-button" data-close-dialog="travelModal">×</button></div>
+      <form id="travelCostForm">
+        <div class="modal-body" id="travelModalBody"></div>
+        <div class="modal-actions"><button class="button button-secondary" type="button" data-close-dialog="travelModal">Batal</button><button class="button button-primary" type="submit">Simpan biaya</button></div>
+      </form>
+    </dialog>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+    <div class="boot-loader" id="bootLoader"><div class="loader-mark">D</div><strong>Menyiapkan sistem...</strong></div>
+    <?!= include('Scripts'); ?>
+  </body>
+</html>

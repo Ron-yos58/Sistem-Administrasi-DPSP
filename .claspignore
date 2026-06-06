@@ -1,0 +1,20 @@
+.agents/**
+Panduan.txt
+Delete_Sheet
+Delete_Sheet.gs
+Draft_Email
+Draft_Email.gs
+Generate_Export_Sheet
+Generate_Export_Sheet.gs
+Generate_Narsumber_Edu Fair_Campus Visit
+Generate_Narsumber_Edu Fair_Campus Visit.gs
+Generate_Perjadin
+Generate_Perjadin.gs
+Generate_Data_Pegawai_dan_Perjadin.gs
+PROJECT_BRIEF.md
+ANALISIS_SISTEM.md
+PANDUAN_IMPLEMENTASI.md
+docs/**
+tools/**
+package.json
+.clasp.json.example

@@ -1,0 +1,7 @@
+{
+  "name": "sistem-surat-dpsp",
+  "private": true,
+  "scripts": {
+    "check": "node tools/check-syntax.js && node tools/test-pure.js"
+  }
+}

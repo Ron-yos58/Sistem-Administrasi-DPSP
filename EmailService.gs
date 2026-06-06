@@ -1,0 +1,358 @@
+function previewEmail(documentId) {
+  assertAuthorized_();
+  const document = getDocumentById_(text_(documentId));
+  return serializeValue_(buildEmailPreviewForDocument_(document));
+}
+
+function createEmailDraft(documentId, force) {
+  const user = assertAuthorized_();
+  assertCanWrite_(user);
+  const id = text_(documentId);
+
+  return withScriptLock_(function() {
+    try {
+      const result = createEmailDraftInternal_(id, Boolean(force), user);
+      logAudit_('CREATE_EMAIL_DRAFT', result.requestId, true, {
+        documentId: id,
+        reused: result.reused
+      });
+      return serializeValue_(result);
+    } catch (error) {
+      logAudit_('CREATE_EMAIL_DRAFT', id, false, { error: error.message });
+      throw error;
+    }
+  });
+}
+
+function createAllEmailDrafts(requestId, force) {
+  const user = assertAuthorized_();
+  assertCanWrite_(user);
+  const id = text_(requestId);
+
+  return withScriptLock_(function() {
+    const documents = getDocumentsByRequest_(id);
+    const results = [];
+    const errors = [];
+    documents.forEach(function(document) {
+      try {
+        results.push(createEmailDraftInternal_(document.id, Boolean(force), user));
+      } catch (error) {
+        errors.push({ documentId: document.id, type: document.type, error: error.message });
+      }
+    });
+    logAudit_('CREATE_ALL_EMAIL_DRAFTS', id, errors.length === 0, {
+      created: results.length,
+      errors: errors
+    });
+    return serializeValue_({ ok: errors.length === 0, results: results, errors: errors });
+  });
+}
+
+function processRequest(requestId) {
+  const user = assertAuthorized_();
+  assertCanWrite_(user);
+  const id = text_(requestId);
+
+  return withScriptLock_(function() {
+    const documents = getDocumentsByRequest_(id);
+    if (!documents.length) throw new Error('Tidak ada dokumen untuk diproses.');
+    const results = [];
+    const errors = [];
+
+    documents.forEach(function(document) {
+      let generated;
+      try {
+        generated = generateDocumentInternal_(document.id, false, user);
+      } catch (error) {
+        markDocumentError_(document.id, error.message);
+        errors.push({
+          documentId: document.id,
+          type: document.type,
+          stage: 'DOCUMENT',
+          error: error.message
+        });
+        return;
+      }
+
+      try {
+        const draft = createEmailDraftInternal_(document.id, false, user);
+        results.push({ document: generated.document, draft: draft });
+      } catch (error) {
+        errors.push({
+          documentId: document.id,
+          type: document.type,
+          stage: 'EMAIL',
+          error: error.message
+        });
+      }
+    });
+    logAudit_('PROCESS_REQUEST', id, errors.length === 0, {
+      processed: results.length,
+      errors: errors
+    });
+    return serializeValue_({ ok: errors.length === 0, results: results, errors: errors });
+  });
+}
+
+function buildEmailPreviewInternal_(requestId, suppressErrors) {
+  return getDocumentsByRequest_(requestId).map(function(document) {
+    try {
+      return buildEmailPreviewForDocument_(document);
+    } catch (error) {
+      if (!suppressErrors) throw error;
+      return {
+        documentId: document.id,
+        type: document.type,
+        error: error.message
+      };
+    }
+  });
+}
+
+function buildEmailPreviewForDocument_(document) {
+  const detail = getRequestDetailInternal_(document.requestId);
+  const request = detail.request;
+  const routingRequest = {
+    documents: detail.documents,
+    partnerEmail: request.partnerEmail,
+    partnerName: request.partnerName,
+    faculties: request.faculties,
+    speakerStatus: request.speakerStatus
+  };
+  const routing = computeEmailRouting_(routingRequest, detail.employees, document.type);
+  if (!routing.to.length) {
+    throw new Error('Penerima To belum tersedia. Periksa email pegawai, mitra, atau Master CC.');
+  }
+  if (routing.to.length + routing.cc.length > 50) {
+    throw new Error('Jumlah penerima melebihi batas aman 50 alamat.');
+  }
+
+  const template = getEmailTemplate_(document.type, request.speakerStatus);
+  const placeholders = buildEmailPlaceholders_(detail, document, routing);
+  const subject = replaceTemplateTokens_(template.subject, placeholders, false);
+  const htmlBody = replaceTemplateTokens_(template.body, placeholders, true);
+
+  return {
+    documentId: document.id,
+    requestId: document.requestId,
+    type: document.type,
+    to: routing.to,
+    cc: routing.cc,
+    toRoles: routing.toRoles,
+    ccRoles: routing.ccRoles,
+    notes: routing.notes,
+    subject: subject,
+    htmlBody: htmlBody,
+    hasAttachment: Boolean(document.pdfId && driveFileExists_(document.pdfId)),
+    attachmentUrl: document.pdfUrl || ''
+  };
+}
+
+function createEmailDraftInternal_(documentId, force, user) {
+  const sheet = getSheet_('DOCUMENTS');
+  const rowNumber = findRowById_(sheet, documentId, 1);
+  if (!rowNumber) throw new Error('Dokumen tidak ditemukan: ' + documentId);
+  const row = sheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
+  const document = documentRowToDto_(row);
+  const marker = 'DPSP-DRAFT:' + document.id + ':R' + document.revision;
+
+  if (!force && document.emailDraftId) {
+    try {
+      const existing = GmailApp.getDraft(document.emailDraftId);
+      if (existing) {
+        return {
+          ok: true,
+          reused: true,
+          requestId: document.requestId,
+          documentId: document.id,
+          draftId: existing.getId(),
+          gmailUrl: 'https://mail.google.com/mail/u/0/#drafts'
+        };
+      }
+    } catch (error) {
+      console.warn('Draft ID lama tidak ditemukan: ' + document.emailDraftId);
+    }
+  }
+
+  if (!force) {
+    const recovered = findExistingDraftByMarker_(marker);
+    if (recovered) {
+      saveDraftState_(sheet, rowNumber, row, recovered.getId());
+      return {
+        ok: true,
+        reused: true,
+        recovered: true,
+        requestId: document.requestId,
+        documentId: document.id,
+        draftId: recovered.getId(),
+        gmailUrl: 'https://mail.google.com/mail/u/0/#drafts'
+      };
+    }
+  }
+
+  if (document.status !== 'GENERATED' || !document.pdfId || !driveFileExists_(document.pdfId)) {
+    throw new Error('Buat dokumen dan PDF sebelum membuat draft email.');
+  }
+  const preview = buildEmailPreviewForDocument_(document);
+  const markerHtml = '<span style="display:none;color:transparent;font-size:0">' +
+    escapeHtml_(marker) + '</span>';
+  const htmlBody = preview.htmlBody + markerHtml;
+  const attachment = DriveApp.getFileById(document.pdfId).getBlob();
+  const draft = GmailApp.createDraft(
+    preview.to.join(','),
+    preview.subject,
+    stripHtml_(htmlBody),
+    {
+      htmlBody: htmlBody,
+      cc: preview.cc.join(','),
+      attachments: [attachment],
+      markImportant: true
+    }
+  );
+
+  saveDraftState_(sheet, rowNumber, row, draft.getId());
+  recordDraftArtifact_(document, draft.getId(), user.email, marker);
+  updateMasterEmailStatus_(document.requestId);
+  return {
+    ok: true,
+    reused: false,
+    requestId: document.requestId,
+    documentId: document.id,
+    draftId: draft.getId(),
+    gmailUrl: 'https://mail.google.com/mail/u/0/#drafts',
+    preview: preview
+  };
+}
+
+function getEmailTemplate_(documentType, speakerStatus) {
+  const sheet = getSheet_('EMAIL_TEMPLATE');
+  const rows = readDataRows_(sheet, 5);
+  let row = rows.find(function(item) {
+    return text_(item[0]) === documentType &&
+      text_(item[1]) === text_(speakerStatus);
+  });
+  if (!row) {
+    row = rows.find(function(item) {
+      return text_(item[0]) === documentType && !text_(item[1]);
+    });
+  }
+  if (!row) throw new Error('Template email tidak ditemukan untuk ' + documentType);
+  return { subject: text_(row[2]), body: String(row[3] || '') };
+}
+
+function buildEmailPlaceholders_(detail, document, routing) {
+  const request = detail.request;
+  const employees = detail.employees;
+  const employeeLines = employees.map(function(employee, index) {
+    return (index + 1) + '. ' + employee.name +
+      (employee.identifier ? ' (' + employee.identifier + ')' : '');
+  });
+  const plain = {
+    kepadaYth: routing.toRoles.join('\n'),
+    jenisSurat: document.type,
+    subTipe: request.speakerSubtype,
+    statusNarasumber: request.speakerStatus,
+    namaKegiatan: request.activityName,
+    namaMitra: request.partnerName,
+    narasumber: employeeLines.join('\n'),
+    hari: request.day,
+    tanggal: request.dateDisplay,
+    tempat: request.activityPlace,
+    tembusan: routing.ccRoles.join('\n'),
+    nomorSurat: document.number,
+    nomorSuratMasuk: request.incomingNumber,
+    tanggalSuratMasuk: request.incomingDate ? formatIndonesianDate_(request.incomingDate) : '',
+    pengirimSuratMasuk: request.incomingSender,
+    perihalSuratMasuk: request.incomingSubject,
+    alamatMitra: request.partnerAddress,
+    waktuKegiatan: request.activityTime
+  };
+  const output = {};
+  Object.keys(plain).forEach(function(key) {
+    output[key] = {
+      plain: String(plain[key] || ''),
+      html: escapeHtml_(plain[key]).replace(/\n/g, '<br>')
+    };
+  });
+  return output;
+}
+
+function replaceTemplateTokens_(template, placeholders, html) {
+  let output = String(template || '');
+  Object.keys(placeholders).forEach(function(key) {
+    const value = html ? placeholders[key].html : placeholders[key].plain;
+    output = output.replace(new RegExp(escapeRegex_('{' + key + '}'), 'g'), value);
+  });
+  return output;
+}
+
+function findExistingDraftByMarker_(marker) {
+  const drafts = GmailApp.getDrafts();
+  const max = Math.min(drafts.length, 200);
+  for (let i = 0; i < max; i++) {
+    try {
+      const body = drafts[i].getMessage().getBody();
+      if (body && body.indexOf(marker) !== -1) return drafts[i];
+    } catch (error) {
+      console.warn('Gagal membaca draft untuk rekonsiliasi: ' + error.message);
+    }
+  }
+  return null;
+}
+
+function saveDraftState_(sheet, rowNumber, row, draftId) {
+  row[12] = draftId;
+  row[13] = 'DRAFTED';
+  row[16] = new Date();
+  sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+}
+
+function recordDraftArtifact_(document, draftId, userEmail, marker) {
+  appendDataRow_(getSheet_('FILES'), [
+    document.requestId,
+    document.templateKey,
+    document.revision,
+    'EMAIL_DRAFT',
+    draftId,
+    'https://mail.google.com/mail/u/0/#drafts',
+    new Date(),
+    userEmail,
+    'ACTIVE',
+    JSON.stringify({ documentId: document.id, marker: marker })
+  ]);
+}
+
+function updateMasterEmailStatus_(requestId) {
+  const documents = getDocumentsByRequest_(requestId);
+  const drafted = documents.length > 0 && documents.every(function(document) {
+    return document.emailStatus === 'DRAFTED';
+  });
+  const sheet = getSheet_('MASTER');
+  const rowNumber = findRowById_(sheet, requestId, 1);
+  if (!rowNumber) return;
+  sheet.getRange(rowNumber, masterColumn_('Email Status'))
+    .setValue(drafted ? 'EMAIL DRAFTED' : 'PARTIAL');
+}
+
+function getDocumentById_(documentId) {
+  const sheet = getSheet_('DOCUMENTS');
+  const rowNumber = findRowById_(sheet, documentId, 1);
+  if (!rowNumber) throw new Error('Dokumen tidak ditemukan: ' + documentId);
+  return documentRowToDto_(
+    sheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0]
+  );
+}
+
+function stripHtml_(html) {
+  return String(html || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+}
