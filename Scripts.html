@@ -4,18 +4,23 @@
       bootstrap: null,
       requests: [],
       travel: [],
+      travelLoaded: false,
       signers: [],
       employeeCatalog: [],
       currentDetail: null,
       currentTravel: null,
+      requestFilterTimer: null,
       activeView: 'dashboard'
     },
 
     async init() {
+      this.setBootProgress(4, 'Menyiapkan tampilan...');
       this.bindEvents();
       this.resetForm();
       try {
+        this.setBootProgress(18, 'Memuat data utama...');
         const data = await this.server('getBootstrapData');
+        this.setBootProgress(55, 'Merender dashboard...');
         this.state.bootstrap = data;
         this.state.requests = data.requests || [];
         this.hydrateUser(data);
@@ -24,10 +29,13 @@
         this.renderRequests(this.state.requests);
         this.renderReferences(data.references);
         this.updateFormVisibility();
+        this.setBootProgress(72, 'Sinkronisasi data biaya...');
+        await this.preloadTravelData();
+        this.setBootProgress(100, 'Siap digunakan');
       } catch (error) {
         this.showGlobalError(error);
       } finally {
-        document.getElementById('bootLoader').classList.add('is-done');
+        setTimeout(() => document.getElementById('bootLoader').classList.add('is-done'), 250);
       }
     },
 
@@ -44,8 +52,19 @@
       document.querySelectorAll('[data-view], [data-view-target]').forEach(button => {
         button.addEventListener('click', () => this.switchView(button.dataset.view || button.dataset.viewTarget));
       });
-      document.getElementById('menuToggle').addEventListener('click', () => {
-        document.getElementById('sidebar').classList.toggle('is-open');
+      document.getElementById('menuToggle').addEventListener('click', () => this.toggleSidebar());
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          this.setSidebarOpen(false);
+          this.closeDrawer();
+        }
+      });
+      document.addEventListener('click', event => {
+        const sidebar = document.getElementById('sidebar');
+        const toggle = document.getElementById('menuToggle');
+        if (!sidebar.classList.contains('is-open')) return;
+        if (sidebar.contains(event.target) || toggle.contains(event.target)) return;
+        this.setSidebarOpen(false);
       });
       document.getElementById('refreshButton').addEventListener('click', () => this.refreshAll());
       document.getElementById('activityType').addEventListener('change', () => this.updateFormVisibility());
@@ -71,10 +90,10 @@
         if (picker) this.applyEmployeeCatalogToCard_(picker.closest('.employee-card'), picker.value);
       });
       document.getElementById('resetForm').addEventListener('click', () => this.resetForm());
-      document.getElementById('applyRequestFilter').addEventListener('click', () => this.loadRequests());
-      document.getElementById('requestSearch').addEventListener('keydown', event => {
-        if (event.key === 'Enter') this.loadRequests();
-      });
+      document.getElementById('requestSearch').addEventListener('input', () => this.scheduleRequestFilter());
+      document.getElementById('requestSearch').addEventListener('search', () => this.scheduleRequestFilter(0));
+      document.getElementById('requestTypeFilter').addEventListener('change', () => this.scheduleRequestFilter(0));
+      document.getElementById('requestStatusFilter').addEventListener('change', () => this.scheduleRequestFilter(0));
       document.getElementById('requestTableBody').addEventListener('click', event => {
         const button = event.target.closest('[data-request-id]');
         if (button) this.openRequestDetail(button.dataset.requestId);
@@ -86,13 +105,14 @@
       document.getElementById('closeDrawer').addEventListener('click', () => this.closeDrawer());
       document.getElementById('drawerBackdrop').addEventListener('click', () => this.closeDrawer());
       document.getElementById('drawerBody').addEventListener('click', event => this.handleDetailAction(event));
-      document.getElementById('syncTravelButton').addEventListener('click', event => this.syncTravel(event.currentTarget));
       document.getElementById('travelTableBody').addEventListener('click', event => {
         const button = event.target.closest('[data-travel-key]');
         if (button) this.openTravelModal(button.dataset.travelKey);
       });
       document.getElementById('travelCostForm').addEventListener('submit', event => this.saveTravelCosts(event));
-      document.getElementById('checkSystemButton').addEventListener('click', event => this.checkSystem(event.currentTarget));
+      document.querySelectorAll('[data-admin-action]').forEach(button => {
+        button.addEventListener('click', event => this.handleAdminAction(event.currentTarget));
+      });
       document.getElementById('signerName').addEventListener('change', () => this.applySignerConfigFromForm_('name'));
       document.getElementById('signerId').addEventListener('change', () => this.applySignerConfigFromForm_('nik'));
       document.querySelectorAll('[data-close-dialog]').forEach(button => {
@@ -102,10 +122,12 @@
 
     hydrateUser(data) {
       const email = data.user.email || 'Pengguna';
+      const role = data.user.role || 'OPERATOR';
       document.getElementById('userEmail').textContent = email;
-      document.getElementById('userRole').textContent = data.user.role || 'USER';
+      document.getElementById('userRole').textContent = role;
       document.getElementById('userInitial').textContent = email.charAt(0).toUpperCase();
       document.getElementById('appVersion').textContent = 'v' + data.app.version;
+      document.body.classList.toggle('is-admin', role === 'ADMIN');
     },
 
     populateOptions(options) {
@@ -181,8 +203,14 @@
         requests: ['DATA PERMOHONAN', 'Permohonan'],
         form: ['FORMULIR TERPADU', document.getElementById('requestId').value ? 'Edit Permohonan' : 'Buat Permohonan'],
         finance: ['HONOR DAN PERJADIN', 'Data Keuangan'],
-        references: ['KONFIGURASI', 'Data Referensi']
+        references: ['KONFIGURASI', 'Data Referensi'],
+        admin: ['ADMIN AREA', 'Maintenance Sistem']
       };
+      if (!titles[view] || !document.getElementById('view-' + view)) return;
+      if (view === 'admin' && !document.body.classList.contains('is-admin')) {
+        this.toast('Menu Admin hanya tersedia untuk role Admin.', true);
+        view = 'dashboard';
+      }
       this.state.activeView = view;
       document.querySelectorAll('.view').forEach(item => item.classList.remove('is-active'));
       document.getElementById('view-' + view).classList.add('is-active');
@@ -190,9 +218,18 @@
       document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('is-active', item.dataset.view === view));
       document.getElementById('pageEyebrow').textContent = titles[view][0];
       document.getElementById('pageTitle').textContent = titles[view][1];
-      document.getElementById('sidebar').classList.remove('is-open');
-      if (view === 'finance') this.loadTravel();
+      this.setSidebarOpen(false);
+      if (view === 'finance' && !this.state.travelLoaded) this.syncAndLoadTravel();
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    toggleSidebar() {
+      this.setSidebarOpen(!document.getElementById('sidebar').classList.contains('is-open'));
+    },
+
+    setSidebarOpen(open) {
+      document.getElementById('sidebar').classList.toggle('is-open', Boolean(open));
+      document.getElementById('menuToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
     },
 
     renderDashboard(summary, requests) {
@@ -221,13 +258,13 @@
     renderRequests(items) {
       const body = document.getElementById('requestTableBody');
       body.innerHTML = items.map(item => `
-        <tr>
+        <tr class="${item.status === 'ARCHIVED' ? 'is-archived' : ''}">
           <td data-label="ID"><span class="table-primary">${this.escape(item.id)}</span><span class="table-secondary">${this.escape(item.updatedBy || item.createdBy || '-')}</span></td>
           <td data-label="Kegiatan"><span class="table-primary">${this.escape(item.activityName || '-')}</span><span class="table-secondary">${this.escape(item.activityType)}</span></td>
           <td data-label="Mitra">${this.escape(item.partnerName || '-')}</td>
           <td data-label="Tanggal">${this.escape(item.dateDisplay || '-')}</td>
-          <td data-label="Dokumen"><span class="table-primary">${this.escape(item.documentTypes.join(', ') || '-')}</span></td>
-          <td data-label="Status">${this.statusBadge(item.status)}</td>
+          <td data-label="Dokumen"><span class="table-primary">${this.escape(this.asArray(item.documentTypes).join(', ') || '-')}</span></td>
+          <td data-label="Status"><div class="status-stack">${this.statusBadge(item.status)}${this.lifecycleBadge(item.status)}</div></td>
           <td data-label="Aksi"><button class="button button-secondary button-small" data-request-id="${this.escape(item.id)}">Detail</button></td>
         </tr>
       `).join('');
@@ -246,6 +283,7 @@
         query: document.getElementById('requestSearch').value,
         activityType: document.getElementById('requestTypeFilter').value,
         status: document.getElementById('requestStatusFilter').value,
+        includeArchived: document.getElementById('requestStatusFilter').value === 'ARCHIVED',
         limit: 250
       };
       try {
@@ -255,6 +293,11 @@
       } catch (error) {
         this.toast(error.message, true);
       }
+    },
+
+    scheduleRequestFilter(delay = 350) {
+      clearTimeout(this.state.requestFilterTimer);
+      this.state.requestFilterTimer = setTimeout(() => this.loadRequests(), delay);
     },
 
     allowedDocuments() {
@@ -389,20 +432,28 @@
 
     collectForm(status) {
       const checked = selector => Array.from(document.querySelectorAll(selector + ':checked')).map(input => input.value);
+      const documents = this.collectDocuments();
+      const hasSpeakerRequest = document.getElementById('activityType').value === 'Penugasan Narasumber' &&
+        documents.some(document => document.type === 'Surat Permohonan Narasumber kepada Dekan');
+      const needsIncoming = documents.some(document => document.type !== 'Surat Tugas');
       return {
         id: document.getElementById('requestId').value,
         revision: document.getElementById('requestRevision').value,
         clientToken: document.getElementById('clientToken').value,
         status,
         activityType: document.getElementById('activityType').value,
-        speakerSubtype: document.getElementById('speakerSubtype').value,
-        speakerStatus: document.querySelector('input[name="speakerStatus"]:checked')?.value || '',
-        faculties: checked('input[name="faculty"]'),
-        documents: this.collectDocuments(),
-        incomingNumber: document.getElementById('incomingNumber').value,
-        incomingDate: document.getElementById('incomingDate').value,
-        incomingSender: document.getElementById('incomingSender').value,
-        incomingSubject: document.getElementById('incomingSubject').value,
+        speakerSubtype: document.getElementById('activityType').value === 'Penugasan Narasumber'
+          ? document.getElementById('speakerSubtype').value
+          : '',
+        speakerStatus: hasSpeakerRequest
+          ? (document.querySelector('input[name="speakerStatus"]:checked')?.value || '')
+          : '',
+        faculties: hasSpeakerRequest ? checked('input[name="faculty"]') : [],
+        documents,
+        incomingNumber: needsIncoming ? document.getElementById('incomingNumber').value : '',
+        incomingDate: needsIncoming ? document.getElementById('incomingDate').value : '',
+        incomingSender: needsIncoming ? document.getElementById('incomingSender').value : '',
+        incomingSubject: needsIncoming ? document.getElementById('incomingSubject').value : '',
         activityName: document.getElementById('activityName').value,
         partnerName: document.getElementById('partnerName').value,
         partnerAddress: document.getElementById('partnerAddress').value,
@@ -444,14 +495,16 @@
       const submitter = event.submitter;
       const status = submitter?.dataset.saveStatus || 'DRAFT';
       const payload = this.collectForm(status);
+      if (!this.validateBeforeSubmit(status, payload)) return;
       this.setBusy(submitter, true, 'Menyimpan...');
       try {
         const result = await this.server('saveRequest', payload);
         document.getElementById('requestId').value = result.id;
         document.getElementById('requestRevision').value = result.revision;
         this.toast('Permohonan ' + result.id + ' tersimpan.');
-        await this.refreshAll(false);
+        this.state.travelLoaded = false;
         await this.openRequestDetail(result.id);
+        this.refreshAll(false);
       } catch (error) {
         this.toast(error.message, true);
         this.focusFirstInvalid();
@@ -467,7 +520,7 @@
       document.getElementById('clientToken').value = this.uuid();
       document.getElementById('employeeList').innerHTML = '';
       this.addEmployee();
-      const today = new Date().toISOString().slice(0, 10);
+      const today = this.localDateIso();
       document.getElementById('letterDate').value = today;
       this.renderDocumentChoices([]);
       this.updateFormVisibility();
@@ -496,17 +549,15 @@
 
     renderDetail(detail) {
       const request = detail.request;
+      const detailDocuments = this.asArray(detail.documents);
       document.getElementById('drawerTitle').textContent = request.id;
-      const documents = detail.documents.map(doc => `
+      const documents = detailDocuments.map(doc => `
         <div class="document-item">
           <div class="document-item-head">
             <div><strong>${this.escape(doc.type)}</strong><small>${this.escape(doc.number || 'Nomor surat belum diisi')}</small></div>
             ${this.statusBadge(doc.status)}
           </div>
-          <div class="document-actions">
-            <button class="button button-primary button-small" data-action="generate-doc" data-document-id="${this.escape(doc.id)}">Buat dokumen</button>
-            <button class="button button-secondary button-small" data-action="preview-email" data-document-id="${this.escape(doc.id)}">Preview email</button>
-            <button class="button button-secondary button-small" data-action="draft-email" data-document-id="${this.escape(doc.id)}">Buat draft</button>
+          <div class="document-links">
             ${doc.docUrl ? `<a class="button button-secondary button-small" href="${this.escape(doc.docUrl)}" target="_blank">Buka Doc</a>` : ''}
             ${doc.pdfUrl ? `<a class="button button-secondary button-small" href="${this.escape(doc.pdfUrl)}" target="_blank">PDF</a>` : ''}
           </div>
@@ -517,22 +568,19 @@
         <div class="detail-hero">
           <p class="eyebrow">${this.escape(request.activityType)}</p>
           <h3>${this.escape(request.activityName)}</h3>
-          <p>${this.escape(request.partnerName)} · ${this.escape(request.dateDisplay || '-')}</p>
+          <p>${this.escape(request.partnerName)} · ${this.escape(request.dateDisplay || '-')} · ${this.escape(request.status || 'DRAFT')}</p>
         </div>
-        <div class="document-actions">
-          <button class="button button-primary" data-action="process-all">Buat dokumen & draft</button>
+        <div class="action-panel">
+          <button class="button button-primary" data-action="process-all">Proses semua dokumen</button>
           <button class="button button-secondary" data-action="edit-request">Edit data</button>
-          <button class="button button-secondary" data-action="generate-finance" data-kind="HONOR">Sheet honor</button>
-          <button class="button button-secondary" data-action="generate-finance" data-kind="PERJADIN">Sheet perjadin</button>
-          <button class="button button-secondary" data-action="export-finance" data-kind="HONOR" data-format="PDF">PDF honor</button>
-          <button class="button button-secondary" data-action="export-finance" data-kind="HONOR" data-format="XLSX">Excel honor</button>
-          <button class="button button-secondary" data-action="export-finance" data-kind="PERJADIN" data-format="PDF">PDF perjadin</button>
-          <button class="button button-secondary" data-action="export-finance" data-kind="PERJADIN" data-format="XLSX">Excel perjadin</button>
+          ${request.status === 'ARCHIVED' ? '' : '<button class="button button-danger" data-action="archive-request">Arsipkan</button>'}
         </div>
+        ${this.renderDocumentToolbar_(detailDocuments)}
+        ${this.renderFinanceToolbar_(request)}
         <section class="detail-section">
           <h3>Ringkasan</h3>
           <div class="detail-grid">
-            <div><span>Status</span><strong>${this.escape(request.status)}</strong></div>
+            <div><span>Status</span><strong>${this.statusBadge(request.status)} ${this.lifecycleBadge(request.status)}</strong></div>
             <div><span>Revision</span><strong>${request.revision}</strong></div>
             <div><span>Tempat</span><strong>${this.escape(request.activityPlace || '-')}</strong></div>
             <div><span>Waktu</span><strong>${this.escape(request.activityTime || '-')}</strong></div>
@@ -548,7 +596,43 @@
           <p><strong>CC:</strong><br>${this.escape(request.emailCc || '-').replace(/\n/g, '<br>')}</p>
           ${request.emailNote ? `<div class="notice notice-error">${this.escape(request.emailNote)}</div>` : ''}
         </section>
-        <button class="button button-danger button-full" data-action="archive-request">Arsipkan permohonan</button>
+      `;
+    },
+
+    renderDocumentToolbar_(documents) {
+      if (!documents.length) return '';
+      const options = documents.map(doc => `
+        <option value="${this.escape(doc.id)}">${this.escape(doc.type)}${doc.number ? ' | ' + this.escape(doc.number) : ''}</option>
+      `).join('');
+      return `
+        <section class="detail-section action-section">
+          <h3>Aksi dokumen</h3>
+          <div class="toolbar-row">
+            <select data-detail-document-select aria-label="Pilih dokumen">${options}</select>
+            <button class="button button-primary" data-action="generate-doc">Buat Doc/PDF</button>
+            <button class="button button-secondary" data-action="preview-email">Preview email</button>
+            <button class="button button-secondary" data-action="draft-email">Buat draft</button>
+          </div>
+        </section>
+      `;
+    },
+
+    renderFinanceToolbar_(request) {
+      const kinds = [];
+      if (request.honor === 'Ya') kinds.push(['HONOR', 'Honor']);
+      if (request.travel === 'Ya') kinds.push(['PERJADIN', 'Perjadin']);
+      if (!kinds.length) return '';
+      const options = kinds.map(item => `<option value="${item[0]}">${item[1]}</option>`).join('');
+      return `
+        <section class="detail-section action-section">
+          <h3>Aksi keuangan</h3>
+          <div class="toolbar-row">
+            <select data-finance-kind-select aria-label="Pilih laporan">${options}</select>
+            <button class="button button-primary" data-action="generate-finance">Buka sheet</button>
+            <button class="button button-secondary" data-action="export-finance" data-format="PDF">PDF</button>
+            <button class="button button-secondary" data-action="export-finance" data-format="XLSX">Excel</button>
+          </div>
+        </section>
       `;
     },
 
@@ -569,22 +653,25 @@
           this.setBusy(button, true, 'Mengarsipkan...');
           await this.server('archiveRequest', request.id, request.revision);
           this.toast('Permohonan diarsipkan.');
+          this.state.travelLoaded = false;
           this.closeDrawer();
           await this.refreshAll(false);
           return;
         }
         if (action === 'generate-doc') {
+          const documentId = button.dataset.documentId || this.selectedDetailDocumentId_();
           this.setBusy(button, true, 'Membuat...');
-          await this.server('generateDocument', button.dataset.documentId, false);
+          await this.server('generateDocument', documentId, false);
           this.toast('Dokumen dan PDF siap.');
         }
         if (action === 'preview-email') {
-          await this.openEmailPreview(button.dataset.documentId);
+          await this.openEmailPreview(button.dataset.documentId || this.selectedDetailDocumentId_());
           return;
         }
         if (action === 'draft-email') {
+          const documentId = button.dataset.documentId || this.selectedDetailDocumentId_();
           this.setBusy(button, true, 'Membuat draft...');
-          await this.server('createEmailDraft', button.dataset.documentId, false);
+          await this.server('createEmailDraft', documentId, false);
           this.toast('Draft Gmail siap.');
         }
         if (action === 'process-all') {
@@ -594,20 +681,22 @@
           this.toast('Semua dokumen dan draft selesai.');
         }
         if (action === 'generate-finance') {
+          const kind = button.dataset.kind || this.selectedFinanceKind_();
           const outputWindow = window.open('', '_blank');
           this.setBusy(button, true, 'Membuat sheet...');
-          const result = await this.server('generateFinanceSheet', request.id, button.dataset.kind);
+          const result = await this.server('generateFinanceSheet', request.id, kind);
           if (outputWindow) outputWindow.location = result.url;
           else window.open(result.url, '_blank');
-          this.toast('Sheet ' + button.dataset.kind.toLowerCase() + ' siap.');
+          this.toast('Sheet ' + kind.toLowerCase() + ' siap.');
         }
         if (action === 'export-finance') {
+          const kind = button.dataset.kind || this.selectedFinanceKind_();
           const outputWindow = window.open('', '_blank');
           this.setBusy(button, true, 'Mengekspor...');
           const result = await this.server(
             'generateAndExportFinance',
             request.id,
-            button.dataset.kind,
+            kind,
             button.dataset.format
           );
           if (outputWindow) outputWindow.location = result.url;
@@ -620,6 +709,18 @@
       } finally {
         this.setBusy(button, false);
       }
+    },
+
+    selectedDetailDocumentId_() {
+      const documentId = document.querySelector('[data-detail-document-select]')?.value;
+      if (!documentId) throw new Error('Pilih dokumen terlebih dahulu.');
+      return documentId;
+    },
+
+    selectedFinanceKind_() {
+      const kind = document.querySelector('[data-finance-kind-select]')?.value;
+      if (!kind) throw new Error('Pilih jenis laporan terlebih dahulu.');
+      return kind;
     },
 
     fillForm(detail) {
@@ -657,7 +758,8 @@
       this.renderDocumentChoices(detail.documents);
       const statusInput = document.querySelector(`input[name="speakerStatus"][value="${CSS.escape(request.speakerStatus || '')}"]`);
       if (statusInput) statusInput.checked = true;
-      document.querySelectorAll('input[name="faculty"]').forEach(input => input.checked = request.faculties.includes(input.value));
+      const faculties = this.asArray(request.faculties);
+      document.querySelectorAll('input[name="faculty"]').forEach(input => input.checked = faculties.includes(input.value));
       document.getElementById('employeeList').innerHTML = '';
       detail.employees.forEach(employee => this.addEmployee(employee));
       if (!detail.employees.length) this.addEmployee();
@@ -681,7 +783,7 @@
             <div><span>Lampiran</span>${preview.hasAttachment ? 'PDF siap' : 'PDF belum dibuat'}</div>
           </div>
           ${preview.notes.length ? `<div class="notice notice-error">${this.escape(preview.notes.join('\n'))}</div>` : ''}
-          <div class="email-preview">${preview.htmlBody}</div>
+          <iframe class="email-preview-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${this.escape(this.emailPreviewDocument(preview.htmlBody))}"></iframe>
         `;
       } catch (error) {
         document.getElementById('emailModalBody').innerHTML = `<div class="notice notice-error">${this.escape(error.message)}</div>`;
@@ -692,6 +794,7 @@
       try {
         const result = await this.server('listTravelData', {});
         this.state.travel = result.items;
+        this.state.travelLoaded = true;
         this.renderTravel(result.items);
       } catch (error) {
         this.toast(error.message, true);
@@ -712,16 +815,24 @@
       document.getElementById('travelEmpty').classList.toggle('is-hidden', items.length > 0);
     },
 
-    async syncTravel(button) {
-      this.setBusy(button, true, 'Sinkronisasi...');
+    async syncAndLoadTravel(showToast = false) {
       try {
         const result = await this.server('syncTravelData', '');
-        this.toast(result.synced + ' data perjadin disinkronkan.');
+        if (showToast) this.toast(result.synced + ' data perjadin disinkronkan.');
         await this.loadTravel();
       } catch (error) {
         this.toast(error.message, true);
-      } finally {
-        this.setBusy(button, false);
+      }
+    },
+
+    async preloadTravelData() {
+      try {
+        await this.server('syncTravelData', '');
+        this.setBootProgress(86, 'Memuat data biaya...');
+        await this.loadTravel();
+      } catch (error) {
+        this.state.travelLoaded = false;
+        this.toast('Data biaya belum termuat: ' + error.message, true);
       }
     },
 
@@ -733,7 +844,7 @@
       document.getElementById('travelModalTitle').textContent = item.name;
       document.getElementById('travelModalBody').innerHTML = `
         <div class="cost-grid">
-          ${labels.map((label, index) => `<label class="field"><span>${this.escape(label)}</span><input type="number" min="0" step="1000" data-cost-index="${index}" value="${Number(item.costs[index] || 0)}"></label>`).join('')}
+          ${labels.map((label, index) => `<label class="field"><span>${this.escape(label)}</span><input type="number" min="0" step="1000" data-cost-index="${index}" value="${Number(this.asArray(item.costs)[index] || 0)}"></label>`).join('')}
         </div>
       `;
       document.getElementById('travelModal').showModal();
@@ -751,21 +862,6 @@
         document.getElementById('travelModal').close();
         this.toast('Biaya perjadin tersimpan.');
         await this.loadTravel();
-      } catch (error) {
-        this.toast(error.message, true);
-      } finally {
-        this.setBusy(button, false);
-      }
-    },
-
-    async checkSystem(button) {
-      this.setBusy(button, true, 'Memeriksa...');
-      try {
-        const status = await this.server('getSystemStatus');
-        document.getElementById('systemStatus').innerHTML = Object.keys(status.checks).map(key => {
-          const item = status.checks[key];
-          return `<div class="system-check"><span>${this.escape(item.name || item.expected)}</span>${this.statusBadge(item.ok ? 'READY' : 'ERROR')}</div>`;
-        }).join('');
       } catch (error) {
         this.toast(error.message, true);
       } finally {
@@ -791,14 +887,93 @@
       }
     },
 
+    async handleAdminAction(button) {
+      if (!document.body.classList.contains('is-admin')) {
+        this.toast('Aksi ini hanya untuk Admin.', true);
+        return;
+      }
+      const action = button.dataset.adminAction;
+      this.setBusy(button, true, 'Memproses...');
+      try {
+        if (action === 'system-status') {
+          const result = await this.server('getSystemStatus');
+          this.renderAdminObject('Status sistem', result);
+        }
+        if (action === 'setup-system') {
+          if (!confirm('Jalankan setupSystem? Header sheet dan konfigurasi dasar akan diperiksa/dilengkapi.')) return;
+          const result = await this.server('setupSystem');
+          this.renderAdminObject('Setup struktur', result);
+        }
+        if (action === 'preview-migration') {
+          const result = await this.server('previewLegacyMigration');
+          this.renderAdminObject('Preview migrasi', result);
+        }
+        if (action === 'repair-master') {
+          if (!confirm('Repair ID Master kosong? Jalankan hanya saat dibutuhkan.')) return;
+          const result = await this.server('repairMigratedMasterIds');
+          this.renderAdminObject('Repair ID Master', result);
+        }
+        if (action === 'repair-employee') {
+          if (!confirm('Repair ID Pegawai hasil migrasi? Jalankan hanya saat dibutuhkan.')) return;
+          const result = await this.server('repairMigratedEmployeeIds');
+          this.renderAdminObject('Repair ID Pegawai', result);
+        }
+        if (action === 'preview-cleanup') {
+          const result = await this.server('previewGeneratedSheetCleanup');
+          this.renderGeneratedSheetCleanup(result || []);
+        }
+        if (action === 'delete-generated') {
+          const selected = Array.from(document.querySelectorAll('[data-generated-sheet]:checked'))
+            .map(input => input.value);
+          if (!selected.length) throw new Error('Pilih minimal satu sheet generate dari hasil tinjauan.');
+          if (!confirm('Hapus sheet generate terpilih? Data di sheet tersebut akan hilang dari spreadsheet.')) return;
+          const result = await this.server('deleteGeneratedSheets', selected);
+          this.renderAdminObject('Hapus sheet generate', result);
+        }
+      } catch (error) {
+        this.toast(error.message, true);
+      } finally {
+        this.setBusy(button, false);
+      }
+    },
+
+    renderAdminObject(title, result) {
+      document.getElementById('adminResult').innerHTML = `
+        <div class="admin-output">
+          <h3>${this.escape(title)}</h3>
+          <pre>${this.escape(JSON.stringify(result, null, 2))}</pre>
+        </div>
+      `;
+    },
+
+    renderGeneratedSheetCleanup(items) {
+      document.getElementById('adminResult').innerHTML = `
+        <div class="admin-output">
+          <h3>Sheet generate</h3>
+          ${items.length ? items.map(item => `
+            <label class="cleanup-item">
+              <input type="checkbox" data-generated-sheet value="${this.escape(item.name)}">
+              <span>${this.escape(item.name)}</span>
+            </label>
+          `).join('') : '<p class="helper-text">Tidak ada sheet generate yang bisa dibersihkan.</p>'}
+        </div>
+      `;
+    },
+
     statusBadge(status) {
       const clean = String(status || 'PENDING').toUpperCase();
       const className = clean === 'READY' ? 'ready' :
         clean === 'GENERATED' ? 'generated' :
         clean === 'DRAFTED' || clean === 'EMAIL DRAFTED' ? 'drafted' :
+        clean === 'ARCHIVED' ? 'archived' :
         clean === 'ERROR' ? 'error' :
         clean === 'DRAFT' ? 'draft' : 'pending';
       return `<span class="status status-${className}">${this.escape(clean.replace(/_/g, ' '))}</span>`;
+    },
+
+    lifecycleBadge(status) {
+      const archived = String(status || '').toUpperCase() === 'ARCHIVED';
+      return `<span class="status status-${archived ? 'archived' : 'active'}">${archived ? 'ARSIP' : 'AKTIF'}</span>`;
     },
 
     setBusy(button, busy, label) {
@@ -837,6 +1012,70 @@
 
     currency(value) {
       return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
+    },
+
+    validateBeforeSubmit(status, payload) {
+      if (status !== 'READY') return true;
+      const form = document.getElementById('requestForm');
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return false;
+      }
+      const errors = [];
+      if (!payload.documents.length) errors.push('Pilih minimal satu dokumen.');
+      payload.documents.forEach(document => {
+        if (!document.number) errors.push('Nomor surat wajib: ' + document.type);
+      });
+      const needsPeople = payload.documents.some(document => document.type === 'Surat Tugas') ||
+        (payload.documents.some(document => document.type === 'Surat Permohonan Narasumber kepada Dekan') &&
+          payload.speakerStatus === 'Tidak Dicarikan');
+      if (needsPeople && !payload.employees.length) errors.push('Minimal satu pegawai/narasumber wajib diisi.');
+      if (payload.activityType === 'Penugasan Narasumber' && !payload.speakerSubtype) {
+        errors.push('Sub-tipe narasumber wajib diisi.');
+      }
+      if (payload.documents.some(document => document.type === 'Surat Permohonan Narasumber kepada Dekan')) {
+        if (!payload.speakerStatus) errors.push('Status narasumber wajib diisi.');
+        if (!payload.faculties.length) errors.push('Fakultas tujuan wajib dipilih.');
+      }
+      if (payload.travel === 'Ya') {
+        payload.employees.forEach((employee, index) => {
+          if (!employee.rank || !employee.category) {
+            errors.push('Pangkat dan kategori perjadin wajib untuk orang ke-' + (index + 1) + '.');
+          }
+        });
+      }
+      if (errors.length) {
+        this.toast(errors.join('\n'), true);
+        return false;
+      }
+      return true;
+    },
+
+    localDateIso(date = new Date()) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    },
+
+    asArray(value) {
+      return Array.isArray(value) ? value : [];
+    },
+
+    emailPreviewDocument(htmlBody) {
+      return '<!doctype html><html><head><base target="_blank"><meta charset="UTF-8">' +
+        '<style>body{font:14px/1.6 Arial,sans-serif;color:#172321;margin:0;padding:16px}a{color:#015850}</style>' +
+        '</head><body>' + String(htmlBody || '') + '</body></html>';
+    },
+
+    setBootProgress(value, text) {
+      const percent = Math.max(0, Math.min(100, Number(value) || 0));
+      const bar = document.getElementById('bootProgressBar');
+      const label = document.getElementById('bootProgressValue');
+      const message = document.getElementById('bootProgressText');
+      if (bar) bar.style.width = percent + '%';
+      if (label) label.textContent = Math.round(percent) + '%';
+      if (message && text) message.textContent = text;
     },
 
     escape(value) {

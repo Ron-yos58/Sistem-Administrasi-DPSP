@@ -56,7 +56,9 @@ Placeholder lain terdapat pada `buildDocumentPlaceholders_()` di `DocumentServic
 | --- | --- | --- |
 | operator@unpar.ac.id | TRUE | ADMIN |
 
-Role yang didukung: `ADMIN`, `OPERATOR`, `VIEWER`.
+Role yang didukung: `ADMIN` dan `OPERATOR`.
+
+`ADMIN` dipakai untuk setup, migrasi, repair, dan pembersihan artefak sistem. `OPERATOR` dipakai untuk input permohonan, generate dokumen, draft email, dan ekspor laporan.
 
 ## 5. Migrasi Data Lama
 
@@ -92,6 +94,10 @@ Migrasi menolak berjalan bila `Dokumen Permohonan` sudah berisi data.
 5. Pastikan draft muncul di akun operator yang sedang login.
 6. Tambah/urutkan pegawai, sinkronkan perjadin, dan pastikan nominal tetap pada orang yang sama.
 7. Jalankan `getSystemStatus`.
+
+### Akses data saat generate sheet
+
+Saat operator membuat sheet honor/perjadin, web app tidak membuka database utama ke browser. Apps Script membaca `Master Permohonan`, `Dokumen Permohonan`, `Data Pegawai`, dan `Data Perjadin` di server menggunakan akun pengguna yang sedang login, lalu hanya membuka sheet hasil `GEN-*` kepada pengguna. Metadata `DPSP_GENERATED` dipakai untuk memastikan sistem tidak menimpa sheet manual.
 
 ## 7. Deployment Web App
 

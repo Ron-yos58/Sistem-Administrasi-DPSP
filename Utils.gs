@@ -31,17 +31,32 @@ function assertAuthorized_() {
 
   const accessSheet = getSheet_('ACCESS', false);
   if (!accessSheet || accessSheet.getLastRow() < 2) {
-    return { email: email, role: 'ADMIN' };
+    throw new Error('Config_Access belum berisi pengguna aktif. Jalankan setupSystem() dengan akun admin awal.');
   }
 
   const values = accessSheet.getRange(2, 1, accessSheet.getLastRow() - 1, 3).getDisplayValues();
   const match = values.find(function(row) {
-    return String(row[0]).trim().toLowerCase() === email &&
-      String(row[1]).trim().toLowerCase() !== 'false' &&
-      String(row[1]).trim().toLowerCase() !== 'tidak';
+    return String(row[0]).trim().toLowerCase() === email && isAccessActive_(row[1]);
   });
   if (!match) throw new Error('Akun ' + email + ' tidak memiliki akses.');
-  return { email: email, role: String(match[2] || 'USER').trim().toUpperCase() };
+  return { email: email, role: normalizeRole_(match[2]) };
+}
+
+function isAccessActive_(value) {
+  const state = String(value == null ? '' : value).trim().toLowerCase();
+  return ['false', 'tidak', 'no', '0', 'inactive', 'nonaktif', 'disabled'].indexOf(state) === -1;
+}
+
+function normalizeRole_(value) {
+  const role = String(value || '').trim().toUpperCase();
+  if (['ADMIN', 'OPERATOR'].indexOf(role) === -1) {
+    throw new Error('Role akses tidak valid: ' + role);
+  }
+  return role;
+}
+
+function assertAdmin_(user) {
+  if ((user || {}).role !== 'ADMIN') throw new Error('Hanya Admin dapat menjalankan operasi ini.');
 }
 
 function withScriptLock_(callback) {
@@ -167,6 +182,24 @@ function rowToObject_(headers, row) {
   }, {});
 }
 
+function getJsonCache_(key) {
+  try {
+    const cached = CacheService.getScriptCache().get(key);
+    return cached ? JSON.parse(cached) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function putJsonCache_(key, value) {
+  try {
+    CacheService.getScriptCache().put(key, JSON.stringify(value), APP_CONFIG.CACHE_SECONDS);
+  } catch (error) {
+    // Oversized cache payloads should not break the main request path.
+  }
+  return value;
+}
+
 function findRowById_(sheet, id, idColumn) {
   const column = idColumn || 1;
   const lastRow = lastNonEmptyRowInColumn_(sheet, column);
@@ -236,5 +269,5 @@ function logAudit_(action, entityId, success, details) {
 }
 
 function clearAppCache_() {
-  CacheService.getScriptCache().removeAll(['bootstrap', 'references']);
+  CacheService.getScriptCache().removeAll(['bootstrap', 'references', 'signers', 'employeeCatalog']);
 }

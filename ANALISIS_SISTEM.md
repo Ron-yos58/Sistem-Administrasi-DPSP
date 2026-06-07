@@ -56,7 +56,7 @@
 
 ## Kontrol Preventif
 
-- Otorisasi server-side: `ADMIN`, `OPERATOR`, `VIEWER`.
+- Otorisasi server-side: `ADMIN` dan `OPERATOR`.
 - Optimistic locking memakai `Revision`.
 - Mutasi memakai `LockService.getScriptLock()`.
 - Validasi enum, email, tanggal, jumlah penerima, dan nominal.

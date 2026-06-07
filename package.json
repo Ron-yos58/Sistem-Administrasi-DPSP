@@ -2,6 +2,7 @@
   "name": "sistem-surat-dpsp",
   "private": true,
   "scripts": {
+    "test": "npm run check",
     "check": "node tools/check-syntax.js && node tools/test-pure.js"
   }
 }

@@ -17,9 +17,11 @@ const gsFiles = fs.readdirSync(root)
 
 let failed = false;
 const functionOwners = new Map();
+const combinedSources = [];
 
 for (const file of gsFiles) {
   const source = fs.readFileSync(path.join(root, file), 'utf8');
+  combinedSources.push(`\n// ${file}\n${source}`);
   try {
     new vm.Script(source, { filename: file });
     console.log(`OK syntax ${file}`);
@@ -40,6 +42,14 @@ for (const file of gsFiles) {
   }
 }
 
+try {
+  new vm.Script(combinedSources.join('\n'), { filename: 'combined-apps-script.gs' });
+  console.log('OK syntax combined Apps Script bundle');
+} catch (error) {
+  failed = true;
+  console.error(`FAIL syntax combined Apps Script bundle: ${error.message}`);
+}
+
 const scriptsHtml = fs.readFileSync(path.join(root, 'Scripts.html'), 'utf8')
   .replace(/^\s*<script>\s*/, '')
   .replace(/\s*<\/script>\s*$/, '');
@@ -52,6 +62,15 @@ try {
 }
 
 const indexHtml = fs.readFileSync(path.join(root, 'Index.html'), 'utf8');
+const includeNames = new Set(Array.from(indexHtml.matchAll(/include\(['"]([^'"]+)['"]\)/g), match => match[1]));
+for (const name of includeNames) {
+  const file = `${name}.html`;
+  if (!fs.existsSync(path.join(root, file))) {
+    failed = true;
+    console.error(`FAIL missing included HTML file: ${file}`);
+  }
+}
+
 const htmlIds = new Set(Array.from(indexHtml.matchAll(/\bid="([^"]+)"/g), match => match[1]));
 const referencedIds = new Set(Array.from(scriptsHtml.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g), match => match[1]));
 for (const id of referencedIds) {

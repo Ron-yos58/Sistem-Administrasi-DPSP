@@ -157,6 +157,9 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
     sheet = ss.insertSheet(sheetName);
     sheet.addDeveloperMetadata('DPSP_GENERATED', reportKind + '|' + requestId);
   } else {
+    if (!isGeneratedSheet_(sheet)) {
+      throw new Error('Sheet bernama ' + sheetName + ' sudah ada tetapi bukan artefak sistem.');
+    }
     sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).breakApart();
     sheet.clear();
   }
@@ -168,7 +171,9 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
   }
   logAudit_('GENERATE_FINANCE_SHEET', requestId, true, {
     kind: reportKind,
-    sheetId: sheet.getSheetId()
+    sheetId: sheet.getSheetId(),
+    dataAccess: 'SERVER_SIDE_SPREADSHEET_READ',
+    openedForUser: 'GENERATED_SHEET_ONLY'
   });
   return {
     ok: true,
@@ -182,7 +187,7 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
 
 function previewGeneratedSheetCleanup() {
   const user = assertAuthorized_();
-  if (user.role !== 'ADMIN') throw new Error('Hanya Admin dapat membersihkan sheet keluaran.');
+  assertAdmin_(user);
   const sheets = getSpreadsheet_().getSheets().filter(isGeneratedSheet_);
   return sheets.map(function(sheet) {
     return { name: sheet.getName(), sheetId: sheet.getSheetId() };
@@ -191,7 +196,7 @@ function previewGeneratedSheetCleanup() {
 
 function deleteGeneratedSheets(sheetNames) {
   const user = assertAuthorized_();
-  if (user.role !== 'ADMIN') throw new Error('Hanya Admin dapat membersihkan sheet keluaran.');
+  assertAdmin_(user);
   const targets = uniqueTextList_(sheetNames || []);
 
   return withScriptLock_(function() {

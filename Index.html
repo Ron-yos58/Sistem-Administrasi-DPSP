@@ -3,6 +3,7 @@
   <head>
     <base target="_top">
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#015850">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,6 +37,9 @@
           <button class="nav-item" data-view="references">
             <span class="nav-icon">◇</span><span>Data Referensi</span>
           </button>
+          <button class="nav-item" data-view="admin" data-admin-only>
+            <span class="nav-icon">⚙</span><span>Admin</span>
+          </button>
         </nav>
 
         <div class="sidebar-foot">
@@ -52,13 +56,13 @@
 
       <div class="workspace">
         <header class="topbar">
-          <button class="icon-button menu-toggle" id="menuToggle" aria-label="Buka menu">☰</button>
+          <button class="icon-button menu-toggle" id="menuToggle" aria-label="Buka menu" aria-expanded="false" aria-controls="sidebar">☰</button>
           <div>
             <p class="eyebrow" id="pageEyebrow">OPERASIONAL DPSP</p>
             <h1 id="pageTitle">Ringkasan</h1>
           </div>
           <div class="topbar-actions">
-            <button class="button button-secondary" id="refreshButton">Muat ulang</button>
+            <button class="button button-secondary" id="refreshButton">Refresh</button>
             <button class="button button-primary" data-view-target="form">Permohonan baru</button>
           </div>
         </header>
@@ -121,8 +125,8 @@
                 <option value="">Semua status</option>
                 <option value="DRAFT">Draft</option>
                 <option value="READY">Siap</option>
+                <option value="ARCHIVED">Arsip</option>
               </select>
-              <button class="button button-secondary" id="applyRequestFilter">Terapkan</button>
             </div>
 
             <div class="panel table-panel">
@@ -275,7 +279,6 @@
                 <p class="eyebrow">DATA TURUNAN</p>
                 <h2>Perjalanan dinas</h2>
               </div>
-              <button class="button button-primary" id="syncTravelButton">Sinkronkan data</button>
             </div>
             <div class="panel table-panel">
               <div class="table-scroll">
@@ -284,7 +287,7 @@
                   <tbody id="travelTableBody"></tbody>
                 </table>
               </div>
-              <div class="empty-state is-hidden" id="travelEmpty"><strong>Belum ada data perjadin</strong><span>Sinkronkan permohonan dengan Perjalanan Dinas = Ya.</span></div>
+              <div class="empty-state is-hidden" id="travelEmpty"><strong>Belum ada data perjadin</strong><span>Data akan muncul otomatis dari permohonan dengan Perjalanan Dinas = Ya.</span></div>
             </div>
           </section>
 
@@ -299,11 +302,49 @@
                   </table>
                 </div>
               </article>
-              <article class="panel">
-                <p class="eyebrow">STATUS SISTEM</p>
-                <h3>Validasi struktur</h3>
-                <div id="systemStatus" class="system-checks"></div>
-                <button class="button button-secondary button-full" id="checkSystemButton">Periksa sistem</button>
+              <article class="panel reference-note">
+                <p class="eyebrow">FUNGSI DATA</p>
+                <h3>Untuk apa dipakai?</h3>
+                <ul class="info-list">
+                  <li><strong>Master CC</strong><span>Menentukan penerima To/CC otomatis saat preview dan draft email dibuat.</span></li>
+                  <li><strong>Signature Config</strong><span>Mengisi pilihan penandatangan pada form permohonan.</span></li>
+                  <li><strong>Data Pegawai</strong><span>Mempercepat pengisian petugas/narasumber dan menjadi dasar honor serta perjadin.</span></li>
+                  <li><strong>Config Access</strong><span>Membatasi siapa yang boleh masuk sebagai Admin atau Operator.</span></li>
+                </ul>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" id="view-admin" data-admin-only>
+            <div class="content-grid">
+              <article class="panel panel-wide">
+                <div class="panel-head">
+                  <div>
+                    <p class="eyebrow">ADMIN AREA</p>
+                    <h3>Maintenance sistem</h3>
+                  </div>
+                </div>
+                <div class="admin-actions">
+                  <button class="button button-primary" data-admin-action="system-status">Periksa sistem</button>
+                  <button class="button button-secondary" data-admin-action="setup-system">Setup struktur</button>
+                  <button class="button button-secondary" data-admin-action="preview-migration">Preview migrasi</button>
+                  <button class="button button-secondary" data-admin-action="repair-master">Repair ID Master</button>
+                  <button class="button button-secondary" data-admin-action="repair-employee">Repair ID Pegawai</button>
+                  <button class="button button-secondary" data-admin-action="preview-cleanup">Tinjau sheet generate</button>
+                  <button class="button button-danger" data-admin-action="delete-generated">Hapus sheet terpilih</button>
+                </div>
+                <div class="admin-result" id="adminResult">
+                  <div class="empty-state"><strong>Belum ada pemeriksaan</strong><span>Pilih salah satu aksi admin.</span></div>
+                </div>
+              </article>
+              <article class="panel reference-note">
+                <p class="eyebrow">BATAS AKSES</p>
+                <h3>Admin vs Operator</h3>
+                <ul class="info-list">
+                  <li><strong>Admin</strong><span>Setup, migrasi, repair, cleanup, dan semua pekerjaan operator.</span></li>
+                  <li><strong>Operator</strong><span>Input/edit permohonan, generate dokumen, draft email, honor, dan perjadin.</span></li>
+                  <li><strong>UI dibatasi</strong><span>Menu Admin hanya tampil untuk role Admin; backend tetap memvalidasi ulang.</span></li>
+                </ul>
               </article>
             </div>
           </section>
@@ -317,6 +358,7 @@
       <button class="mobile-create" data-view="form"><span>＋</span>Buat</button>
       <button data-view="finance"><span>Rp</span>Biaya</button>
       <button data-view="references"><span>◇</span>Lainnya</button>
+      <button data-view="admin" data-admin-only><span>⚙</span>Admin</button>
     </nav>
 
     <div class="drawer-backdrop is-hidden" id="drawerBackdrop"></div>
@@ -342,7 +384,14 @@
     </dialog>
 
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-    <div class="boot-loader" id="bootLoader"><div class="loader-mark">D</div><strong>Menyiapkan sistem...</strong></div>
+    <div class="boot-loader" id="bootLoader" role="status" aria-live="polite">
+      <div class="loader-mark">D</div>
+      <strong id="bootProgressText">Menyiapkan sistem...</strong>
+      <div class="boot-progress" aria-hidden="true">
+        <span id="bootProgressBar"></span>
+      </div>
+      <span class="boot-percent" id="bootProgressValue">0%</span>
+    </div>
     <?!= include('Scripts'); ?>
   </body>
 </html>

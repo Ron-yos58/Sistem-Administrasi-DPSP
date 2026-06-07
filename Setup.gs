@@ -1,5 +1,5 @@
 function setupSystem() {
-  const user = assertAuthorized_();
+  const user = getSetupUser_();
   return withScriptLock_(function() {
     const ss = getSpreadsheet_();
     const report = [];
@@ -9,13 +9,14 @@ function setupSystem() {
     ensureSheet_(ss, 'EMPLOYEES', EMPLOYEE_HEADERS, report);
     ensureSheet_(ss, 'TRAVEL', TRAVEL_HEADERS, report);
     ensureSheet_(ss, 'CC', CC_HEADERS, report);
-    ensureSheet_(ss, 'EMAIL_TEMPLATE', ['SubTipe', 'Status Narasumber', 'Subject Email', 'Body Email', 'Place Holder'], report);
+    ensureSheet_(ss, 'EMAIL_TEMPLATE', ['Jenis Surat', 'Status Narasumber', 'Subject Email', 'Body Email', 'Place Holder'], report);
     ensureSheet_(ss, 'EXPORT', ['Peruntukan', 'Folder_ID', 'Keterangan'], report);
     ensureSheet_(ss, 'AUDIT', AUDIT_HEADERS, report);
     ensureSheet_(ss, 'FILES', GENERATED_FILE_HEADERS, report);
     ensureSheet_(ss, 'ACCESS', ACCESS_HEADERS, report);
     ensureSheet_(ss, 'SIGNATURE', SIGNATURE_HEADERS, report);
 
+    seedInitialAccessUser_(user.email, report);
     seedExportFolder_();
     seedEmailTemplates_();
     formatSystemSheets_();
@@ -23,6 +24,38 @@ function setupSystem() {
     logAudit_('SETUP_SYSTEM', '', true, { report: report, user: user.email });
     return { ok: true, report: report };
   });
+}
+
+function getSetupUser_() {
+  const email = getCurrentUser_();
+  if (!email) {
+    throw new Error(
+      'Identitas pengguna tidak tersedia. Deploy sebagai "User accessing the web app" sebelum setup.'
+    );
+  }
+
+  const accessSheet = getSheet_('ACCESS', false);
+  if (!accessSheet || accessSheet.getLastRow() < 2) {
+    return { email: email, role: 'ADMIN' };
+  }
+
+  const user = assertAuthorized_();
+  assertAdmin_(user);
+  return user;
+}
+
+function seedInitialAccessUser_(email, report) {
+  const sheet = getSheet_('ACCESS');
+  const rows = sheet.getLastRow() >= 2
+    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getDisplayValues()
+    : [];
+  const hasActiveUser = rows.some(function(row) {
+    return text_(row[0]) && isAccessActive_(row[1]);
+  });
+  if (hasActiveUser) return;
+
+  sheet.getRange(2, 1, 1, 3).setValues([[email, 'TRUE', 'ADMIN']]);
+  report.push('Menambahkan admin awal ke Config_Access: ' + email);
 }
 
 function ensureSheet_(ss, key, headers, report) {

@@ -45,7 +45,7 @@
       return enrichRequestWithDocuments_(masterRowToDto_(row), documentsByRequest);
     }).filter(function(item) {
       if (!item.id) return false;
-      if (!filters.includeArchived && item.status === 'ARCHIVED') return false;
+      if (!filters.includeArchived && status !== 'ARCHIVED' && item.status === 'ARCHIVED') return false;
       if (type && item.activityType !== type) return false;
       if (status && item.status !== status) return false;
       if (query) {
@@ -73,12 +73,11 @@
     const row = master.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
     const documents = getDocumentsByRequest_(id);
     return serializeValue_({
-      request: enrichRequestWithDocuments_(masterRowToDto_(row), buildDocumentsByRequestMap_(), documents),
+      request: enrichRequestWithDocuments_(masterRowToDto_(row), null, documents),
       documents: documents,
       employees: getEmployeesByRequest_(id),
       generatedFiles: getGeneratedFilesByRequest_(id),
-      travel: getTravelByRequestInternal_(id),
-      emailPreview: buildEmailPreviewInternal_(id, true)
+      travel: getTravelByRequestInternal_(id)
     });
   }
 
@@ -175,17 +174,20 @@
         setMaster_(row, 'Dibuat Pada', now);
       }
 
-      const documents = replaceDocumentsForRequest_(id, clean.documents, revision);
-      replaceEmployeesForRequest_(id, clean.employees);
-      applyEmployeeAndRoutingColumns_(row, clean.employees, clean);
-
+      clearGeneratedStateColumns_(row);
       if (isNew) {
         rowNumber = appendDataRow_(sheet, row);
       } else {
         sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+        markGeneratedFilesSuperseded_(id);
       }
 
-      if (clean.travel === 'Ya') syncTravelDataInternal_(id);
+      const documents = replaceDocumentsForRequest_(id, clean.documents, revision);
+      replaceEmployeesForRequest_(id, clean.employees);
+      applyEmployeeAndRoutingColumns_(row, clean.employees, clean);
+      sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+
+      syncTravelDataInternal_(id);
       clearAppCache_();
       logAudit_('SAVE_REQUEST', id, true, {
         revision: revision,
@@ -225,6 +227,7 @@
       setMaster_(row, 'Diubah Pada', new Date());
       setMaster_(row, 'Revision', currentRevision + 1);
       sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+      syncTravelDataInternal_(id);
       clearAppCache_();
       logAudit_('ARCHIVE_REQUEST', id, true, {});
       return { ok: true };
@@ -237,6 +240,9 @@
   }
 
   function getReferenceDataInternal_() {
+    const cached = getJsonCache_('references');
+    if (cached) return cached;
+
     const ccSheet = getSheet_('CC');
     const lastRow = lastNonEmptyRowInColumn_(ccSheet, 1);
     const cc = lastRow < 2 ? [] :
@@ -245,20 +251,23 @@
         .map(function(row) {
           return { unit: row[0], role: row[1], email: row[2] };
         });
-    return {
+    return putJsonCache_('references', {
       cc: cc,
       signers: getSignatureConfigsInternal_()
-    };
+    });
   }
 
   function getSignatureConfigsInternal_() {
+    const cached = getJsonCache_('signers');
+    if (cached) return cached;
+
     const sheet = getSheet_('SIGNATURE', false);
     if (!sheet) return [];
 
     const lastRow = lastNonEmptyRowInColumn_(sheet, 1);
     if (lastRow < 2) return [];
 
-    return sheet.getRange(2, 1, lastRow - 1, 3).getDisplayValues()
+    const signers = sheet.getRange(2, 1, lastRow - 1, 3).getDisplayValues()
       .map(function(row) {
         return {
           name: text_(row[0], 250),
@@ -269,12 +278,16 @@
       .filter(function(item) {
         return item.name || item.role || item.nik;
       });
+    return putJsonCache_('signers', signers);
   }
 
   function getEmployeeCatalogInternal_() {
+    const cached = getJsonCache_('employeeCatalog');
+    if (cached) return cached;
+
     const rows = readDataRows_(getSheet_('EMPLOYEES'), EMPLOYEE_HEADERS.length);
     const seen = {};
-    return rows.map(function(row) {
+    const catalog = rows.map(function(row) {
       return {
         name: text_(row[1], 250),
         identifier: text_(row[2], 100),
@@ -295,10 +308,18 @@
     }).sort(function(a, b) {
       return a.name.localeCompare(b.name) || a.identifier.localeCompare(b.identifier);
     });
+    return putJsonCache_('employeeCatalog', catalog);
   }
 
   function buildDashboardSummary_() {
-    const requests = listRequestsInternal_({ limit: APP_CONFIG.MAX_LIST_ROWS }).items;
+    const documentsByRequest = buildDocumentsByRequestMap_();
+    const requests = readDataRows_(getSheet_('MASTER'), MASTER_HEADERS.length)
+      .map(function(row) {
+        return enrichRequestWithDocuments_(masterRowToDto_(row), documentsByRequest);
+      })
+      .filter(function(item) {
+        return item.id && item.status !== 'ARCHIVED';
+      });
     const documents = readDataRows_(getSheet_('DOCUMENTS'), DOCUMENT_HEADERS.length)
       .map(documentRowToDto_);
     const now = new Date();
@@ -440,6 +461,11 @@
         speakerStatus: document.speakerStatus
       });
       const row = old ? old.slice() : new Array(DOCUMENT_HEADERS.length).fill('');
+      const reusable = old &&
+        text_(old[2]) === document.type &&
+        text_(old[5]) === document.number &&
+        text_(old[6]) === templateKey &&
+        Number(old[14] || 0) === Number(revision);
       row[0] = old ? old[0] : 'DOC-' + Utilities.getUuid().slice(0, 12).toUpperCase();
       row[1] = requestId;
       row[2] = document.type;
@@ -447,9 +473,12 @@
       row[4] = document.speakerStatus;
       row[5] = document.number;
       row[6] = templateKey;
-      row[7] = old && old[2] === document.type && old[5] === document.number
+      row[7] = reusable
         ? (old[7] || 'PENDING')
         : 'PENDING';
+      if (!reusable) {
+        for (let i = 8; i <= 13; i++) row[i] = '';
+      }
       row[14] = revision;
       row[15] = old ? old[15] : now;
       row[16] = now;
@@ -478,6 +507,32 @@
       ];
     });
     rewriteDataRows_(sheet, untouched.concat(additions), EMPLOYEE_HEADERS.length);
+  }
+
+  function clearGeneratedStateColumns_(row) {
+    setMaster_(row, 'Edit Surat', '');
+    setMaster_(row, 'Download PDF Surat', '');
+    setMaster_(row, 'Email Status', '');
+    Object.keys(APP_CONFIG.DOCUMENT_COLUMNS).forEach(function(key) {
+      const columns = APP_CONFIG.DOCUMENT_COLUMNS[key];
+      for (let i = 0; i < columns.length; i++) {
+        row[columns[i] - 1] = '';
+      }
+    });
+  }
+
+  function markGeneratedFilesSuperseded_(requestId) {
+    const sheet = getSheet_('FILES', false);
+    if (!sheet) return;
+    const rows = readDataRows_(sheet, GENERATED_FILE_HEADERS.length);
+    let changed = false;
+    rows.forEach(function(row) {
+      if (text_(row[0]) === requestId && text_(row[8]) === 'ACTIVE') {
+        row[8] = 'SUPERSEDED';
+        changed = true;
+      }
+    });
+    if (changed) rewriteDataRows_(sheet, rows, GENERATED_FILE_HEADERS.length);
   }
 
   function normalizeRequestPayload_(payload) {
@@ -858,7 +913,9 @@
   }
 
   function assertCanWrite_(user) {
-    if (user.role === 'VIEWER') throw new Error('Role Viewer tidak dapat mengubah data.');
+    if (['ADMIN', 'OPERATOR'].indexOf((user || {}).role) === -1) {
+      throw new Error('Hanya Admin atau Operator dapat mengubah data.');
+    }
   }
 
   function buildParticipantKey_(requestId, employee) {

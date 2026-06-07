@@ -1,6 +1,6 @@
 function previewLegacyMigration() {
   const user = assertAuthorized_();
-  assertCanWrite_(user);
+  assertAdmin_(user);
   const sheet = getSheet_('MASTER');
   const rows = readLegacyMasterRows_(sheet, MASTER_HEADERS.length);
   const groups = {};
@@ -83,7 +83,7 @@ function previewLegacyMigration() {
 
 function migrateLegacyData(confirmText) {
   const user = assertAuthorized_();
-  assertCanWrite_(user);
+  assertAdmin_(user);
   if (text_(confirmText) !== 'MIGRATE') {
     throw new Error('Konfirmasi migrasi harus tepat: MIGRATE');
   }
@@ -284,7 +284,7 @@ function migrateLegacyDataConfirmed() {
 
 function repairMigratedMasterIds() {
   const user = assertAuthorized_();
-  assertCanWrite_(user);
+  assertAdmin_(user);
 
   return withScriptLock_(function() {
     const masterSheet = getSheet_('MASTER');
@@ -332,7 +332,7 @@ function repairMigratedMasterIds() {
 
 function repairMigratedEmployeeIds() {
   const user = assertAuthorized_();
-  assertCanWrite_(user);
+  assertAdmin_(user);
 
   return withScriptLock_(function() {
     const employeeSheet = getSheet_('EMPLOYEES');

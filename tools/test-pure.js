@@ -63,6 +63,55 @@ test('email validation and deduplication', () => {
   );
 });
 
+test('role policy follows documented access model', () => {
+  equal(context.normalizeRole_('admin'), 'ADMIN');
+  equal(context.normalizeRole_('OPERATOR'), 'OPERATOR');
+  let rejected = false;
+  try {
+    context.normalizeRole_('USER');
+  } catch (error) {
+    rejected = /Role akses tidak valid/.test(error.message);
+  }
+  if (!rejected) throw new Error('USER role was accepted');
+
+  context.assertCanWrite_({ role: 'OPERATOR' });
+  rejected = false;
+  try {
+    context.assertCanWrite_({ role: 'VIEWER' });
+  } catch (error) {
+    rejected = /Admin atau Operator/.test(error.message);
+  }
+  if (!rejected) throw new Error('VIEWER role was allowed to write');
+
+  rejected = false;
+  try {
+    context.normalizeRole_('VIEWER');
+  } catch (error) {
+    rejected = /Role akses tidak valid/.test(error.message);
+  }
+  if (!rejected) throw new Error('VIEWER role was accepted');
+});
+
+test('authorization fails closed when access sheet is empty', () => {
+  const previousSession = context.Session;
+  const previousGetSheet = context.getSheet_;
+  context.Session = { getActiveUser: () => ({ getEmail: () => 'operator@example.com' }) };
+  context.getSheet_ = key => key === 'ACCESS'
+    ? { getLastRow: () => 1 }
+    : null;
+
+  let rejected = false;
+  try {
+    context.assertAuthorized_();
+  } catch (error) {
+    rejected = /Config_Access/.test(error.message);
+  } finally {
+    context.Session = previousSession;
+    context.getSheet_ = previousGetSheet;
+  }
+  if (!rejected) throw new Error('empty Config_Access was allowed');
+});
+
 test('Edu Fair only allows task letter', () => {
   equal(Array.from(context.allowedDocumentsFor_('Edu Fair', '')), ['Surat Tugas']);
 });
@@ -147,6 +196,61 @@ test('readDataRows reads rows even when first column is blank', () => {
       ['REQ-1', 'Budi', '456']
     ]
   );
+});
+
+test('request document rewrite invalidates stale generated files', () => {
+  const rows = [[
+    'DOC-1',
+    'REQ-1',
+    'Surat Tugas',
+    '',
+    '',
+    'OLD-001',
+    'EDU_FAIR_TASK',
+    'GENERATED',
+    'doc-id',
+    'doc-url',
+    'pdf-id',
+    'pdf-url',
+    'draft-id',
+    'DRAFTED',
+    1,
+    '2026-06-01',
+    '2026-06-01'
+  ]];
+  const fakeSheet = {
+    getLastRow: () => rows.length + 1,
+    getRange: (row, column, rowCount, columnCount) => ({
+      getValues: () => rows.map(item => item.slice(0, columnCount)),
+      clearContent: () => { rows.length = 0; },
+      setValues: values => {
+        rows.length = 0;
+        values.forEach(value => rows.push(value.slice()));
+      }
+    })
+  };
+  const previousGetSheet = context.getSheet_;
+  context.getSheet_ = key => {
+    if (key !== 'DOCUMENTS') throw new Error('unexpected sheet ' + key);
+    return fakeSheet;
+  };
+
+  try {
+    const output = context.replaceDocumentsForRequest_('REQ-1', [{
+      activityType: 'Edu Fair',
+      type: 'Surat Tugas',
+      speakerSubtype: '',
+      speakerStatus: '',
+      number: 'NEW-001'
+    }], 2);
+    equal(output[0].status, 'PENDING');
+    equal(output[0].docId, '');
+    equal(output[0].pdfId, '');
+    equal(output[0].emailDraftId, '');
+    equal(output[0].emailStatus, '');
+  } finally {
+    context.getSheet_ = previousGetSheet;
+  }
 });
 
 if (!process.exitCode) console.log('PASS pure behavior tests');
