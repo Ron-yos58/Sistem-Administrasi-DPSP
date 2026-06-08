@@ -6,6 +6,7 @@ function setupSystem() {
 
     ensureSheet_(ss, 'MASTER', MASTER_HEADERS, report);
     ensureSheet_(ss, 'DOCUMENTS', DOCUMENT_HEADERS, report);
+    ensureSheet_(ss, 'SCHEDULES', SCHEDULE_HEADERS, report);
     ensureSheet_(ss, 'EMPLOYEES', EMPLOYEE_HEADERS, report);
     ensureSheet_(ss, 'TRAVEL', TRAVEL_HEADERS, report);
     ensureSheet_(ss, 'CC', CC_HEADERS, report);
@@ -68,11 +69,21 @@ function ensureSheet_(ss, key, headers, report) {
     report.push('Memakai alias lama: ' + sheet.getName());
   }
 
-  if (sheet.getMaxColumns() < headers.length) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+  const targetHeaders = key === 'MASTER' && isLegacyMasterSheet_(sheet)
+    ? LEGACY_MASTER_HEADERS
+    : headers;
+  if (sheet.getMaxColumns() < targetHeaders.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), targetHeaders.length - sheet.getMaxColumns());
   }
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
   sheet.setFrozenRows(1);
+}
+
+function isLegacyMasterSheet_(sheet) {
+  if (!sheet || sheet.getMaxColumns() < 75) return false;
+  return text_(sheet.getRange(1, 39).getDisplayValue()) === AUTOCRAT_HEADERS[0] &&
+    text_(sheet.getRange(1, 74).getDisplayValue()) === AUTOCRAT_HEADERS[AUTOCRAT_HEADERS.length - 1] &&
+    text_(sheet.getRange(1, 75).getDisplayValue()) === 'Email Status';
 }
 
 function seedExportFolder_() {
@@ -141,7 +152,7 @@ function seedEmailTemplates_() {
 }
 
 function formatSystemSheets_() {
-  ['MASTER', 'DOCUMENTS', 'EMPLOYEES', 'TRAVEL', 'CC', 'EMAIL_TEMPLATE', 'EXPORT', 'AUDIT', 'FILES', 'ACCESS', 'SIGNATURE']
+  ['MASTER', 'DOCUMENTS', 'SCHEDULES', 'EMPLOYEES', 'TRAVEL', 'CC', 'EMAIL_TEMPLATE', 'EXPORT', 'AUDIT', 'FILES', 'ACCESS', 'SIGNATURE']
     .forEach(function(key) {
       const sheet = getSheet_(key);
       const width = Math.max(1, sheet.getLastColumn());

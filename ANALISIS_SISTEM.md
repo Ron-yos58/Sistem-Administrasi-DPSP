@@ -46,6 +46,7 @@
 
 - `Master Permohonan`: satu baris per ID.
 - `Dokumen Permohonan`: satu baris per dokumen.
+- `Jadwal Kegiatan`: satu atau lebih sesi tanggal, waktu, dan tempat per ID.
 - `Data Pegawai`: banyak orang per ID, dengan `Participant Key`.
 - `Data Perjadin`: biaya per orang berdasarkan `Participant Key`.
 - `Master CC`: sumber penerima internal.

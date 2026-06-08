@@ -2,12 +2,19 @@ function previewLegacyMigration() {
   const user = assertAuthorized_();
   assertAdmin_(user);
   const sheet = getSheet_('MASTER');
-  const rows = readLegacyMasterRows_(sheet, MASTER_HEADERS.length);
+  const rows = readLegacyMasterRows_(sheet, LEGACY_MASTER_HEADERS.length);
   const groups = {};
   const missingIds = [];
   const generatedIdRows = [];
   const dateWarnings = [];
   const unsupportedDocuments = [];
+  const schemaErrors = [];
+
+  try {
+    validateLegacyAutocratColumns_(sheet);
+  } catch (error) {
+    schemaErrors.push(text_(error && error.message ? error.message : error));
+  }
 
   rows.forEach(function(row, index) {
     const idInfo = resolveLegacyRequestId_(row, index);
@@ -56,7 +63,9 @@ function previewLegacyMigration() {
     missingIdRows: missingIds,
     dateWarnings: dateWarnings,
     unsupportedDocuments: unsupportedDocuments,
-    ready: missingIds.length === 0 && unsupportedDocuments.length === 0
+    schemaErrors: schemaErrors,
+    autocratColumnsToRemove: schemaErrors.length ? 0 : AUTOCRAT_HEADERS.length,
+    ready: missingIds.length === 0 && unsupportedDocuments.length === 0 && schemaErrors.length === 0
   });
 
   Logger.log('previewLegacyMigration summary: %s', JSON.stringify({
@@ -67,14 +76,17 @@ function previewLegacyMigration() {
     generatedIdCount: result.generatedIdRows.length,
     missingIdCount: result.missingIdRows.length,
     dateWarningCount: result.dateWarnings.length,
-    unsupportedCount: result.unsupportedDocuments.length
+    unsupportedCount: result.unsupportedDocuments.length,
+    schemaErrorCount: result.schemaErrors.length,
+    autocratColumnsToRemove: result.autocratColumnsToRemove
   }));
 
   if (!result.ready) {
     Logger.log('previewLegacyMigration blockers: %s', JSON.stringify({
       generatedIdRows: result.generatedIdRows.slice(0, 20),
       missingIdRows: result.missingIdRows,
-      unsupportedDocuments: result.unsupportedDocuments.slice(0, 20)
+      unsupportedDocuments: result.unsupportedDocuments.slice(0, 20),
+      schemaErrors: result.schemaErrors
     }));
   }
 
@@ -90,13 +102,14 @@ function migrateLegacyData(confirmText) {
 
   return withScriptLock_(function() {
     const documentSheet = getSheet_('DOCUMENTS');
+    const scheduleSheet = getSheet_('SCHEDULES');
     if (documentSheet.getLastRow() > 1) {
       throw new Error('Sheet Dokumen Permohonan sudah berisi data. Migrasi dibatalkan agar tidak overwrite.');
     }
 
     const ss = getSpreadsheet_();
     const masterSheet = getSheet_('MASTER');
-    const sourceRows = readLegacyMasterRows_(masterSheet, MASTER_HEADERS.length);
+    const sourceRows = readLegacyMasterRows_(masterSheet, LEGACY_MASTER_HEADERS.length);
     if (!sourceRows.length) return { ok: true, migrated: 0, message: 'Tidak ada data lama.' };
 
     const preview = previewLegacyMigration();
@@ -104,6 +117,7 @@ function migrateLegacyData(confirmText) {
       throw new Error(
         'Migrasi belum aman. missingIdRows=' + preview.missingIdRows.length +
         ', unsupportedDocuments=' + preview.unsupportedDocuments.length +
+        ', schemaErrors=' + preview.schemaErrors.length +
         '. Jalankan previewLegacyMigration lalu cek Execution log (summary dan blockers).'
       );
     }
@@ -117,7 +131,8 @@ function migrateLegacyData(confirmText) {
       createMigrationBackup_(ss, masterSheet, 'Master', backupStamp),
       createMigrationBackup_(ss, getSheet_('EMPLOYEES'), 'Pegawai', backupStamp),
       createMigrationBackup_(ss, getSheet_('TRAVEL'), 'Perjadin', backupStamp),
-      createMigrationBackup_(ss, documentSheet, 'Dokumen', backupStamp)
+      createMigrationBackup_(ss, documentSheet, 'Dokumen', backupStamp),
+      createMigrationBackup_(ss, scheduleSheet, 'Jadwal', backupStamp)
     ];
 
     const groups = {};
@@ -157,11 +172,12 @@ function migrateLegacyData(confirmText) {
 
     const masterOutput = [];
     const documentOutput = [];
+    const scheduleOutput = [];
     const now = new Date();
 
     Object.keys(groups).forEach(function(id) {
       const sourceGroup = groups[id];
-      const row = sourceGroup[0].slice();
+      const row = compactLegacyMasterRow_(sourceGroup[0]);
       const documentTypes = [];
       const documentNumbers = [];
 
@@ -173,7 +189,7 @@ function migrateLegacyData(confirmText) {
           speakerStatus: text_(source[4])
         };
         const templateKey = resolveTemplateKey_(descriptor);
-        const columns = APP_CONFIG.DOCUMENT_COLUMNS[templateKey];
+        const columns = APP_CONFIG.LEGACY_DOCUMENT_COLUMNS[templateKey];
         const docId = 'DOC-' + Utilities.getUuid().slice(0, 12).toUpperCase();
         const generatedDocId = columns ? text_(source[columns[0] - 1]) : '';
         const generatedDocUrl = columns ? text_(source[columns[1] - 1]) : '';
@@ -195,29 +211,36 @@ function migrateLegacyData(confirmText) {
           '',
           '',
           '',
-          source[74] ? 'DRAFTED' : '',
+          legacyMasterValue_(source, 'Email Status') ? 'DRAFTED' : '',
           1,
           now,
           now
         ]);
 
-        if (columns) {
-          row[columns[0] - 1] = source[columns[0] - 1];
-          row[columns[1] - 1] = source[columns[1] - 1];
-          row[columns[2] - 1] = source[columns[2] - 1];
-          row[columns[3] - 1] = source[columns[3] - 1];
-        }
       });
 
-      const range = parseLegacyDateRange_(row[17]);
+      const range = parseLegacyDateRange_(sourceGroup[0][17]);
+      if (range) {
+        const timeRange = parseTimeRange_(sourceGroup[0][18]);
+        scheduleOutput.push([
+          'SCH-' + Utilities.getUuid().slice(0, 12).toUpperCase(),
+          id,
+          parseIsoDate_(range.start),
+          parseIsoDate_(range.end || range.start),
+          timeRange.startTime,
+          timeRange.endTime,
+          text_(sourceGroup[0][19]),
+          1
+        ]);
+      }
       const employees = employeesByRequest[id] || [];
       const requestForRouting = {
         documents: documentOutput.filter(function(docRow) { return docRow[1] === id; })
           .map(function(docRow) { return { type: docRow[2] }; }),
-        partnerEmail: row[14],
-        partnerName: row[12],
-        faculties: text_(row[5]).split(/\s*,\s*/).filter(Boolean),
-        speakerStatus: row[4]
+        partnerEmail: masterValue_(row, 'Email Mitra'),
+        partnerName: masterValue_(row, 'Nama Mitra'),
+        faculties: text_(masterValue_(row, 'Fakultas Asal Narasumber')).split(/\s*,\s*/).filter(Boolean),
+        speakerStatus: masterValue_(row, 'Status Narasumber')
       };
 
       // Keep Master value validation-safe (single enum); full document list is stored in DOCUMENTS sheet.
@@ -237,22 +260,29 @@ function migrateLegacyData(confirmText) {
       masterOutput.push(row);
     });
 
+    const removedAutocratColumns = removeLegacyAutocratColumns_(masterSheet);
     rewriteDataRows_(masterSheet, masterOutput, MASTER_HEADERS.length);
+    masterSheet.getRange(1, 1, 1, MASTER_HEADERS.length).setValues([MASTER_HEADERS]);
     rewriteDataRows_(documentSheet, documentOutput, DOCUMENT_HEADERS.length);
+    rewriteDataRows_(scheduleSheet, scheduleOutput, SCHEDULE_HEADERS.length);
     syncTravelDataInternal_('');
     clearAppCache_();
     logAudit_('MIGRATE_LEGACY_DATA', '', true, {
       sourceRows: sourceRows.length,
       requests: masterOutput.length,
       documents: documentOutput.length,
-      backupSheets: backupSheets
+      schedules: scheduleOutput.length,
+      backupSheets: backupSheets,
+      removedAutocratColumns: removedAutocratColumns
     });
     return {
       ok: true,
       sourceRows: sourceRows.length,
       migrated: masterOutput.length,
       documents: documentOutput.length,
-      backupSheets: backupSheets
+      schedules: scheduleOutput.length,
+      backupSheets: backupSheets,
+      removedAutocratColumns: removedAutocratColumns
     };
   });
 }
@@ -280,6 +310,47 @@ function resolveLegacyRequestId_(row, index) {
 
 function migrateLegacyDataConfirmed() {
   return migrateLegacyData('MIGRATE');
+}
+
+function cleanupMigratedAutocratColumns() {
+  const user = assertAuthorized_();
+  assertAdmin_(user);
+
+  return withScriptLock_(function() {
+    const ss = getSpreadsheet_();
+    const masterSheet = getSheet_('MASTER');
+    const schema = inspectMasterSchema_(masterSheet);
+    if (schema === 'ACTIVE') {
+      return {
+        ok: true,
+        removedAutocratColumns: 0,
+        message: 'Kolom Autocrat sudah tidak ada pada Master Permohonan.'
+      };
+    }
+    if (schema !== 'LEGACY') {
+      throw new Error(
+        'Struktur Master Permohonan tidak dikenali. Cleanup dibatalkan tanpa menghapus kolom.'
+      );
+    }
+
+    const stamp = Utilities.formatDate(new Date(), APP_CONFIG.TIME_ZONE, 'yyyyMMdd-HHmmss');
+    const backupSheet = createMigrationBackup_(ss, masterSheet, 'Master Pre-Cleanup', stamp);
+    const removedAutocratColumns = removeLegacyAutocratColumns_(masterSheet);
+    masterSheet.getRange(1, 1, 1, MASTER_HEADERS.length).setValues([MASTER_HEADERS]);
+    clearAppCache_();
+
+    logAudit_('CLEANUP_AUTOCRAT_COLUMNS', '', true, {
+      backupSheet: backupSheet,
+      removedAutocratColumns: removedAutocratColumns,
+      user: user.email
+    });
+    return {
+      ok: true,
+      backupSheet: backupSheet,
+      removedAutocratColumns: removedAutocratColumns,
+      message: 'Kolom Autocrat AM-BV berhasil dihapus dari Master Permohonan.'
+    };
+  });
 }
 
 function repairMigratedMasterIds() {
@@ -397,7 +468,7 @@ function buildLegacyEmployeeRequestIdMap_() {
   const backupSheet = findLatestMigrationBackupSheet_('Backup Master ');
   if (!backupSheet) return {};
 
-  const rows = readLegacyMasterRows_(backupSheet, MASTER_HEADERS.length);
+  const rows = readLegacyMasterRows_(backupSheet, LEGACY_MASTER_HEADERS.length);
   return rows.reduce(function(map, row, index) {
     const oldId = text_(row[0]);
     const resolvedId = resolveLegacyRequestId_(row, index).id;
@@ -413,6 +484,67 @@ function findLatestMigrationBackupSheet_(prefix) {
     return b.getName().localeCompare(a.getName());
   });
   return sheets.length ? sheets[0] : null;
+}
+
+function compactLegacyMasterRow_(legacyRow) {
+  return MASTER_HEADERS.map(function(header) {
+    const legacyIndex = LEGACY_MASTER_HEADERS.indexOf(header);
+    return legacyIndex === -1 ? '' : legacyRow[legacyIndex];
+  });
+}
+
+function legacyMasterValue_(row, header) {
+  const index = LEGACY_MASTER_HEADERS.indexOf(header);
+  return index === -1 ? '' : row[index];
+}
+
+function removeLegacyAutocratColumns_(sheet) {
+  const startColumn = 39; // AM
+  const columnCount = AUTOCRAT_HEADERS.length; // AM:BV
+  validateLegacyAutocratColumns_(sheet);
+  sheet.deleteColumns(startColumn, columnCount);
+  return columnCount;
+}
+
+function validateLegacyAutocratColumns_(sheet) {
+  const startColumn = 39; // AM
+  const columnCount = AUTOCRAT_HEADERS.length; // AM:BV
+  if (sheet.getMaxColumns() < startColumn + columnCount - 1) {
+    throw new Error('Kolom Autocrat AM-BV tidak lengkap. Migrasi dihentikan tanpa menghapus kolom.');
+  }
+
+  const actualHeaders = sheet.getRange(1, startColumn, 1, columnCount).getDisplayValues()[0];
+  const mismatch = actualHeaders.findIndex(function(header, index) {
+    return text_(header) !== AUTOCRAT_HEADERS[index];
+  });
+  if (mismatch !== -1) {
+    throw new Error(
+      'Header Autocrat tidak cocok di kolom ' + (startColumn + mismatch) +
+      ': expected="' + AUTOCRAT_HEADERS[mismatch] +
+      '", actual="' + text_(actualHeaders[mismatch]) + '". Kolom tidak dihapus.'
+    );
+  }
+  return true;
+}
+
+function inspectMasterSchema_(sheet) {
+  if (!sheet) return 'UNKNOWN';
+  const maxColumns = sheet.getMaxColumns();
+  if (maxColumns >= LEGACY_MASTER_HEADERS.length) {
+    const legacyHeaders = sheet.getRange(1, 1, 1, LEGACY_MASTER_HEADERS.length).getDisplayValues()[0];
+    if (headersMatch_(legacyHeaders, LEGACY_MASTER_HEADERS)) return 'LEGACY';
+  }
+  if (maxColumns >= MASTER_HEADERS.length) {
+    const activeHeaders = sheet.getRange(1, 1, 1, MASTER_HEADERS.length).getDisplayValues()[0];
+    if (headersMatch_(activeHeaders, MASTER_HEADERS)) return 'ACTIVE';
+  }
+  return 'UNKNOWN';
+}
+
+function headersMatch_(actual, expected) {
+  return expected.every(function(header, index) {
+    return text_(actual[index]) === header;
+  });
 }
 
 function createMigrationBackup_(ss, sourceSheet, label, stamp) {

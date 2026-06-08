@@ -53,6 +53,13 @@ function generateDocumentInternal_(documentId, force, user) {
   const row = documentSheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
   const document = documentRowToDto_(row);
   const detail = getRequestDetailInternal_(document.requestId);
+  if (detail.request.status !== 'READY') {
+    throw new Error(
+      detail.request.status === 'ARCHIVED'
+        ? 'Permohonan sudah selesai dan tidak dapat diproses ulang.'
+        : 'Tandai permohonan sebagai Siap Diproses sebelum membuat dokumen.'
+    );
+  }
 
   validateDocumentGeneration_(detail.request, document, detail.employees);
   if (
@@ -100,7 +107,7 @@ function generateDocumentInternal_(documentId, force, user) {
   row[16] = now;
   documentSheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
 
-  updateLegacyDocumentColumns_(detail.request.id, document.templateKey, docFile, pdfFile);
+  updateMasterDocumentLinks_(detail.request.id, docFile, pdfFile);
   recordGeneratedArtifact_(detail.request.id, document.templateKey, document.revision, 'DOC', docFile, {
     documentId: document.id
   });
@@ -122,8 +129,7 @@ function validateDocumentGeneration_(request, document, employees) {
   if (!request.letterDate) errors.push('Tanggal surat belum diisi.');
   if (!request.activityName) errors.push('Nama kegiatan belum diisi.');
   if (!request.partnerName) errors.push('Nama mitra belum diisi.');
-  if (!request.startDate) errors.push('Tanggal kegiatan belum diisi.');
-  if (!request.activityPlace) errors.push('Tempat kegiatan belum diisi.');
+  if (!detailSchedulesAvailable_(request)) errors.push('Jadwal kegiatan belum diisi.');
   if (document.type === 'Surat Tugas' && !employees.length) {
     errors.push('Surat Tugas membutuhkan minimal satu penerima tugas.');
   }
@@ -135,6 +141,10 @@ function validateDocumentGeneration_(request, document, employees) {
     errors.push('Data narasumber belum diisi.');
   }
   if (errors.length) throw new Error(errors.join('\n'));
+}
+
+function detailSchedulesAvailable_(request) {
+  return Boolean(request.startDate && request.activityPlace);
 }
 
 function buildDocumentPlaceholders_(detail, document) {
@@ -263,18 +273,10 @@ function driveFileExists_(fileId) {
   }
 }
 
-function updateLegacyDocumentColumns_(requestId, templateKey, docFile, pdfFile) {
-  const columns = APP_CONFIG.DOCUMENT_COLUMNS[templateKey];
-  if (!columns) return;
+function updateMasterDocumentLinks_(requestId, docFile, pdfFile) {
   const sheet = getSheet_('MASTER');
   const rowNumber = findRowById_(sheet, requestId, 1);
   if (!rowNumber) return;
-  sheet.getRange(rowNumber, columns[0], 1, 4).setValues([[
-    docFile.getId(),
-    docFile.getUrl(),
-    docFile.getUrl(),
-    'GENERATED'
-  ]]);
   sheet.getRange(rowNumber, masterColumn_('Edit Surat')).setValue(docFile.getUrl());
   sheet.getRange(rowNumber, masterColumn_('Download PDF Surat')).setValue(pdfFile.getUrl());
 }

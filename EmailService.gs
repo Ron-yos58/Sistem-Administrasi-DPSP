@@ -54,6 +54,14 @@ function processRequest(requestId) {
   const id = text_(requestId);
 
   return withScriptLock_(function() {
+    const request = getRequestDetailInternal_(id).request;
+    if (request.status !== 'READY') {
+      throw new Error(
+        request.status === 'ARCHIVED'
+          ? 'Permohonan sudah selesai dan tidak dapat diproses ulang.'
+          : 'Tandai permohonan sebagai Siap Diproses sebelum menjalankan proses dokumen.'
+      );
+    }
     const documents = getDocumentsByRequest_(id);
     if (!documents.length) throw new Error('Tidak ada dokumen untuk diproses.');
     const results = [];
@@ -202,6 +210,14 @@ function createEmailDraftInternal_(documentId, force, user) {
   if (!rowNumber) throw new Error('Dokumen tidak ditemukan: ' + documentId);
   const row = sheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
   const document = documentRowToDto_(row);
+  const request = getRequestDetailInternal_(document.requestId).request;
+  if (request.status !== 'READY') {
+    throw new Error(
+      request.status === 'ARCHIVED'
+        ? 'Permohonan sudah selesai dan tidak dapat diproses ulang.'
+        : 'Tandai permohonan sebagai Siap Diproses sebelum membuat draft email.'
+    );
+  }
   const marker = 'DPSP-DRAFT:' + document.id + ':R' + document.revision;
 
   if (!force && document.emailDraftId) {

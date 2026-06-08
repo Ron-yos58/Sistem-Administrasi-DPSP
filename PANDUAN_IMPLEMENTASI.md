@@ -49,7 +49,7 @@ Placeholder lain terdapat pada `buildDocumentPlaceholders_()` di `DocumentServic
 1. Pilih fungsi `setupSystem`.
 2. Klik **Run**.
 3. Beri izin Spreadsheet, Drive, Docs, Gmail Compose, dan email identity.
-4. Fungsi membuat/melengkapi sheet sistem dan header.
+4. Fungsi membuat/melengkapi sheet sistem dan header, termasuk `Jadwal Kegiatan` untuk banyak sesi dalam satu pengajuan.
 5. Buka `Config_Access`, lalu isi:
 
 | Email | Active | Role |
@@ -75,9 +75,12 @@ Jika `Data Pegawai` hasil migrasi tidak tampil di UI karena masih memakai ID lam
 
 Migrasi:
 
-- membuat backup tersembunyi untuk Master, Pegawai, Perjadin, dan Dokumen,
+- membuat backup tersembunyi untuk Master, Pegawai, Perjadin, Dokumen, dan Jadwal,
 - menggabungkan ID duplikat menjadi satu permohonan,
 - membuat `LEGACY-xxxx` otomatis bila kolom ID Permohonan lama kosong,
+- memindahkan artefak Autocrat ke `Dokumen Permohonan`, lalu menghapus kolom AM-BV dari `Master Permohonan` setelah backup tersembunyi berhasil dibuat,
+- menyediakan aksi Admin `Bersihkan kolom Autocrat` untuk instalasi yang sudah dimigrasikan sebelum cleanup AM-BV tersedia,
+- menyediakan tombol Admin `Jalankan migrasi` dengan konfirmasi teks `MIGRATE`,
 - memindahkan setiap surat ke `Dokumen Permohonan`,
 - membuat tanggal ISO dan `Participant Key`,
 - meremap `Data Pegawai` ke ID hasil migrasi bila ID lama berubah,
@@ -119,13 +122,24 @@ Setelah perubahan kode:
 ## 8. Urutan Operasional
 
 1. Isi form dan simpan `DRAFT`.
-2. Lengkapi data lalu simpan `READY`.
-3. Buka detail dan preview email.
-4. Klik **Buat dokumen** atau **Buat dokumen & draft**.
-5. Buka Google Doc/PDF untuk pemeriksaan.
-6. Buka Gmail Drafts, tinjau, lalu kirim manual.
-7. Isi biaya perjadin pada menu Honor & Perjadin.
-8. Ekspor sheet honor/perjadin menjadi PDF atau XLSX dari detail permohonan.
+2. Tambahkan seluruh sesi kegiatan pada pengajuan yang sama melalui tombol `Tambah sesi`. Gunakan satu sesi berjangka untuk kegiatan beruntun, atau beberapa sesi untuk tanggal/waktu yang terpisah.
+3. Lengkapi data lalu simpan `READY`.
+4. Buka detail dan preview email.
+5. Klik **Buat dokumen** atau **Buat dokumen & draft**.
+6. Buka Google Doc/PDF untuk pemeriksaan.
+7. Buka Gmail Drafts, tinjau, lalu kirim manual.
+8. Isi biaya perjadin pada menu Honor & Perjadin.
+9. Ekspor sheet honor/perjadin menjadi PDF atau XLSX dari detail permohonan.
+
+Semua sesi dalam satu pengajuan memakai satu `ID Permohonan`, daftar orang, dokumen, dan alur tanda tangan yang sama. Contoh tanggal 25 dan 30 Juni dengan waktu berbeda tetap menghasilkan satu Surat Tugas; tanggal dan waktu setiap sesi digabungkan ke placeholder dokumen.
+
+### Definisi status workflow
+
+- `Draft`: data belum final, masih dapat diedit, dan belum dapat diproses menjadi dokumen.
+- `Siap Diproses`: data sudah tervalidasi. Status ini tidak berarti dokumen atau draft email sudah dibuat.
+- `Selesai`: seluruh Doc/PDF dan draft Gmail sudah tersedia, lalu operator menutup permohonan secara manual. Permohonan menjadi hanya-baca.
+
+Progres dokumen ditampilkan terpisah dari status permohonan: `Belum Dibuat`, `Doc & PDF Dibuat`, `Draft Email Dibuat`, `Gagal Generate`, atau `Selesai / Diarsipkan`. Aplikasi membuat draft Gmail, tetapi tidak dapat memastikan email benar-benar sudah dikirim oleh operator.
 
 ## 9. Batas Google Apps Script
 

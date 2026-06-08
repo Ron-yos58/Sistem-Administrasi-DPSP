@@ -31,3 +31,12 @@
 - [x] Hotfix migrasi pegawai: remap ID `Data Pegawai` ke ID permohonan hasil migrasi + utility repairMigratedEmployeeIds
 - [x] UI pegawai: tambah picker dari database pegawai agar orang lama bisa dipilih tanpa input ulang
 - [x] Hotfix picker pegawai: pembacaan Data Pegawai tidak lagi bergantung kolom A sehingga opsi orang lama tetap muncul saat ID Permohonan kosong
+- [x] Hotfix sidebar profil: avatar kembali terpusat dan email/role terpotong sesuai lebar sidebar
+- [x] UI navigasi: sidebar menjadi hamburger drawer di desktop/mobile dan menampilkan kredit pengembang
+- [x] Polish UI: micro-interaction bergaya Tailwind dan ikon Lucide pada navigasi/kontrol utama
+- [x] Hotfix picker pegawai: katalog dirender ulang setelah bootstrap/refresh dan status jumlah data ditampilkan
+- [x] Migrasi schema cleanup: backup legacy dipertahankan, kolom Autocrat AM-BV divalidasi lalu dihapus dari Master aktif
+- [x] Cleanup pascamigrasi: aksi Admin untuk backup dan menghapus AM-BV pada Master yang sudah lebih dulu dimigrasikan
+- [x] UI Admin: tombol Jalankan migrasi dengan konfirmasi MIGRATE dan refresh data otomatis
+- [x] Jadwal multi-sesi: satu permohonan dapat memuat tanggal/waktu terpisah tanpa menggandakan Surat Tugas atau proses tanda tangan
+- [x] Refactor workflow UI: pisahkan status pengajuan dari progres dokumen/email, sederhanakan Ringkasan/Detail, dan jadikan pengajuan selesai hanya-baca

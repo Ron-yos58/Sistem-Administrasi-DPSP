@@ -143,6 +143,13 @@ function generateFinanceSheet(requestId, kind) {
 
 function generateFinanceSheetInternal_(requestId, reportKind) {
   const detail = getRequestDetailInternal_(requestId);
+  if (detail.request.status !== 'READY') {
+    throw new Error(
+      detail.request.status === 'ARCHIVED'
+        ? 'Permohonan sudah selesai dan laporan keuangan tidak dapat dibuat ulang.'
+        : 'Tandai permohonan sebagai Siap Diproses sebelum membuat laporan keuangan.'
+    );
+  }
   if (reportKind === 'HONOR' && detail.request.honor !== 'Ya') {
     throw new Error('Permohonan ini tidak ditandai memiliki honor.');
   }
@@ -752,6 +759,7 @@ function getRequestDetailInternal_(requestId) {
   return {
     request: masterRowToDto_(row),
     documents: getDocumentsByRequest_(requestId),
+    schedules: getSchedulesByRequest_(requestId, row),
     employees: getEmployeesByRequest_(requestId),
     travel: getTravelByRequestInternal_(requestId)
   };

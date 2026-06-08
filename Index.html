@@ -12,58 +12,51 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar" id="sidebar">
+      <aside class="sidebar" id="sidebar" aria-hidden="true" inert>
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">D</div>
           <div>
             <strong>DPSP</strong>
             <span>Sistem Surat</span>
           </div>
+          <button class="icon-button sidebar-close" id="sidebarClose" type="button" aria-label="Tutup menu"><i data-lucide="x" aria-hidden="true">×</i></button>
         </div>
 
         <nav class="main-nav" aria-label="Navigasi utama">
           <button class="nav-item is-active" data-view="dashboard">
-            <span class="nav-icon">⌂</span><span>Ringkasan</span>
+            <span class="nav-icon"><i data-lucide="layout-dashboard" aria-hidden="true">⌂</i></span><span>Ringkasan</span>
           </button>
           <button class="nav-item" data-view="requests">
-            <span class="nav-icon">▤</span><span>Permohonan</span>
+            <span class="nav-icon"><i data-lucide="files" aria-hidden="true">▤</i></span><span>Permohonan</span>
           </button>
           <button class="nav-item" data-view="form">
-            <span class="nav-icon">＋</span><span>Buat Permohonan</span>
+            <span class="nav-icon"><i data-lucide="file-plus-2" aria-hidden="true">＋</i></span><span>Buat Permohonan</span>
           </button>
           <button class="nav-item" data-view="finance">
-            <span class="nav-icon">Rp</span><span>Honor & Perjadin</span>
+            <span class="nav-icon"><i data-lucide="wallet-cards" aria-hidden="true">Rp</i></span><span>Honor & Perjadin</span>
           </button>
           <button class="nav-item" data-view="references">
-            <span class="nav-icon">◇</span><span>Data Referensi</span>
+            <span class="nav-icon"><i data-lucide="database" aria-hidden="true">◇</i></span><span>Data Referensi</span>
           </button>
           <button class="nav-item" data-view="admin" data-admin-only>
-            <span class="nav-icon">⚙</span><span>Admin</span>
+            <span class="nav-icon"><i data-lucide="settings" aria-hidden="true">⚙</i></span><span>Admin</span>
           </button>
         </nav>
 
         <div class="sidebar-foot">
-          <div class="user-chip">
-            <span class="avatar" id="userInitial">U</span>
-            <div>
-              <strong id="userEmail">Memuat...</strong>
-              <span id="userRole">-</span>
-            </div>
-          </div>
           <div class="version" id="appVersion">v1.0.0</div>
+          <div class="credits">Designed and Developed by<br><strong>Ronald Sebastian</strong></div>
         </div>
       </aside>
+      <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
       <div class="workspace">
         <header class="topbar">
-          <button class="icon-button menu-toggle" id="menuToggle" aria-label="Buka menu" aria-expanded="false" aria-controls="sidebar">☰</button>
-          <div>
-            <p class="eyebrow" id="pageEyebrow">OPERASIONAL DPSP</p>
-            <h1 id="pageTitle">Ringkasan</h1>
-          </div>
+          <button class="icon-button menu-toggle" id="menuToggle" aria-label="Buka menu" aria-expanded="false" aria-controls="sidebar"><i data-lucide="menu" aria-hidden="true">☰</i></button>
+          <h1 id="pageTitle">Ringkasan</h1>
           <div class="topbar-actions">
-            <button class="button button-secondary" id="refreshButton">Refresh</button>
-            <button class="button button-primary" data-view-target="form">Permohonan baru</button>
+            <span class="topbar-user" id="userEmail">Memuat pengguna...</span>
+            <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
           </div>
         </header>
 
@@ -71,15 +64,6 @@
           <div class="notice notice-error is-hidden" id="globalError" role="alert"></div>
 
           <section class="view is-active" id="view-dashboard">
-            <div class="hero-panel">
-              <div>
-                <p class="eyebrow">PUSAT KERJA SURAT</p>
-                <h2>Dokumen rapi. Penerima tepat. Proses terlacak.</h2>
-                <p>Kelola permohonan, dokumen, draft email, honor, dan perjalanan dinas dari satu alur.</p>
-              </div>
-              <button class="button button-accent" data-view-target="form">Buat permohonan</button>
-            </div>
-
             <div class="metric-grid" id="metricGrid">
               <div class="metric-card skeleton"></div>
               <div class="metric-card skeleton"></div>
@@ -94,19 +78,19 @@
                     <p class="eyebrow">TERBARU</p>
                     <h3>Permohonan terkini</h3>
                   </div>
-                  <button class="text-button" data-view-target="requests">Lihat semua</button>
+                  <button class="text-button" data-view-target="requests">Lihat semua <i data-lucide="arrow-right" aria-hidden="true"></i></button>
                 </div>
                 <div id="recentRequests" class="request-list"></div>
               </article>
 
               <article class="panel focus-panel">
-                <p class="eyebrow">URUTAN KERJA</p>
-                <h3>Dari data ke draft Gmail</h3>
+                <p class="eyebrow">STATUS WORKFLOW</p>
+                <h3>Alur permohonan</h3>
                 <ol class="workflow-list">
-                  <li><span>1</span><div><strong>Simpan data</strong><small>Permohonan dan petugas</small></div></li>
-                  <li><span>2</span><div><strong>Review penerima</strong><small>To dan CC dari Master CC</small></div></li>
-                  <li><span>3</span><div><strong>Buat dokumen</strong><small>Google Doc dan PDF</small></div></li>
-                  <li><span>4</span><div><strong>Buat draft</strong><small>Tinjau lalu kirim dari Gmail</small></div></li>
+                  <li><span>1</span><div><strong>Draft</strong><small>Data masih dapat diubah dan belum final.</small></div></li>
+                  <li><span>2</span><div><strong>Siap Diproses</strong><small>Data valid; Doc, PDF, dan draft email dapat dibuat.</small></div></li>
+                  <li><span>3</span><div><strong>Dokumen & Draft Email</strong><small>Progres ditampilkan terpisah untuk setiap dokumen.</small></div></li>
+                  <li><span>4</span><div><strong>Selesai</strong><small>Ditutup manual setelah seluruh draft email tersedia.</small></div></li>
                 </ol>
               </article>
             </div>
@@ -124,8 +108,8 @@
               <select id="requestStatusFilter" aria-label="Filter status">
                 <option value="">Semua status</option>
                 <option value="DRAFT">Draft</option>
-                <option value="READY">Siap</option>
-                <option value="ARCHIVED">Arsip</option>
+                <option value="READY">Siap Diproses</option>
+                <option value="ARCHIVED">Selesai</option>
               </select>
             </div>
 
@@ -216,13 +200,14 @@
                     <div class="step-heading"><span>03</span><div><h3>Waktu dan penandatangan</h3><p>Jadwal kegiatan serta pejabat penanda tangan.</p></div></div>
                     <div class="field-grid">
                       <label class="field"><span>Tanggal surat dibuat *</span><input id="letterDate" type="date" required></label>
-                      <label class="field"><span>Waktu kegiatan</span><input id="activityTime" placeholder="09.00 - 12.00 WIB"></label>
-                      <label class="field"><span>Tanggal mulai *</span><input id="startDate" type="date" required></label>
-                      <label class="field"><span>Tanggal selesai</span><input id="endDate" type="date"></label>
-                      <label class="field field-wide"><span>Tempat kegiatan *</span><input id="activityPlace" required></label>
                       <label class="field"><span>Nama penandatangan</span><select id="signerName"><option value="">Pilih penandatangan</option></select></label>
                       <label class="field"><span>NIK penandatangan</span><input id="signerId"></label>
                       <label class="field field-wide"><span>Jabatan penandatangan</span><input id="signerRole"></label>
+                    </div>
+                    <div class="field">
+                      <span>Jadwal kegiatan *</span>
+                      <div id="scheduleList" class="schedule-list"></div>
+                      <button class="button button-secondary button-small schedule-add" type="button" id="addSchedule"><i data-lucide="calendar-plus" aria-hidden="true"></i>Tambah sesi</button>
                     </div>
                   </section>
 
@@ -241,7 +226,7 @@
                   <section class="form-card">
                     <div class="step-heading"><span>05</span><div><h3>Petugas atau narasumber</h3><p>Data orang dipakai untuk surat, email, honor, dan perjadin.</p></div></div>
                     <div id="employeeList" class="employee-list"></div>
-                    <button class="button button-secondary" type="button" id="addEmployee">Tambah orang</button>
+                    <button class="button button-secondary" type="button" id="addEmployee"><i data-lucide="user-plus" aria-hidden="true"></i>Tambah orang</button>
                   </section>
 
                   <section class="form-card">
@@ -264,10 +249,10 @@
               </div>
 
               <div class="form-actions">
-                <button class="button button-secondary" type="button" id="resetForm">Reset</button>
+                <button class="button button-secondary" type="button" id="resetForm"><i data-lucide="rotate-ccw" aria-hidden="true"></i>Reset</button>
                 <div>
-                  <button class="button button-secondary" type="submit" data-save-status="DRAFT">Simpan draft</button>
-                  <button class="button button-primary" type="submit" data-save-status="READY">Simpan & tandai siap</button>
+                  <button class="button button-secondary" type="submit" data-save-status="DRAFT"><i data-lucide="save" aria-hidden="true"></i>Simpan draft</button>
+                  <button class="button button-primary" type="submit" data-save-status="READY"><i data-lucide="circle-check" aria-hidden="true"></i>Simpan & tandai siap</button>
                 </div>
               </div>
             </form>
@@ -325,13 +310,15 @@
                   </div>
                 </div>
                 <div class="admin-actions">
-                  <button class="button button-primary" data-admin-action="system-status">Periksa sistem</button>
-                  <button class="button button-secondary" data-admin-action="setup-system">Setup struktur</button>
-                  <button class="button button-secondary" data-admin-action="preview-migration">Preview migrasi</button>
-                  <button class="button button-secondary" data-admin-action="repair-master">Repair ID Master</button>
-                  <button class="button button-secondary" data-admin-action="repair-employee">Repair ID Pegawai</button>
-                  <button class="button button-secondary" data-admin-action="preview-cleanup">Tinjau sheet generate</button>
-                  <button class="button button-danger" data-admin-action="delete-generated">Hapus sheet terpilih</button>
+                  <button class="button button-primary" data-admin-action="system-status"><i data-lucide="shield-check" aria-hidden="true"></i>Periksa sistem</button>
+                  <button class="button button-secondary" data-admin-action="setup-system"><i data-lucide="wrench" aria-hidden="true"></i>Setup struktur</button>
+                  <button class="button button-secondary" data-admin-action="preview-migration"><i data-lucide="scan-search" aria-hidden="true"></i>Preview migrasi</button>
+                  <button class="button button-accent" data-admin-action="run-migration"><i data-lucide="database-zap" aria-hidden="true"></i>Jalankan migrasi</button>
+                  <button class="button button-secondary" data-admin-action="cleanup-autocrat"><i data-lucide="columns-3" aria-hidden="true"></i>Bersihkan kolom Autocrat</button>
+                  <button class="button button-secondary" data-admin-action="repair-master"><i data-lucide="database-backup" aria-hidden="true"></i>Repair ID Master</button>
+                  <button class="button button-secondary" data-admin-action="repair-employee"><i data-lucide="users" aria-hidden="true"></i>Repair ID Pegawai</button>
+                  <button class="button button-secondary" data-admin-action="preview-cleanup"><i data-lucide="list-checks" aria-hidden="true"></i>Tinjau sheet generate</button>
+                  <button class="button button-danger" data-admin-action="delete-generated"><i data-lucide="trash-2" aria-hidden="true"></i>Hapus sheet terpilih</button>
                 </div>
                 <div class="admin-result" id="adminResult">
                   <div class="empty-state"><strong>Belum ada pemeriksaan</strong><span>Pilih salah satu aksi admin.</span></div>
@@ -353,33 +340,33 @@
     </div>
 
     <nav class="mobile-nav" aria-label="Navigasi mobile">
-      <button class="is-active" data-view="dashboard"><span>⌂</span>Ringkasan</button>
-      <button data-view="requests"><span>▤</span>Data</button>
-      <button class="mobile-create" data-view="form"><span>＋</span>Buat</button>
-      <button data-view="finance"><span>Rp</span>Biaya</button>
-      <button data-view="references"><span>◇</span>Lainnya</button>
-      <button data-view="admin" data-admin-only><span>⚙</span>Admin</button>
+      <button class="is-active" data-view="dashboard"><span><i data-lucide="layout-dashboard" aria-hidden="true">⌂</i></span>Ringkasan</button>
+      <button data-view="requests"><span><i data-lucide="files" aria-hidden="true">▤</i></span>Data</button>
+      <button class="mobile-create" data-view="form"><span><i data-lucide="file-plus-2" aria-hidden="true">＋</i></span>Buat</button>
+      <button data-view="finance"><span><i data-lucide="wallet-cards" aria-hidden="true">Rp</i></span>Biaya</button>
+      <button data-view="references"><span><i data-lucide="database" aria-hidden="true">◇</i></span>Lainnya</button>
+      <button data-view="admin" data-admin-only><span><i data-lucide="settings" aria-hidden="true">⚙</i></span>Admin</button>
     </nav>
 
     <div class="drawer-backdrop is-hidden" id="drawerBackdrop"></div>
     <aside class="detail-drawer" id="detailDrawer" aria-hidden="true">
       <div class="drawer-head">
         <div><p class="eyebrow">DETAIL PERMOHONAN</p><h2 id="drawerTitle">-</h2></div>
-        <button class="icon-button" id="closeDrawer" aria-label="Tutup detail">×</button>
+        <button class="icon-button" id="closeDrawer" aria-label="Tutup detail"><i data-lucide="x" aria-hidden="true">×</i></button>
       </div>
       <div class="drawer-body" id="drawerBody"></div>
     </aside>
 
     <dialog class="modal" id="emailModal">
-      <div class="modal-head"><div><p class="eyebrow">PREVIEW EMAIL</p><h2 id="emailModalTitle">-</h2></div><button class="icon-button" data-close-dialog="emailModal">×</button></div>
+      <div class="modal-head"><div><p class="eyebrow">PREVIEW EMAIL</p><h2 id="emailModalTitle">-</h2></div><button class="icon-button" data-close-dialog="emailModal" aria-label="Tutup preview email"><i data-lucide="x" aria-hidden="true">×</i></button></div>
       <div class="modal-body" id="emailModalBody"></div>
     </dialog>
 
     <dialog class="modal" id="travelModal">
-      <div class="modal-head"><div><p class="eyebrow">KOMPONEN BIAYA</p><h2 id="travelModalTitle">-</h2></div><button class="icon-button" data-close-dialog="travelModal">×</button></div>
+      <div class="modal-head"><div><p class="eyebrow">KOMPONEN BIAYA</p><h2 id="travelModalTitle">-</h2></div><button class="icon-button" data-close-dialog="travelModal" aria-label="Tutup komponen biaya"><i data-lucide="x" aria-hidden="true">×</i></button></div>
       <form id="travelCostForm">
         <div class="modal-body" id="travelModalBody"></div>
-        <div class="modal-actions"><button class="button button-secondary" type="button" data-close-dialog="travelModal">Batal</button><button class="button button-primary" type="submit">Simpan biaya</button></div>
+        <div class="modal-actions"><button class="button button-secondary" type="button" data-close-dialog="travelModal"><i data-lucide="x" aria-hidden="true"></i>Batal</button><button class="button button-primary" type="submit"><i data-lucide="save" aria-hidden="true"></i>Simpan biaya</button></div>
       </form>
     </dialog>
 
@@ -392,6 +379,7 @@
       </div>
       <span class="boot-percent" id="bootProgressValue">0%</span>
     </div>
+    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
     <?!= include('Scripts'); ?>
   </body>
 </html>

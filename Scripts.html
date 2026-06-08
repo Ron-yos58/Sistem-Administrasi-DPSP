@@ -15,6 +15,7 @@
 
     async init() {
       this.setBootProgress(4, 'Menyiapkan tampilan...');
+      this.refreshIcons();
       this.bindEvents();
       this.resetForm();
       try {
@@ -48,14 +49,26 @@
       });
     },
 
+    refreshIcons() {
+      if (!window.lucide || typeof window.lucide.createIcons !== 'function') return;
+      window.lucide.createIcons({
+        attrs: {
+          'aria-hidden': 'true',
+          'stroke-width': 2
+        }
+      });
+    },
+
     bindEvents() {
       document.querySelectorAll('[data-view], [data-view-target]').forEach(button => {
         button.addEventListener('click', () => this.switchView(button.dataset.view || button.dataset.viewTarget));
       });
       document.getElementById('menuToggle').addEventListener('click', () => this.toggleSidebar());
+      document.getElementById('sidebarClose').addEventListener('click', () => this.setSidebarOpen(false, true));
+      document.getElementById('sidebarBackdrop').addEventListener('click', () => this.setSidebarOpen(false, true));
       document.addEventListener('keydown', event => {
         if (event.key === 'Escape') {
-          this.setSidebarOpen(false);
+          this.setSidebarOpen(false, true);
           this.closeDrawer();
         }
       });
@@ -77,6 +90,19 @@
       document.getElementById('facultyChoices').addEventListener('change', () => this.updateReview());
       document.getElementById('requestForm').addEventListener('input', () => this.updateReview());
       document.getElementById('requestForm').addEventListener('submit', event => this.saveRequest(event));
+      document.getElementById('addSchedule').addEventListener('click', () => this.addSchedule());
+      document.getElementById('scheduleList').addEventListener('click', event => {
+        const button = event.target.closest('.remove-schedule');
+        if (!button) return;
+        const cards = document.querySelectorAll('.schedule-card');
+        if (cards.length <= 1) {
+          this.toast('Minimal satu sesi jadwal harus tersedia.', true);
+          return;
+        }
+        button.closest('.schedule-card').remove();
+        this.renumberSchedules_();
+        this.updateReview();
+      });
       document.getElementById('addEmployee').addEventListener('click', () => this.addEmployee());
       document.getElementById('employeeList').addEventListener('click', event => {
         const button = event.target.closest('.remove-employee');
@@ -124,8 +150,6 @@
       const email = data.user.email || 'Pengguna';
       const role = data.user.role || 'OPERATOR';
       document.getElementById('userEmail').textContent = email;
-      document.getElementById('userRole').textContent = role;
-      document.getElementById('userInitial').textContent = email.charAt(0).toUpperCase();
       document.getElementById('appVersion').textContent = 'v' + data.app.version;
       document.body.classList.toggle('is-admin', role === 'ADMIN');
     },
@@ -149,7 +173,7 @@
           <label><input type="checkbox" name="faculty" value="${this.escape(item)}"> ${this.escape(item)}</label>
         `).join('');
       this.renderSignerOptions(options.signers || []);
-      this.state.employeeCatalog = options.employeeCatalog || [];
+      this.setEmployeeCatalog_(options.employeeCatalog || []);
       this.renderDocumentChoices([]);
     },
 
@@ -199,12 +223,12 @@
 
     switchView(view) {
       const titles = {
-        dashboard: ['OPERASIONAL DPSP', 'Ringkasan'],
-        requests: ['DATA PERMOHONAN', 'Permohonan'],
-        form: ['FORMULIR TERPADU', document.getElementById('requestId').value ? 'Edit Permohonan' : 'Buat Permohonan'],
-        finance: ['HONOR DAN PERJADIN', 'Data Keuangan'],
-        references: ['KONFIGURASI', 'Data Referensi'],
-        admin: ['ADMIN AREA', 'Maintenance Sistem']
+        dashboard: 'Ringkasan',
+        requests: 'Permohonan',
+        form: document.getElementById('requestId').value ? 'Edit Permohonan' : 'Buat Permohonan',
+        finance: 'Data Keuangan',
+        references: 'Data Referensi',
+        admin: 'Maintenance Sistem'
       };
       if (!titles[view] || !document.getElementById('view-' + view)) return;
       if (view === 'admin' && !document.body.classList.contains('is-admin')) {
@@ -216,8 +240,7 @@
       document.getElementById('view-' + view).classList.add('is-active');
       document.querySelectorAll('[data-view]').forEach(item => item.classList.toggle('is-active', item.dataset.view === view));
       document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('is-active', item.dataset.view === view));
-      document.getElementById('pageEyebrow').textContent = titles[view][0];
-      document.getElementById('pageTitle').textContent = titles[view][1];
+      document.getElementById('pageTitle').textContent = titles[view];
       this.setSidebarOpen(false);
       if (view === 'finance' && !this.state.travelLoaded) this.syncAndLoadTravel();
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -227,17 +250,31 @@
       this.setSidebarOpen(!document.getElementById('sidebar').classList.contains('is-open'));
     },
 
-    setSidebarOpen(open) {
-      document.getElementById('sidebar').classList.toggle('is-open', Boolean(open));
-      document.getElementById('menuToggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+    setSidebarOpen(open, restoreFocus) {
+      const isOpen = Boolean(open);
+      const sidebar = document.getElementById('sidebar');
+      const toggle = document.getElementById('menuToggle');
+      const focusWasInside = sidebar.contains(document.activeElement);
+      sidebar.classList.toggle('is-open', isOpen);
+      sidebar.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+      sidebar.inert = !isOpen;
+      document.getElementById('sidebarBackdrop').classList.toggle('is-visible', isOpen);
+      document.body.classList.toggle('sidebar-open', isOpen);
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      toggle.setAttribute('aria-label', isOpen ? 'Tutup menu' : 'Buka menu');
+      if (isOpen) {
+        document.getElementById('sidebarClose').focus();
+      } else if (restoreFocus || focusWasInside) {
+        toggle.focus();
+      }
     },
 
     renderDashboard(summary, requests) {
       const metrics = [
-        ['Total aktif', summary.total, 'Semua permohonan'],
-        ['Draft', summary.drafts, 'Perlu dilengkapi'],
-        ['Dokumen antre', summary.documentsPending, 'Siap dibuat atau gagal'],
-        ['Email antre', summary.emailsPending, 'Siap menjadi draft']
+        ['Permohonan aktif', summary.total, 'Belum ditandai selesai'],
+        ['Draft', summary.drafts, 'Masih dapat diubah'],
+        ['Siap diproses', summary.ready, 'Data sudah tervalidasi'],
+        ['Perlu tindak lanjut', Number(summary.documentsPending || 0) + Number(summary.documentsFailed || 0) + Number(summary.emailsPending || 0), 'Dokumen atau email belum tuntas']
       ];
       document.getElementById('metricGrid').innerHTML = metrics.map(item => `
         <article class="metric-card">
@@ -250,7 +287,8 @@
         <div class="request-row">
           <div><strong>${this.escape(item.activityName || item.id)}</strong><small>${this.escape(item.id)} · ${this.escape(item.partnerName)}</small></div>
           <div><span>${this.escape(item.dateDisplay || '-')}</span><small>${this.escape(item.activityType)}</small></div>
-          <button class="button button-secondary button-small" data-request-id="${this.escape(item.id)}">Buka</button>
+          <div class="status-stack">${this.requestWorkflowBadges_(item)}</div>
+          <button class="button button-secondary button-small" data-request-id="${this.escape(item.id)}">Detail</button>
         </div>
       `).join('') || '<div class="empty-state"><strong>Belum ada permohonan</strong><span>Mulai dari formulir baru.</span></div>';
     },
@@ -264,7 +302,7 @@
           <td data-label="Mitra">${this.escape(item.partnerName || '-')}</td>
           <td data-label="Tanggal">${this.escape(item.dateDisplay || '-')}</td>
           <td data-label="Dokumen"><span class="table-primary">${this.escape(this.asArray(item.documentTypes).join(', ') || '-')}</span></td>
-          <td data-label="Status"><div class="status-stack">${this.statusBadge(item.status)}${this.lifecycleBadge(item.status)}</div></td>
+          <td data-label="Status"><div class="status-stack">${this.requestWorkflowBadges_(item)}</div></td>
           <td data-label="Aksi"><button class="button button-secondary button-small" data-request-id="${this.escape(item.id)}">Detail</button></td>
         </tr>
       `).join('');
@@ -353,8 +391,61 @@
       this.updateReview();
     },
 
+    addSchedule(schedule = {}) {
+      const index = document.querySelectorAll('.schedule-card').length + 1;
+      const card = document.createElement('div');
+      card.className = 'schedule-card';
+      card.innerHTML = `
+        <button type="button" class="remove-schedule" aria-label="Hapus sesi"><i data-lucide="x" aria-hidden="true"></i></button>
+        <input type="hidden" data-schedule-field="id" value="${this.escape(schedule.id || '')}">
+        <div class="field-grid">
+          <label class="field"><span>Tanggal mulai *</span><input type="date" data-schedule-field="startDate" value="${this.escape(schedule.startDate || '')}" required></label>
+          <label class="field"><span>Tanggal selesai</span><input type="date" data-schedule-field="endDate" value="${this.escape(schedule.endDate || schedule.startDate || '')}"></label>
+          <div class="field"><span>Sesi</span><strong data-schedule-index>${index}</strong></div>
+          <label class="field"><span>Waktu mulai</span><input type="time" data-schedule-field="startTime" value="${this.escape(schedule.startTime || '')}"></label>
+          <label class="field"><span>Waktu selesai</span><input type="time" data-schedule-field="endTime" value="${this.escape(schedule.endTime || '')}"></label>
+          <label class="field schedule-place"><span>Tempat *</span><input data-schedule-field="place" value="${this.escape(schedule.place || '')}" required></label>
+        </div>
+      `;
+      document.getElementById('scheduleList').appendChild(card);
+      this.renumberSchedules_();
+      this.refreshIcons();
+      this.updateReview();
+    },
+
+    renumberSchedules_() {
+      document.querySelectorAll('.schedule-card').forEach((card, index) => {
+        const label = card.querySelector('[data-schedule-index]');
+        if (label) label.textContent = index + 1;
+      });
+    },
+
+    scheduleFromCard_(card) {
+      const schedule = {};
+      card.querySelectorAll('[data-schedule-field]').forEach(input => {
+        schedule[input.dataset.scheduleField] = input.value.trim();
+      });
+      return schedule;
+    },
+
+    collectSchedules() {
+      return Array.from(document.querySelectorAll('.schedule-card'))
+        .map(card => this.scheduleFromCard_(card))
+        .filter(schedule => schedule.startDate || schedule.startTime || schedule.endTime || schedule.place);
+    },
+
+    scheduleLabel_(schedule) {
+      const date = schedule.startDate || 'Tanggal belum diisi';
+      const endDate = schedule.endDate && schedule.endDate !== schedule.startDate
+        ? ' s.d. ' + schedule.endDate
+        : '';
+      const time = [schedule.startTime, schedule.endTime].filter(Boolean).join(' - ');
+      return date + endDate + (time ? ', ' + time : '') + (schedule.place ? ', ' + schedule.place : '');
+    },
+
     addEmployee(employee = {}) {
       const index = document.querySelectorAll('.employee-card').length + 1;
+      const catalogCount = this.state.employeeCatalog.length;
       const pickerOptions = this.state.employeeCatalog.map((item, itemIndex) => {
         const label = [item.name, item.identifier, item.unit].filter(Boolean).join(' | ');
         const selected = this.employeeCatalogMatches_(item, employee) ? 'selected' : '';
@@ -368,9 +459,10 @@
         <label class="field field-wide">
           <span>Pilih dari database pegawai</span>
           <select data-employee-picker>
-            <option value="">Isi manual / pilih orang lama</option>
+            <option value="">${catalogCount ? 'Isi manual / pilih orang lama' : 'Database pegawai kosong - isi manual'}</option>
             ${pickerOptions}
           </select>
+          <small class="catalog-status ${catalogCount ? '' : 'is-empty'}">${catalogCount} data pegawai tersedia</small>
         </label>
         <div class="field-grid">
           <label class="field"><span>Nama *</span><input data-employee-field="name" value="${this.escape(employee.name || '')}" placeholder="Orang ${index}"></label>
@@ -384,6 +476,24 @@
       `;
       document.getElementById('employeeList').appendChild(card);
       this.updateReview();
+    },
+
+    setEmployeeCatalog_(catalog) {
+      const cards = Array.from(document.querySelectorAll('.employee-card'));
+      const currentEmployees = cards.map(card => this.employeeFromCard_(card));
+      this.state.employeeCatalog = Array.isArray(catalog) ? catalog : [];
+      if (!cards.length) return;
+
+      document.getElementById('employeeList').innerHTML = '';
+      currentEmployees.forEach(employee => this.addEmployee(employee));
+    },
+
+    employeeFromCard_(card) {
+      const employee = {};
+      card.querySelectorAll('[data-employee-field]').forEach(input => {
+        employee[input.dataset.employeeField] = input.value.trim();
+      });
+      return employee;
     },
 
     employeeCatalogMatches_(catalogItem, employee) {
@@ -416,11 +526,9 @@
     },
 
     collectEmployees() {
-      return Array.from(document.querySelectorAll('.employee-card')).map(card => {
-        const item = {};
-        card.querySelectorAll('[data-employee-field]').forEach(input => item[input.dataset.employeeField] = input.value.trim());
-        return item;
-      }).filter(item => item.name || item.identifier || item.email);
+      return Array.from(document.querySelectorAll('.employee-card'))
+        .map(card => this.employeeFromCard_(card))
+        .filter(item => item.name || item.identifier || item.email);
     },
 
     collectDocuments() {
@@ -436,6 +544,7 @@
       const hasSpeakerRequest = document.getElementById('activityType').value === 'Penugasan Narasumber' &&
         documents.some(document => document.type === 'Surat Permohonan Narasumber kepada Dekan');
       const needsIncoming = documents.some(document => document.type !== 'Surat Tugas');
+      const schedules = this.collectSchedules();
       return {
         id: document.getElementById('requestId').value,
         revision: document.getElementById('requestRevision').value,
@@ -459,10 +568,11 @@
         partnerAddress: document.getElementById('partnerAddress').value,
         partnerEmail: document.getElementById('partnerEmail').value,
         letterDate: document.getElementById('letterDate').value,
-        startDate: document.getElementById('startDate').value,
-        endDate: document.getElementById('endDate').value,
-        activityTime: document.getElementById('activityTime').value,
-        activityPlace: document.getElementById('activityPlace').value,
+        schedules,
+        startDate: schedules[0]?.startDate || '',
+        endDate: schedules[schedules.length - 1]?.endDate || schedules[schedules.length - 1]?.startDate || '',
+        activityTime: '',
+        activityPlace: schedules[0]?.place || '',
         signerName: document.getElementById('signerName').value,
         signerId: document.getElementById('signerId').value,
         signerRole: document.getElementById('signerRole').value,
@@ -477,17 +587,16 @@
       const name = document.getElementById('activityName').value || 'Permohonan baru';
       const documents = this.collectDocuments();
       const employees = this.collectEmployees();
-      const start = document.getElementById('startDate').value;
-      const end = document.getElementById('endDate').value;
+      const schedules = this.collectSchedules();
       document.getElementById('reviewTitle').textContent = name;
       document.getElementById('reviewContent').innerHTML = [
         ['Tipe kegiatan', type],
         ['Dokumen', documents.map(item => item.type).join(', ') || 'Belum dipilih'],
-        ['Tanggal', [start, end && end !== start ? end : ''].filter(Boolean).join(' s.d. ') || 'Belum diisi'],
+        ['Jadwal', schedules.map(schedule => this.scheduleLabel_(schedule)).join('\n') || 'Belum diisi'],
         ['Petugas / narasumber', employees.length + ' orang'],
         ['Honor', document.getElementById('honor').value],
         ['Perjalanan dinas', document.getElementById('travel').value]
-      ].map(item => `<div class="review-line"><span>${this.escape(item[0])}</span><strong>${this.escape(item[1])}</strong></div>`).join('');
+      ].map(item => `<div class="review-line"><span>${this.escape(item[0])}</span><strong>${this.escape(item[1]).replace(/\n/g, '<br>')}</strong></div>`).join('');
     },
 
     async saveRequest(event) {
@@ -499,12 +608,15 @@
       this.setBusy(submitter, true, 'Menyimpan...');
       try {
         const result = await this.server('saveRequest', payload);
-        document.getElementById('requestId').value = result.id;
-        document.getElementById('requestRevision').value = result.revision;
-        this.toast('Permohonan ' + result.id + ' tersimpan.');
+        this.toast(
+          status === 'READY'
+            ? 'Permohonan ' + result.id + ' siap diproses.'
+            : 'Draft permohonan ' + result.id + ' tersimpan.'
+        );
         this.state.travelLoaded = false;
-        await this.openRequestDetail(result.id);
-        this.refreshAll(false);
+        await this.refreshAll(false);
+        this.resetForm();
+        this.switchView(status === 'READY' ? 'requests' : 'dashboard');
       } catch (error) {
         this.toast(error.message, true);
         this.focusFirstInvalid();
@@ -518,7 +630,9 @@
       document.getElementById('requestId').value = '';
       document.getElementById('requestRevision').value = '';
       document.getElementById('clientToken').value = this.uuid();
+      document.getElementById('scheduleList').innerHTML = '';
       document.getElementById('employeeList').innerHTML = '';
+      this.addSchedule();
       this.addEmployee();
       const today = this.localDateIso();
       document.getElementById('letterDate').value = today;
@@ -550,12 +664,13 @@
     renderDetail(detail) {
       const request = detail.request;
       const detailDocuments = this.asArray(detail.documents);
+      const progress = request.documentProgress || this.summarizeDocumentProgress_(detailDocuments, request.status);
       document.getElementById('drawerTitle').textContent = request.id;
       const documents = detailDocuments.map(doc => `
         <div class="document-item">
           <div class="document-item-head">
             <div><strong>${this.escape(doc.type)}</strong><small>${this.escape(doc.number || 'Nomor surat belum diisi')}</small></div>
-            ${this.statusBadge(doc.status)}
+            ${this.documentStatusBadge_(doc, request.status)}
           </div>
           <div class="document-links">
             ${doc.docUrl ? `<a class="button button-secondary button-small" href="${this.escape(doc.docUrl)}" target="_blank">Buka Doc</a>` : ''}
@@ -564,28 +679,33 @@
         </div>
       `).join('');
       const employees = detail.employees.map(item => `<li>${this.escape(item.name)}${item.identifier ? ' · ' + this.escape(item.identifier) : ''}${item.email ? ' · ' + this.escape(item.email) : ''}</li>`).join('');
+      const schedules = this.asArray(detail.schedules).map((item, index) =>
+        `<li><strong>Sesi ${index + 1}</strong><br>${this.escape(this.scheduleLabel_(item))}</li>`
+      ).join('');
       document.getElementById('drawerBody').innerHTML = `
         <div class="detail-hero">
           <p class="eyebrow">${this.escape(request.activityType)}</p>
           <h3>${this.escape(request.activityName)}</h3>
-          <p>${this.escape(request.partnerName)} · ${this.escape(request.dateDisplay || '-')} · ${this.escape(request.status || 'DRAFT')}</p>
+          <p>${this.escape(request.partnerName)}</p>
+          <div class="status-stack detail-status">${this.requestWorkflowBadges_(request)}</div>
         </div>
-        <div class="action-panel">
-          <button class="button button-primary" data-action="process-all">Proses semua dokumen</button>
-          <button class="button button-secondary" data-action="edit-request">Edit data</button>
-          ${request.status === 'ARCHIVED' ? '' : '<button class="button button-danger" data-action="archive-request">Arsipkan</button>'}
+        <div class="workflow-notice workflow-${this.escape(String(request.status || 'DRAFT').toLowerCase())}">
+          ${this.escape(this.requestStatusMessage_(request.status, progress))}
         </div>
-        ${this.renderDocumentToolbar_(detailDocuments)}
+        ${this.renderPrimaryActions_(request, progress)}
+        ${this.renderDocumentToolbar_(detailDocuments, request)}
         ${this.renderFinanceToolbar_(request)}
         <section class="detail-section">
-          <h3>Ringkasan</h3>
+          <div class="detail-section-head">
+            <h3>Ringkasan Permohonan</h3>
+          </div>
           <div class="detail-grid">
-            <div><span>Status</span><strong>${this.statusBadge(request.status)} ${this.lifecycleBadge(request.status)}</strong></div>
-            <div><span>Revision</span><strong>${request.revision}</strong></div>
-            <div><span>Tempat</span><strong>${this.escape(request.activityPlace || '-')}</strong></div>
-            <div><span>Waktu</span><strong>${this.escape(request.activityTime || '-')}</strong></div>
             <div><span>Honor</span><strong>${this.escape(request.honor)}</strong></div>
             <div><span>Perjadin</span><strong>${this.escape(request.travel)}</strong></div>
+            <div class="detail-wide">
+              <span>Jadwal kegiatan</span>
+              <ol class="compact-schedule-list">${schedules || '<li>Belum ada jadwal.</li>'}</ol>
+            </div>
           </div>
         </section>
         <section class="detail-section"><h3>Dokumen</h3><div class="document-list">${documents || '<p>Belum ada dokumen.</p>'}</div></section>
@@ -599,25 +719,39 @@
       `;
     },
 
-    renderDocumentToolbar_(documents) {
-      if (!documents.length) return '';
+    renderPrimaryActions_(request, progress) {
+      if (request.status === 'ARCHIVED') return '';
+      const actions = [];
+      if (request.status === 'READY' && progress.status !== 'DRAFTED') {
+        actions.push('<button class="button button-primary" data-action="process-all">Buat semua Doc, PDF & draft Gmail</button>');
+      }
+      actions.push('<button class="button button-secondary" data-action="edit-request">Ubah permohonan</button>');
+      if (request.status === 'READY' && progress.status === 'DRAFTED') {
+        actions.push('<button class="button button-secondary" data-action="archive-request">Tandai Selesai</button>');
+      }
+      return `<div class="action-panel">${actions.join('')}</div>`;
+    },
+
+    renderDocumentToolbar_(documents, request) {
+      if (!documents.length || request.status !== 'READY') return '';
       const options = documents.map(doc => `
         <option value="${this.escape(doc.id)}">${this.escape(doc.type)}${doc.number ? ' | ' + this.escape(doc.number) : ''}</option>
       `).join('');
       return `
         <section class="detail-section action-section">
-          <h3>Aksi dokumen</h3>
+          <h3>Proses satu dokumen</h3>
           <div class="toolbar-row">
             <select data-detail-document-select aria-label="Pilih dokumen">${options}</select>
-            <button class="button button-primary" data-action="generate-doc">Buat Doc/PDF</button>
+            <button class="button button-primary" data-action="generate-doc">Buat Doc & PDF</button>
             <button class="button button-secondary" data-action="preview-email">Preview email</button>
-            <button class="button button-secondary" data-action="draft-email">Buat draft</button>
+            <button class="button button-secondary" data-action="draft-email">Buat draft Gmail</button>
           </div>
         </section>
       `;
     },
 
     renderFinanceToolbar_(request) {
+      if (request.status !== 'READY') return '';
       const kinds = [];
       if (request.honor === 'Ya') kinds.push(['HONOR', 'Honor']);
       if (request.travel === 'Ya') kinds.push(['PERJADIN', 'Perjadin']);
@@ -649,10 +783,13 @@
           return;
         }
         if (action === 'archive-request') {
-          if (!confirm('Arsipkan permohonan ' + request.id + '? Data tidak dihapus.')) return;
-          this.setBusy(button, true, 'Mengarsipkan...');
+          if (!confirm(
+            'Tandai permohonan ' + request.id + ' sebagai selesai? ' +
+            'Permohonan akan menjadi hanya-baca dan dipindahkan dari daftar aktif.'
+          )) return;
+          this.setBusy(button, true, 'Menyelesaikan...');
           await this.server('archiveRequest', request.id, request.revision);
-          this.toast('Permohonan diarsipkan.');
+          this.toast('Permohonan ditandai selesai.');
           this.state.travelLoaded = false;
           this.closeDrawer();
           await this.refreshAll(false);
@@ -675,10 +812,19 @@
           this.toast('Draft Gmail siap.');
         }
         if (action === 'process-all') {
-          this.setBusy(button, true, 'Memproses...');
+          this.setBusy(button, true, 'Membuat dokumen & draft...');
           const result = await this.server('processRequest', request.id);
-          if (!result.ok) throw new Error(result.errors.map(item => item.type + ': ' + item.error).join('\n'));
-          this.toast('Semua dokumen dan draft selesai.');
+          await this.openRequestDetail(request.id);
+          if (!result.ok) {
+            this.toast(
+              'Sebagian proses gagal:\n' +
+              result.errors.map(item => item.type + ' (' + item.stage + '): ' + item.error).join('\n'),
+              true
+            );
+            return;
+          }
+          this.toast('Semua Doc, PDF, dan draft Gmail siap.');
+          return;
         }
         if (action === 'generate-finance') {
           const kind = button.dataset.kind || this.selectedFinanceKind_();
@@ -741,10 +887,6 @@
         partnerAddress: request.partnerAddress,
         partnerEmail: request.partnerEmail,
         letterDate: request.letterDate,
-        startDate: request.startDate,
-        endDate: request.endDate,
-        activityTime: request.activityTime,
-        activityPlace: request.activityPlace,
         signerName: request.signerName,
         signerId: request.signerId,
         signerRole: request.signerRole,
@@ -755,6 +897,16 @@
         const input = document.getElementById(id);
         if (input) input.value = values[id] == null ? '' : values[id];
       });
+      document.getElementById('scheduleList').innerHTML = '';
+      const schedules = this.asArray(detail.schedules);
+      schedules.forEach(schedule => this.addSchedule(schedule));
+      if (!schedules.length) {
+        this.addSchedule({
+          startDate: request.startDate,
+          endDate: request.endDate,
+          place: request.activityPlace
+        });
+      }
       this.renderDocumentChoices(detail.documents);
       const statusInput = document.querySelector(`input[name="speakerStatus"][value="${CSS.escape(request.speakerStatus || '')}"]`);
       if (statusInput) statusInput.checked = true;
@@ -873,11 +1025,16 @@
       const button = document.getElementById('refreshButton');
       this.setBusy(button, true, 'Memuat...');
       try {
-        const data = await this.server('getBootstrapData');
+        const data = await this.server('refreshBootstrapData');
         this.state.bootstrap = data;
         this.state.requests = data.requests || [];
+        this.setEmployeeCatalog_((data.options || {}).employeeCatalog || []);
         this.renderDashboard(data.summary, this.state.requests);
-        this.renderRequests(this.state.requests);
+        if (this.state.activeView === 'requests') {
+          await this.loadRequests();
+        } else {
+          this.renderRequests(this.state.requests);
+        }
         this.renderReferences(data.references);
         if (showToast) this.toast('Data diperbarui.');
       } catch (error) {
@@ -907,6 +1064,26 @@
         if (action === 'preview-migration') {
           const result = await this.server('previewLegacyMigration');
           this.renderAdminObject('Preview migrasi', result);
+        }
+        if (action === 'run-migration') {
+          const confirmation = prompt(
+            'Migrasi akan membuat backup dan mengubah struktur data. Ketik MIGRATE untuk melanjutkan.'
+          );
+          if (confirmation === null) return;
+          if (confirmation.trim() !== 'MIGRATE') {
+            throw new Error('Migrasi dibatalkan. Konfirmasi harus tepat: MIGRATE');
+          }
+          const result = await this.server('migrateLegacyData', confirmation.trim());
+          this.renderAdminObject('Hasil migrasi', result);
+          this.toast('Migrasi selesai.');
+          await this.refreshAll(false);
+        }
+        if (action === 'cleanup-autocrat') {
+          if (!confirm('Hapus kolom Autocrat AM-BV dari Master Permohonan? Backup tersembunyi akan dibuat terlebih dahulu.')) return;
+          const result = await this.server('cleanupMigratedAutocratColumns');
+          this.renderAdminObject('Cleanup kolom Autocrat', result);
+          this.toast(result.message || 'Kolom Autocrat berhasil dibersihkan.');
+          await this.refreshAll(false);
         }
         if (action === 'repair-master') {
           if (!confirm('Repair ID Master kosong? Jalankan hanya saat dibutuhkan.')) return;
@@ -960,31 +1137,110 @@
       `;
     },
 
-    statusBadge(status) {
-      const clean = String(status || 'PENDING').toUpperCase();
-      const className = clean === 'READY' ? 'ready' :
-        clean === 'GENERATED' ? 'generated' :
-        clean === 'DRAFTED' || clean === 'EMAIL DRAFTED' ? 'drafted' :
-        clean === 'ARCHIVED' ? 'archived' :
-        clean === 'ERROR' ? 'error' :
-        clean === 'DRAFT' ? 'draft' : 'pending';
-      return `<span class="status status-${className}">${this.escape(clean.replace(/_/g, ' '))}</span>`;
+    requestStatusBadge_(status) {
+      const clean = String(status || 'DRAFT').toUpperCase();
+      const meta = {
+        DRAFT: ['draft', 'Draft'],
+        READY: ['ready', 'Siap Diproses'],
+        ARCHIVED: ['archived', 'Selesai']
+      }[clean] || ['pending', clean];
+      return this.statusPill_(meta[0], meta[1]);
     },
 
-    lifecycleBadge(status) {
-      const archived = String(status || '').toUpperCase() === 'ARCHIVED';
-      return `<span class="status status-${archived ? 'archived' : 'active'}">${archived ? 'ARSIP' : 'AKTIF'}</span>`;
+    documentProgressBadge_(progress) {
+      const clean = String((progress || {}).status || 'NOT_CREATED').toUpperCase();
+      const meta = {
+        NOT_CREATED: ['pending', 'Dokumen Belum Dibuat'],
+        IN_PROGRESS: ['generated', 'Sebagian Diproses'],
+        GENERATED: ['generated', 'Doc & PDF Dibuat'],
+        DRAFTED: ['drafted', 'Draft Email Dibuat'],
+        ERROR: ['error', 'Gagal Generate'],
+        COMPLETE: ['archived', 'Selesai / Diarsipkan']
+      }[clean] || ['pending', clean];
+      return this.statusPill_(meta[0], meta[1]);
+    },
+
+    documentStatusBadge_(document, requestStatus) {
+      if (String(requestStatus || '').toUpperCase() === 'ARCHIVED') {
+        return this.statusPill_('archived', 'Selesai / Diarsipkan');
+      }
+      if (String(document.status || '').toUpperCase() === 'ERROR') {
+        return this.statusPill_('error', 'Gagal Generate');
+      }
+      if (String(document.emailStatus || '').toUpperCase() === 'DRAFTED') {
+        return this.statusPill_('drafted', 'Draft Email Dibuat');
+      }
+      if (String(document.status || '').toUpperCase() === 'GENERATED') {
+        return this.statusPill_('generated', 'Doc & PDF Dibuat');
+      }
+      return this.statusPill_('pending', 'Belum Dibuat');
+    },
+
+    requestWorkflowBadges_(request) {
+      const requestBadge = this.requestStatusBadge_(request.status);
+      if (String(request.status || '').toUpperCase() === 'ARCHIVED') return requestBadge;
+      const progress = request.documentProgress || this.summarizeDocumentProgress_([], request.status);
+      return requestBadge + this.documentProgressBadge_(progress);
+    },
+
+    summarizeDocumentProgress_(documents, requestStatus) {
+      const summary = {
+        total: documents.length,
+        notCreated: 0,
+        generated: 0,
+        failed: 0,
+        drafted: 0,
+        status: 'NOT_CREATED'
+      };
+      documents.forEach(document => {
+        if (document.status === 'ERROR') summary.failed++;
+        else if (document.status === 'GENERATED') summary.generated++;
+        else summary.notCreated++;
+        if (document.emailStatus === 'DRAFTED') summary.drafted++;
+      });
+      if (requestStatus === 'ARCHIVED') summary.status = 'COMPLETE';
+      else if (summary.failed) summary.status = 'ERROR';
+      else if (!summary.total || summary.notCreated === summary.total) summary.status = 'NOT_CREATED';
+      else if (summary.drafted === summary.total) summary.status = 'DRAFTED';
+      else if (summary.generated === summary.total) summary.status = 'GENERATED';
+      else summary.status = 'IN_PROGRESS';
+      return summary;
+    },
+
+    requestStatusMessage_(status, progress) {
+      if (status === 'ARCHIVED') {
+        return 'Permohonan telah selesai dan bersifat hanya-baca.';
+      }
+      if (status === 'DRAFT') {
+        return 'Data masih dapat diubah. Lengkapi lalu tandai Siap Diproses sebelum membuat dokumen.';
+      }
+      if (progress.status === 'DRAFTED') {
+        return 'Seluruh Doc, PDF, dan draft Gmail tersedia. Permohonan dapat ditandai selesai.';
+      }
+      if (progress.status === 'ERROR') {
+        return 'Ada dokumen yang gagal dibuat. Periksa status dokumen lalu jalankan proses kembali.';
+      }
+      return 'Data sudah tervalidasi dan siap dibuat menjadi Doc, PDF, serta draft Gmail.';
+    },
+
+    statusPill_(className, label) {
+      return `<span class="status status-${this.escape(className)}">${this.escape(label)}</span>`;
     },
 
     setBusy(button, busy, label) {
       if (!button) return;
       if (busy) {
-        button.dataset.originalText = button.textContent;
-        button.textContent = label || 'Memproses...';
+        button.dataset.originalHtml = button.innerHTML;
+        button.setAttribute('aria-busy', 'true');
+        if (!button.classList.contains('icon-button')) {
+          button.textContent = label || 'Memproses...';
+        }
         button.disabled = true;
       } else {
-        button.textContent = button.dataset.originalText || button.textContent;
+        if (button.dataset.originalHtml) button.innerHTML = button.dataset.originalHtml;
+        button.removeAttribute('aria-busy');
         button.disabled = false;
+        this.refreshIcons();
       }
     },
 
@@ -1023,6 +1279,17 @@
       }
       const errors = [];
       if (!payload.documents.length) errors.push('Pilih minimal satu dokumen.');
+      if (!payload.schedules.length) errors.push('Minimal satu sesi jadwal wajib diisi.');
+      payload.schedules.forEach((schedule, index) => {
+        if (!schedule.startDate) errors.push('Tanggal sesi ke-' + (index + 1) + ' wajib diisi.');
+        if (!schedule.place) errors.push('Tempat sesi ke-' + (index + 1) + ' wajib diisi.');
+        if (schedule.startDate && schedule.endDate && schedule.endDate < schedule.startDate) {
+          errors.push('Tanggal selesai sesi ke-' + (index + 1) + ' tidak boleh sebelum tanggal mulai.');
+        }
+        if (schedule.startTime && schedule.endTime && schedule.endTime < schedule.startTime) {
+          errors.push('Waktu selesai sesi ke-' + (index + 1) + ' tidak boleh sebelum waktu mulai.');
+        }
+      });
       payload.documents.forEach(document => {
         if (!document.number) errors.push('Nomor surat wajib: ' + document.type);
       });

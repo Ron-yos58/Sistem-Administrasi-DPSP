@@ -163,6 +163,134 @@ function formatDayRange_(startIso, endIso) {
     : days[start.getDay()] + ' - ' + days[end.getDay()];
 }
 
+function joinIndonesian_(values) {
+  const items = (values || []).filter(Boolean);
+  if (items.length < 2) return items[0] || '';
+  if (items.length === 2) return items[0] + ' dan ' + items[1];
+  return items.slice(0, -1).join(', ') + ', dan ' + items[items.length - 1];
+}
+
+function formatTimeRange_(startTime, endTime) {
+  const start = text_(startTime).replace(':', '.');
+  const end = text_(endTime).replace(':', '.');
+  if (!start && !end) return '';
+  if (!start) return end + ' WIB';
+  if (!end || end === start) return start + ' WIB';
+  return start + ' - ' + end + ' WIB';
+}
+
+function parseTimeRange_(value) {
+  if (!value) return { startTime: '', endTime: '' };
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return {
+      startTime: Utilities.formatDate(value, APP_CONFIG.TIME_ZONE, 'HH:mm'),
+      endTime: ''
+    };
+  }
+
+  const input = text_(value)
+    .replace(/\b(?:wib|wita|wit)\b/gi, '')
+    .replace(/\bpukul\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match = input.match(
+    /(\d{1,2})[.:](\d{2})(?:\s*(?:-|\u2013|\u2014|s\.?\s*d\.?|sampai)\s*(\d{1,2})[.:](\d{2}))?/i
+  );
+  if (!match) return { startTime: '', endTime: '' };
+
+  function clock_(hour, minute) {
+    const hours = Number(hour);
+    const minutes = Number(minute);
+    if (hours > 23 || minutes > 59) return '';
+    return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+  }
+
+  return {
+    startTime: clock_(match[1], match[2]),
+    endTime: match[3] ? clock_(match[3], match[4]) : ''
+  };
+}
+
+function formatScheduleDateList_(items) {
+  if (!items.length) return '';
+  const singleDates = items.every(function(item) {
+    return !item.endDate || item.endDate === item.startDate;
+  });
+  const first = parseIsoDate_(items[0].startDate);
+  const sameMonth = singleDates && items.every(function(item) {
+    const date = parseIsoDate_(item.startDate);
+    return date.getFullYear() === first.getFullYear() && date.getMonth() === first.getMonth();
+  });
+  if (!sameMonth) {
+    return joinIndonesian_(uniqueTextList_(items.map(function(item) {
+      return formatDateRange_(item.startDate, item.endDate || item.startDate);
+    })));
+  }
+
+  const months = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  const days = uniqueTextList_(items.map(function(item) {
+    return String(parseIsoDate_(item.startDate).getDate());
+  }));
+  return joinIndonesian_(days) + ' ' + months[first.getMonth()] + ' ' + first.getFullYear();
+}
+
+function buildScheduleSummary_(schedules) {
+  const sourceItems = (schedules || []).slice();
+  const items = sourceItems.filter(function(item) {
+    return text_(item.startDate);
+  }).sort(function(a, b) {
+    return String(a.startDate).localeCompare(String(b.startDate)) ||
+      Number(a.sequence || 0) - Number(b.sequence || 0);
+  });
+  const places = uniqueTextList_(sourceItems.map(function(item) {
+    return item.place;
+  }).filter(Boolean));
+  if (!items.length) {
+    return {
+      startDate: '',
+      endDate: '',
+      dayDisplay: '',
+      dateDisplay: '',
+      timeDisplay: sourceItems.length === 1
+        ? formatTimeRange_(sourceItems[0].startTime, sourceItems[0].endTime)
+        : '',
+      placeDisplay: places.join('\n')
+    };
+  }
+
+  const dayLabels = uniqueTextList_(items.map(function(item) {
+    return formatDayRange_(item.startDate, item.endDate || item.startDate);
+  }));
+  const timeLabels = items.map(function(item) {
+    const time = formatTimeRange_(item.startTime, item.endTime);
+    return items.length > 1 && time
+      ? formatDateRange_(item.startDate, item.endDate || item.startDate) + ': ' + time
+      : time;
+  }).filter(Boolean);
+  const placeLabels = places.length <= 1
+    ? places
+    : items.map(function(item) {
+        return item.place
+          ? formatDateRange_(item.startDate, item.endDate || item.startDate) + ': ' + item.place
+          : '';
+      }).filter(Boolean);
+
+  return {
+    startDate: items[0].startDate,
+    endDate: items.reduce(function(latest, item) {
+      const candidate = item.endDate || item.startDate;
+      return candidate > latest ? candidate : latest;
+    }, items[0].endDate || items[0].startDate),
+    dayDisplay: joinIndonesian_(dayLabels),
+    dateDisplay: formatScheduleDateList_(items),
+    timeDisplay: timeLabels.join('\n'),
+    placeDisplay: placeLabels.join('\n')
+  };
+}
+
 function serializeValue_(value) {
   if (value instanceof Date) return formatDate_(value, 'yyyy-MM-dd');
   if (Array.isArray(value)) return value.map(serializeValue_);

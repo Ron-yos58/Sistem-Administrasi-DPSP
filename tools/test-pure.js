@@ -56,6 +56,88 @@ test('Indonesian day range', () => {
   equal(context.formatDayRange_('2026-06-01', '2026-06-03'), 'Senin - Rabu');
 });
 
+test('non-contiguous sessions stay one schedule summary', () => {
+  const summary = context.buildScheduleSummary_([
+    {
+      startDate: '2026-06-25',
+      endDate: '2026-06-25',
+      startTime: '09:00',
+      endTime: '12:00',
+      place: 'Aula',
+      sequence: 1
+    },
+    {
+      startDate: '2026-06-30',
+      endDate: '2026-06-30',
+      startTime: '13:00',
+      endTime: '15:00',
+      place: 'Aula',
+      sequence: 2
+    }
+  ]);
+
+  equal(summary.startDate, '2026-06-25');
+  equal(summary.endDate, '2026-06-30');
+  equal(summary.dayDisplay, 'Kamis dan Selasa');
+  equal(summary.dateDisplay, '25 dan 30 Juni 2026');
+  equal(
+    summary.timeDisplay,
+    '25 Juni 2026: 09.00 - 12.00 WIB\n30 Juni 2026: 13.00 - 15.00 WIB'
+  );
+  equal(summary.placeDisplay, 'Aula');
+});
+
+test('one continuous session remains a date range', () => {
+  const summary = context.buildScheduleSummary_([{
+    startDate: '2026-06-25',
+    endDate: '2026-06-27',
+    startTime: '09:00',
+    endTime: '15:00',
+    place: 'Aula',
+    sequence: 1
+  }]);
+
+  equal(summary.dateDisplay, '25 - 27 Juni 2026');
+  equal(summary.timeDisplay, '09.00 - 15.00 WIB');
+});
+
+test('legacy time range parsing', () => {
+  equal(
+    context.parseTimeRange_('Pukul 09.00 - 12.30 WIB'),
+    { startTime: '09:00', endTime: '12:30' }
+  );
+});
+
+test('document workflow summary keeps request and processing states separate', () => {
+  equal(
+    context.summarizeDocumentWorkflow_([
+      { status: 'PENDING', emailStatus: '' },
+      { status: 'PENDING', emailStatus: '' }
+    ], 'READY').status,
+    'NOT_CREATED'
+  );
+  equal(
+    context.summarizeDocumentWorkflow_([
+      { status: 'GENERATED', emailStatus: 'DRAFTED' },
+      { status: 'GENERATED', emailStatus: 'DRAFTED' }
+    ], 'READY').status,
+    'DRAFTED'
+  );
+  equal(
+    context.summarizeDocumentWorkflow_([
+      { status: 'ERROR', emailStatus: '' },
+      { status: 'GENERATED', emailStatus: '' }
+    ], 'READY').status,
+    'ERROR'
+  );
+  equal(
+    context.summarizeDocumentWorkflow_([
+      { status: 'GENERATED', emailStatus: 'DRAFTED' }
+    ], 'ARCHIVED').status,
+    'COMPLETE'
+  );
+});
+
 test('email validation and deduplication', () => {
   equal(
     Array.from(context.emailList_('A@EXAMPLE.COM; invalid; a@example.com, b@example.com')),
@@ -130,6 +212,82 @@ test('legacy date range parsing', () => {
     JSON.parse(JSON.stringify(context.parseLegacyDateRange_('31 Mei - 2 Juni 2026'))),
     { start: '2026-05-31', end: '2026-06-02' }
   );
+});
+
+test('legacy Master compacts without Autocrat columns', () => {
+  const masterHeaders = vm.runInContext('MASTER_HEADERS.slice()', context);
+  const legacyHeaders = vm.runInContext('LEGACY_MASTER_HEADERS.slice()', context);
+  const autocratHeaders = vm.runInContext('AUTOCRAT_HEADERS.slice()', context);
+  const legacyRow = legacyHeaders.map(header => `value:${header}`);
+  const compacted = context.compactLegacyMasterRow_(legacyRow);
+
+  equal(masterHeaders.length, 48);
+  equal(legacyHeaders.length, 84);
+  equal(autocratHeaders.length, 36);
+  equal(compacted.length, masterHeaders.length);
+  equal(compacted[masterHeaders.indexOf('Email Status')], 'value:Email Status');
+  if (masterHeaders.some(header => autocratHeaders.includes(header))) {
+    throw new Error('active Master still contains an Autocrat header');
+  }
+});
+
+test('migration deletes only Autocrat AM-BV columns', () => {
+  const autocratHeaders = vm.runInContext('AUTOCRAT_HEADERS.slice()', context);
+  let deletedColumns = null;
+  const sheet = {
+    getMaxColumns: () => 84,
+    getRange: (row, column, rowCount, columnCount) => ({
+      getDisplayValues: () => [autocratHeaders.slice(0, columnCount)]
+    }),
+    deleteColumns: (startColumn, columnCount) => {
+      deletedColumns = [startColumn, columnCount];
+    }
+  };
+
+  equal(context.removeLegacyAutocratColumns_(sheet), 36);
+  equal(deletedColumns, [39, 36]);
+});
+
+test('migration refuses unexpected Autocrat headers', () => {
+  const autocratHeaders = vm.runInContext('AUTOCRAT_HEADERS.slice()', context);
+  autocratHeaders[4] = 'Header lain';
+  let deleted = false;
+  const sheet = {
+    getMaxColumns: () => 84,
+    getRange: () => ({
+      getDisplayValues: () => [autocratHeaders]
+    }),
+    deleteColumns: () => {
+      deleted = true;
+    }
+  };
+
+  let rejected = false;
+  try {
+    context.removeLegacyAutocratColumns_(sheet);
+  } catch (error) {
+    rejected = /Header Autocrat tidak cocok/.test(error.message);
+  }
+  if (!rejected) throw new Error('unexpected headers were accepted');
+  if (deleted) throw new Error('columns were deleted after failed validation');
+});
+
+test('Master schema inspection recognizes legacy and active layouts', () => {
+  const masterHeaders = vm.runInContext('MASTER_HEADERS.slice()', context);
+  const legacyHeaders = vm.runInContext('LEGACY_MASTER_HEADERS.slice()', context);
+  const makeSheet = headers => ({
+    getMaxColumns: () => headers.length,
+    getRange: (row, column, rowCount, columnCount) => ({
+      getDisplayValues: () => [headers.slice(column - 1, column - 1 + columnCount)]
+    })
+  });
+
+  equal(context.inspectMasterSchema_(makeSheet(legacyHeaders)), 'LEGACY');
+  equal(context.inspectMasterSchema_(makeSheet(masterHeaders)), 'ACTIVE');
+
+  const unexpectedHeaders = legacyHeaders.slice();
+  unexpectedHeaders[38] = 'Header tidak dikenal';
+  equal(context.inspectMasterSchema_(makeSheet(unexpectedHeaders)), 'UNKNOWN');
 });
 
 test('incomplete draft remains valid', () => {

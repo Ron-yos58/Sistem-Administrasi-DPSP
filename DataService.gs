@@ -22,6 +22,12 @@
     });
   }
 
+  function refreshBootstrapData() {
+    assertAuthorized_();
+    clearAppCache_();
+    return getBootstrapData();
+  }
+
   function listRequests(filters) {
     assertAuthorized_();
     return serializeValue_(listRequestsInternal_(filters || {}));
@@ -75,6 +81,7 @@
     return serializeValue_({
       request: enrichRequestWithDocuments_(masterRowToDto_(row), null, documents),
       documents: documents,
+      schedules: getSchedulesByRequest_(id, row),
       employees: getEmployeesByRequest_(id),
       generatedFiles: getGeneratedFilesByRequest_(id),
       travel: getTravelByRequestInternal_(id)
@@ -95,13 +102,40 @@
   function enrichRequestWithDocuments_(request, documentsByRequest, preloadedDocuments) {
     const item = Object.assign({}, request);
     const docs = preloadedDocuments || (documentsByRequest && documentsByRequest[item.id]) || [];
-    if (!docs.length) return item;
-
-    item.documentTypes = uniqueTextList_(docs.map(function(doc) { return doc.type; }));
-    item.documentNumber = docs.map(function(doc) {
-      return doc.number ? doc.type + ': ' + doc.number : '';
-    }).filter(Boolean).join('\n');
+    item.documentProgress = summarizeDocumentWorkflow_(docs, item.status);
+    if (docs.length) {
+      item.documentTypes = uniqueTextList_(docs.map(function(doc) { return doc.type; }));
+      item.documentNumber = docs.map(function(doc) {
+        return doc.number ? doc.type + ': ' + doc.number : '';
+      }).filter(Boolean).join('\n');
+    }
     return item;
+  }
+
+  function summarizeDocumentWorkflow_(documents, requestStatus) {
+    const docs = documents || [];
+    const summary = {
+      total: docs.length,
+      notCreated: 0,
+      generated: 0,
+      failed: 0,
+      drafted: 0,
+      status: 'NOT_CREATED'
+    };
+    docs.forEach(function(document) {
+      if (document.status === 'ERROR') summary.failed++;
+      else if (document.status === 'GENERATED') summary.generated++;
+      else summary.notCreated++;
+      if (document.emailStatus === 'DRAFTED') summary.drafted++;
+    });
+
+    if (requestStatus === 'ARCHIVED') summary.status = 'COMPLETE';
+    else if (summary.failed) summary.status = 'ERROR';
+    else if (!summary.total || summary.notCreated === summary.total) summary.status = 'NOT_CREATED';
+    else if (summary.drafted === summary.total) summary.status = 'DRAFTED';
+    else if (summary.generated === summary.total) summary.status = 'GENERATED';
+    else summary.status = 'IN_PROGRESS';
+    return summary;
   }
 
   function saveRequest(payload) {
@@ -123,6 +157,9 @@
       const existing = isNew
         ? new Array(MASTER_HEADERS.length).fill('')
         : sheet.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
+      if (!isNew && text_(masterValue_(existing, 'Status Permohonan')) === 'ARCHIVED') {
+        throw new Error('Permohonan selesai bersifat hanya-baca dan tidak dapat diubah.');
+      }
 
       const currentRevision = Number(existing[masterColumn_('Revision') - 1] || 0);
       if (!isNew && clean.revision !== null && clean.revision !== currentRevision) {
@@ -134,6 +171,7 @@
       const revision = currentRevision + 1;
       const now = new Date();
       const row = existing.slice();
+      const scheduleSummary = buildScheduleSummary_(clean.schedules);
       setMaster_(row, 'ID Permohonan', id);
       setMaster_(row, 'Tipe Kegiatan', clean.activityType);
       setMaster_(row, 'Jenis Surat', clean.documents.map(function(doc) { return doc.type; }).join('\n'));
@@ -152,10 +190,10 @@
       setMaster_(row, 'Alamat Mitra', clean.partnerAddress);
       setMaster_(row, 'Email Mitra', clean.partnerEmail);
       setMaster_(row, 'Tanggal Surat Dibuat', clean.letterDate ? parseIsoDate_(clean.letterDate) : '');
-      setMaster_(row, 'Hari Kegiatan', formatDayRange_(clean.startDate, clean.endDate));
-      setMaster_(row, 'Tanggal Kegiatan', formatDateRange_(clean.startDate, clean.endDate));
-      setMaster_(row, 'Waktu Kegiatan', clean.activityTime);
-      setMaster_(row, 'Tempat Kegiatan', clean.activityPlace);
+      setMaster_(row, 'Hari Kegiatan', scheduleSummary.dayDisplay);
+      setMaster_(row, 'Tanggal Kegiatan', scheduleSummary.dateDisplay);
+      setMaster_(row, 'Waktu Kegiatan', scheduleSummary.timeDisplay);
+      setMaster_(row, 'Tempat Kegiatan', scheduleSummary.placeDisplay);
       setMaster_(row, 'Nama Penandatangan', clean.signerName);
       setMaster_(row, 'NIK Penandatangan', clean.signerId);
       setMaster_(row, 'Jabatan Penandatangan', clean.signerRole);
@@ -165,8 +203,8 @@
       setMaster_(row, 'Diubah Oleh', user.email);
       setMaster_(row, 'Diubah Pada', now);
       setMaster_(row, 'Client Token', clean.clientToken);
-      setMaster_(row, 'Tanggal Mulai ISO', clean.startDate);
-      setMaster_(row, 'Tanggal Selesai ISO', clean.endDate || clean.startDate);
+      setMaster_(row, 'Tanggal Mulai ISO', scheduleSummary.startDate);
+      setMaster_(row, 'Tanggal Selesai ISO', scheduleSummary.endDate);
       setMaster_(row, 'Revision', revision);
 
       if (isNew) {
@@ -183,6 +221,7 @@
       }
 
       const documents = replaceDocumentsForRequest_(id, clean.documents, revision);
+      replaceSchedulesForRequest_(id, clean.schedules);
       replaceEmployeesForRequest_(id, clean.employees);
       applyEmployeeAndRoutingColumns_(row, clean.employees, clean);
       sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
@@ -202,7 +241,8 @@
         revision: revision,
         row: rowNumber,
         request: masterRowToDto_(row),
-        documents: documents
+        documents: documents,
+        schedules: clean.schedules
       });
     });
   }
@@ -220,6 +260,13 @@
       const currentRevision = Number(row[masterColumn_('Revision') - 1] || 0);
       if (Number(revision) !== currentRevision) {
         throw new Error('Revision tidak cocok. Muat ulang data.');
+      }
+      if (text_(masterValue_(row, 'Status Permohonan')) !== 'READY') {
+        throw new Error('Hanya permohonan berstatus Siap Diproses yang dapat ditandai selesai.');
+      }
+      const progress = summarizeDocumentWorkflow_(getDocumentsByRequest_(id), 'READY');
+      if (!progress.total || progress.status !== 'DRAFTED') {
+        throw new Error('Seluruh dokumen harus berhasil dibuat dan seluruh draft email harus tersedia sebelum permohonan ditandai selesai.');
       }
 
       setMaster_(row, 'Status Permohonan', 'ARCHIVED');
@@ -320,8 +367,13 @@
       .filter(function(item) {
         return item.id && item.status !== 'ARCHIVED';
       });
+    const processableRequestIds = requests.reduce(function(result, item) {
+      if (item.status === 'READY') result[item.id] = true;
+      return result;
+    }, {});
     const documents = readDataRows_(getSheet_('DOCUMENTS'), DOCUMENT_HEADERS.length)
-      .map(documentRowToDto_);
+      .map(documentRowToDto_)
+      .filter(function(item) { return processableRequestIds[item.requestId]; });
     const now = new Date();
     const next30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
@@ -330,10 +382,16 @@
       drafts: requests.filter(function(item) { return item.status === 'DRAFT'; }).length,
       ready: requests.filter(function(item) { return item.status === 'READY'; }).length,
       documentsPending: documents.filter(function(item) {
-        return item.status === 'PENDING' || item.status === 'ERROR';
+        return item.status === 'PENDING';
+      }).length,
+      documentsFailed: documents.filter(function(item) {
+        return item.status === 'ERROR';
       }).length,
       emailsPending: documents.filter(function(item) {
         return item.status === 'GENERATED' && item.emailStatus !== 'DRAFTED';
+      }).length,
+      emailsDrafted: documents.filter(function(item) {
+        return item.emailStatus === 'DRAFTED';
       }).length,
       upcoming: requests.filter(function(item) {
         const startIso = normalizeIsoDateString_(item.startDate);
@@ -442,6 +500,46 @@
       });
   }
 
+  function getSchedulesByRequest_(requestId, masterRow) {
+    const sheet = getSheet_('SCHEDULES', false);
+    const rows = sheet
+      ? readDataRows_(sheet, SCHEDULE_HEADERS.length)
+        .filter(function(row) { return text_(row[1]) === requestId; })
+      : [];
+    const schedules = rows.map(scheduleRowToDto_).sort(function(a, b) {
+      return Number(a.sequence || 0) - Number(b.sequence || 0);
+    });
+    if (schedules.length) return schedules;
+
+    const row = masterRow || [];
+    const startDate = normalizeIsoDateString_(masterValue_(row, 'Tanggal Mulai ISO'));
+    if (!startDate) return [];
+    const legacyTime = parseTimeRange_(masterValue_(row, 'Waktu Kegiatan'));
+    return [{
+      id: '',
+      requestId: requestId,
+      startDate: startDate,
+      endDate: normalizeIsoDateString_(masterValue_(row, 'Tanggal Selesai ISO')) || startDate,
+      startTime: legacyTime.startTime,
+      endTime: legacyTime.endTime,
+      place: text_(masterValue_(row, 'Tempat Kegiatan')),
+      sequence: 1
+    }];
+  }
+
+  function scheduleRowToDto_(row) {
+    return {
+      id: row[0],
+      requestId: row[1],
+      startDate: normalizeIsoDateString_(row[2]),
+      endDate: normalizeIsoDateString_(row[3]) || normalizeIsoDateString_(row[2]),
+      startTime: text_(row[4]),
+      endTime: text_(row[5]),
+      place: text_(row[6]),
+      sequence: Number(row[7] || 0)
+    };
+  }
+
   function replaceDocumentsForRequest_(requestId, documents, revision) {
     const sheet = getSheet_('DOCUMENTS');
     const allRows = readDataRows_(sheet, DOCUMENT_HEADERS.length);
@@ -509,16 +607,29 @@
     rewriteDataRows_(sheet, untouched.concat(additions), EMPLOYEE_HEADERS.length);
   }
 
+  function replaceSchedulesForRequest_(requestId, schedules) {
+    const sheet = getSheet_('SCHEDULES');
+    const untouched = readDataRows_(sheet, SCHEDULE_HEADERS.length)
+      .filter(function(row) { return text_(row[1]) !== requestId; });
+    const additions = schedules.map(function(schedule, index) {
+      return [
+        schedule.id || 'SCH-' + Utilities.getUuid().slice(0, 12).toUpperCase(),
+        requestId,
+        schedule.startDate ? parseIsoDate_(schedule.startDate) : '',
+        schedule.startDate ? parseIsoDate_(schedule.endDate || schedule.startDate) : '',
+        schedule.startTime,
+        schedule.endTime,
+        schedule.place,
+        index + 1
+      ];
+    });
+    rewriteDataRows_(sheet, untouched.concat(additions), SCHEDULE_HEADERS.length);
+  }
+
   function clearGeneratedStateColumns_(row) {
     setMaster_(row, 'Edit Surat', '');
     setMaster_(row, 'Download PDF Surat', '');
     setMaster_(row, 'Email Status', '');
-    Object.keys(APP_CONFIG.DOCUMENT_COLUMNS).forEach(function(key) {
-      const columns = APP_CONFIG.DOCUMENT_COLUMNS[key];
-      for (let i = 0; i < columns.length; i++) {
-        row[columns[i] - 1] = '';
-      }
-    });
   }
 
   function markGeneratedFilesSuperseded_(requestId) {
@@ -563,6 +674,36 @@
     }).filter(function(employee) {
       return employee.name || employee.identifier || employee.email;
     });
+    let schedules = (payload.schedules || []).map(function(schedule, index) {
+      return {
+        id: text_(schedule.id),
+        startDate: text_(schedule.startDate),
+        endDate: text_(schedule.endDate) || text_(schedule.startDate),
+        startTime: text_(schedule.startTime, 20),
+        endTime: text_(schedule.endTime, 20),
+        place: text_(schedule.place, 500),
+        sequence: index + 1
+      };
+    }).filter(function(schedule) {
+      return schedule.startDate || schedule.startTime || schedule.endTime || schedule.place;
+    });
+    if (!schedules.length && text_(payload.startDate)) {
+      schedules = [{
+        id: '',
+        startDate: text_(payload.startDate),
+        endDate: text_(payload.endDate) || text_(payload.startDate),
+        startTime: '',
+        endTime: '',
+        place: text_(payload.activityPlace, 500),
+        sequence: 1
+      }];
+    }
+    const scheduleSummary = schedules.length ? buildScheduleSummary_(schedules) : {
+      startDate: '',
+      endDate: '',
+      timeDisplay: text_(payload.activityTime, 100),
+      placeDisplay: text_(payload.activityPlace, 500)
+    };
 
     return {
       id: text_(payload.id),
@@ -584,42 +725,63 @@
       partnerAddress: text_(payload.partnerAddress, 1000),
       partnerEmail: emailList_(payload.partnerEmail).join(', '),
       letterDate: text_(payload.letterDate),
-      startDate: text_(payload.startDate),
-      endDate: text_(payload.endDate) || text_(payload.startDate),
-      activityTime: text_(payload.activityTime, 100),
-      activityPlace: text_(payload.activityPlace, 500),
+      startDate: scheduleSummary.startDate,
+      endDate: scheduleSummary.endDate,
+      activityTime: scheduleSummary.timeDisplay,
+      activityPlace: scheduleSummary.placeDisplay,
       signerName: text_(payload.signerName, 250),
       signerId: text_(payload.signerId, 100),
       signerRole: text_(payload.signerRole, 250),
       honor: text_(payload.honor) === 'Ya' ? 'Ya' : 'Tidak',
       travel: text_(payload.travel) === 'Ya' ? 'Ya' : 'Tidak',
       documents: documents,
-      employees: employees
+      employees: employees,
+      schedules: schedules
     };
   }
 
   function validateRequestPayload_(payload) {
     const errors = [];
     const isReady = payload.status === 'READY';
+    const schedules = payload.schedules || (payload.startDate ? [{
+      startDate: payload.startDate,
+      endDate: payload.endDate || payload.startDate,
+      startTime: '',
+      endTime: '',
+      place: payload.activityPlace || ''
+    }] : []);
+    const documents = payload.documents || [];
+    const employees = payload.employees || [];
     if (APP_CONFIG.ACTIVITY_TYPES.indexOf(payload.activityType) === -1) {
       errors.push('Tipe kegiatan tidak valid.');
     }
     if (isReady && !payload.activityName) errors.push('Nama kegiatan wajib diisi.');
     if (isReady && !payload.partnerName) errors.push('Nama mitra wajib diisi.');
-    if (isReady && !payload.startDate) errors.push('Tanggal mulai wajib diisi.');
-    if (isReady && !payload.activityPlace) errors.push('Tempat kegiatan wajib diisi.');
-    if (isReady && !payload.documents.length) errors.push('Pilih minimal satu dokumen.');
+    if (isReady && !schedules.length) errors.push('Minimal satu sesi jadwal wajib diisi.');
+    if (isReady && !documents.length) errors.push('Pilih minimal satu dokumen.');
 
-    if (payload.startDate) {
-      parseIsoDate_(payload.startDate);
-      parseIsoDate_(payload.endDate || payload.startDate);
-      formatDateRange_(payload.startDate, payload.endDate);
-    }
+    schedules.forEach(function(schedule, index) {
+      if (!schedule.startDate) {
+        if (isReady) errors.push('Tanggal sesi ke-' + (index + 1) + ' wajib diisi.');
+        return;
+      }
+      const start = parseIsoDate_(schedule.startDate);
+      const end = parseIsoDate_(schedule.endDate || schedule.startDate);
+      if (end.getTime() < start.getTime()) {
+        errors.push('Tanggal selesai sesi ke-' + (index + 1) + ' tidak boleh sebelum tanggal mulai.');
+      }
+      if (schedule.startTime && schedule.endTime && schedule.endTime < schedule.startTime) {
+        errors.push('Waktu selesai sesi ke-' + (index + 1) + ' tidak boleh sebelum waktu mulai.');
+      }
+      if (isReady && !schedule.place) {
+        errors.push('Tempat sesi ke-' + (index + 1) + ' wajib diisi.');
+      }
+    });
     if (payload.incomingDate) parseIsoDate_(payload.incomingDate);
     if (payload.letterDate) parseIsoDate_(payload.letterDate);
 
     const allowed = allowedDocumentsFor_(payload.activityType, payload.speakerSubtype);
-    payload.documents.forEach(function(document) {
+    documents.forEach(function(document) {
       if (allowed.indexOf(document.type) === -1) {
         errors.push('Jenis dokumen tidak sesuai kegiatan: ' + document.type);
       }
@@ -628,14 +790,14 @@
       }
     });
 
-    const needsPeople = payload.documents.some(function(document) {
+    const needsPeople = documents.some(function(document) {
       return document.type === 'Surat Tugas';
     }) || (
-      payload.documents.some(function(document) {
+      documents.some(function(document) {
         return document.type === 'Surat Permohonan Narasumber kepada Dekan';
       }) && payload.speakerStatus === 'Tidak Dicarikan'
     );
-    if (isReady && needsPeople && !payload.employees.length) {
+    if (isReady && needsPeople && !employees.length) {
       errors.push('Minimal satu pegawai/narasumber wajib diisi.');
     }
 
@@ -643,19 +805,19 @@
       if (APP_CONFIG.SPEAKER_SUBTYPES.indexOf(payload.speakerSubtype) === -1) {
         errors.push('Sub-tipe narasumber wajib diisi.');
       }
-      const hasRequestLetter = payload.documents.some(function(document) {
+      const hasRequestLetter = documents.some(function(document) {
         return document.type === 'Surat Permohonan Narasumber kepada Dekan';
       });
       if (hasRequestLetter) {
         if (APP_CONFIG.SPEAKER_STATUSES.indexOf(payload.speakerStatus) === -1) {
           errors.push('Status pencarian narasumber wajib diisi.');
         }
-        if (!payload.faculties.length) errors.push('Fakultas tujuan wajib dipilih.');
+        if (!(payload.faculties || []).length) errors.push('Fakultas tujuan wajib dipilih.');
       }
     }
 
     if (isReady && payload.travel === 'Ya') {
-      payload.employees.forEach(function(employee, index) {
+      employees.forEach(function(employee, index) {
         if (!employee.rank || !employee.category) {
           errors.push('Pangkat dan kategori perjadin wajib untuk orang ke-' + (index + 1) + '.');
         }

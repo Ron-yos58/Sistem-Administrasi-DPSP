@@ -9,6 +9,7 @@ const APP_CONFIG = Object.freeze({
   SHEETS: {
     MASTER: { name: 'Master Permohonan', aliases: [] },
     DOCUMENTS: { name: 'Dokumen Permohonan', aliases: [] },
+    SCHEDULES: { name: 'Jadwal Kegiatan', aliases: [] },
     EMPLOYEES: { name: 'Data Pegawai', aliases: ['Database Pegawai'] },
     TRAVEL: { name: 'Data Perjadin', aliases: [] },
     CC: { name: 'Master CC', aliases: [] },
@@ -52,7 +53,7 @@ const APP_CONFIG = Object.freeze({
     SPEAKER_REQUEST_SEARCH: '1ZhLP76Ysse6IKMlO_mN-61IwMZc0iWcQqk6OMyFdSK8',
     SPEAKER_REQUEST_KNOWN: '1K5aik94SZW20X0TPLqIXZEmJ0p-r5ZoxJy9FO4Ywd24'
   },
-  DOCUMENT_COLUMNS: {
+  LEGACY_DOCUMENT_COLUMNS: {
     EDU_FAIR_TASK: [39, 40, 41, 42],
     SPEAKER_WORKSHOP_TASK: [43, 44, 45, 46],
     SPEAKER_PROMOTION_TASK: [47, 48, 49, 50],
@@ -64,6 +65,45 @@ const APP_CONFIG = Object.freeze({
     SPEAKER_REQUEST_KNOWN: [71, 72, 73, 74]
   }
 });
+
+const AUTOCRAT_HEADERS = Object.freeze([
+  'Merged Doc ID - Penugasan Edu Fair',
+  'Merged Doc URL - Penugasan Edu Fair',
+  'Link to merged Doc - Penugasan Edu Fair',
+  'Document Merge Status - Penugasan Edu Fair',
+  'Merged Doc ID - Penugasan Narasumber',
+  'Merged Doc URL - Penugasan Narasumber',
+  'Link to merged Doc - Penugasan Narasumber',
+  'Document Merge Status - Penugasan Narasumber',
+  'Merged Doc ID - Penugasan Narasumber (Promosi)',
+  'Merged Doc URL - Penugasan Narasumber (Promosi)',
+  'Link to merged Doc - Penugasan Narasumber (Promosi)',
+  'Document Merge Status - Penugasan Narasumber (Promosi)',
+  'Merged Doc ID - Penugasan Campus Visit',
+  'Merged Doc URL - Penugasan Campus Visit',
+  'Link to merged Doc - Penugasan Campus Visit',
+  'Document Merge Status - Penugasan Campus Visit',
+  'Merged Doc ID - Surat izin pimpinan - Campus Visit',
+  'Merged Doc URL - Surat izin pimpinan - Campus Visit',
+  'Link to merged Doc - Surat izin pimpinan - Campus Visit',
+  'Document Merge Status - Surat izin pimpinan - Campus Visit',
+  'Merged Doc ID - Surat Rekomendasi Campus Visit - SU',
+  'Merged Doc URL - Surat Rekomendasi Campus Visit - SU',
+  'Link to merged Doc - Surat Rekomendasi Campus Visit - SU',
+  'Document Merge Status - Surat Rekomendasi Campus Visit - SU',
+  'Merged Doc ID - Surat Balasan Campus Visit',
+  'Merged Doc URL - Surat Balasan Campus Visit',
+  'Link to merged Doc - Surat Balasan Campus Visit',
+  'Document Merge Status - Surat Balasan Campus Visit',
+  'Merged Doc ID - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
+  'Merged Doc URL - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
+  'Link to merged Doc - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
+  'Document Merge Status - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
+  'Merged Doc ID - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
+  'Merged Doc URL - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
+  'Link to merged Doc - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
+  'Document Merge Status - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)'
+]);
 
 const MASTER_HEADERS = Object.freeze([
   'ID Permohonan',
@@ -104,42 +144,6 @@ const MASTER_HEADERS = Object.freeze([
   'Keterangan Email',
   'Edit Surat',
   'Download PDF Surat',
-  'Merged Doc ID - Penugasan Edu Fair',
-  'Merged Doc URL - Penugasan Edu Fair',
-  'Link to merged Doc - Penugasan Edu Fair',
-  'Document Merge Status - Penugasan Edu Fair',
-  'Merged Doc ID - Penugasan Narasumber',
-  'Merged Doc URL - Penugasan Narasumber',
-  'Link to merged Doc - Penugasan Narasumber',
-  'Document Merge Status - Penugasan Narasumber',
-  'Merged Doc ID - Penugasan Narasumber (Promosi)',
-  'Merged Doc URL - Penugasan Narasumber (Promosi)',
-  'Link to merged Doc - Penugasan Narasumber (Promosi)',
-  'Document Merge Status - Penugasan Narasumber (Promosi)',
-  'Merged Doc ID - Penugasan Campus Visit',
-  'Merged Doc URL - Penugasan Campus Visit',
-  'Link to merged Doc - Penugasan Campus Visit',
-  'Document Merge Status - Penugasan Campus Visit',
-  'Merged Doc ID - Surat izin pimpinan - Campus Visit',
-  'Merged Doc URL - Surat izin pimpinan - Campus Visit',
-  'Link to merged Doc - Surat izin pimpinan - Campus Visit',
-  'Document Merge Status - Surat izin pimpinan - Campus Visit',
-  'Merged Doc ID - Surat Rekomendasi Campus Visit - SU',
-  'Merged Doc URL - Surat Rekomendasi Campus Visit - SU',
-  'Link to merged Doc - Surat Rekomendasi Campus Visit - SU',
-  'Document Merge Status - Surat Rekomendasi Campus Visit - SU',
-  'Merged Doc ID - Surat Balasan Campus Visit',
-  'Merged Doc URL - Surat Balasan Campus Visit',
-  'Link to merged Doc - Surat Balasan Campus Visit',
-  'Document Merge Status - Surat Balasan Campus Visit',
-  'Merged Doc ID - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
-  'Merged Doc URL - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
-  'Link to merged Doc - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
-  'Document Merge Status - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
-  'Merged Doc ID - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
-  'Merged Doc URL - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
-  'Link to merged Doc - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
-  'Document Merge Status - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
   'Email Status',
   'Status Permohonan',
   'Dibuat Oleh',
@@ -152,6 +156,12 @@ const MASTER_HEADERS = Object.freeze([
   'Revision'
 ]);
 
+const LEGACY_MASTER_HEADERS = Object.freeze(
+  MASTER_HEADERS.slice(0, 38)
+    .concat(AUTOCRAT_HEADERS)
+    .concat(MASTER_HEADERS.slice(38))
+);
+
 const EMPLOYEE_HEADERS = Object.freeze([
   'ID Permohonan',
   'Nama Pegawai / Mahasiswa',
@@ -162,6 +172,17 @@ const EMPLOYEE_HEADERS = Object.freeze([
   'Dosen/Pangkat Penunjang',
   'Kategori Penerima Tugas',
   'Participant Key'
+]);
+
+const SCHEDULE_HEADERS = Object.freeze([
+  'Schedule ID',
+  'ID Permohonan',
+  'Tanggal Mulai',
+  'Tanggal Selesai',
+  'Waktu Mulai',
+  'Waktu Selesai',
+  'Tempat',
+  'Urutan'
 ]);
 
 const DOCUMENT_HEADERS = Object.freeze([

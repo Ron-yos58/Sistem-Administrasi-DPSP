@@ -71,7 +71,13 @@ for (const name of includeNames) {
   }
 }
 
-const htmlIds = new Set(Array.from(indexHtml.matchAll(/\bid="([^"]+)"/g), match => match[1]));
+const htmlIdList = Array.from(indexHtml.matchAll(/\bid="([^"]+)"/g), match => match[1]);
+const htmlIds = new Set(htmlIdList);
+const duplicateHtmlIds = htmlIdList.filter((id, index) => htmlIdList.indexOf(id) !== index);
+for (const id of new Set(duplicateHtmlIds)) {
+  failed = true;
+  console.error(`FAIL duplicate HTML id: ${id}`);
+}
 const referencedIds = new Set(Array.from(scriptsHtml.matchAll(/getElementById\(['"]([^'"]+)['"]\)/g), match => match[1]));
 for (const id of referencedIds) {
   if (!htmlIds.has(id)) {
@@ -86,6 +92,45 @@ for (const method of serverMethods) {
     failed = true;
     console.error(`FAIL missing server function called by frontend: ${method}`);
   }
+}
+
+const appMethodNames = Array.from(
+  scriptsHtml.matchAll(/^\s{4}([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/gm),
+  match => match[1]
+);
+const duplicateAppMethods = appMethodNames.filter((name, index) => appMethodNames.indexOf(name) !== index);
+for (const name of new Set(duplicateAppMethods)) {
+  failed = true;
+  console.error(`FAIL duplicate App method: ${name}`);
+}
+
+if (scriptsHtml.includes('lifecycleBadge(')) {
+  failed = true;
+  console.error('FAIL redundant lifecycleBadge renderer must not return');
+}
+if ((scriptsHtml.match(/data-action="process-all"/g) || []).length > 1) {
+  failed = true;
+  console.error('FAIL duplicate process-all action');
+}
+if (scriptsHtml.includes('<h3>Sesi kegiatan</h3>')) {
+  failed = true;
+  console.error('FAIL duplicate standalone Sesi kegiatan block');
+}
+
+const topbarSource = indexHtml.match(/<header class="topbar">[\s\S]*?<\/header>/);
+if (topbarSource && /data-view-target="form"/.test(topbarSource[0])) {
+  failed = true;
+  console.error('FAIL redundant create-request action in topbar');
+}
+
+const saveMethodStart = scriptsHtml.indexOf('async saveRequest(event)');
+const resetMethodStart = scriptsHtml.indexOf('\n    resetForm() {', saveMethodStart);
+const saveMethodSource = saveMethodStart !== -1 && resetMethodStart !== -1
+  ? scriptsHtml.slice(saveMethodStart, resetMethodStart)
+  : '';
+if (saveMethodSource.includes('openRequestDetail(')) {
+  failed = true;
+  console.error('FAIL saveRequest must not open Detail automatically');
 }
 
 const requiredFiles = [
