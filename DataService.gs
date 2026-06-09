@@ -76,16 +76,33 @@
     if (!rowNumber) throw new Error('Permohonan tidak ditemukan: ' + id);
 
     const row = master.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
-    const documents = getDocumentsByRequest_(id);
+    const request = masterRowToDto_(row);
+    const employees = getEmployeesByRequest_(id);
+    const documents = getDocumentsByRequest_(id).map(function(doc) {
+      const routingRequest = {
+        documents: [doc],
+        partnerEmail: request.partnerEmail,
+        partnerName: request.partnerName,
+        faculties: request.faculties,
+        speakerStatus: request.speakerStatus,
+        manualTo: Array.isArray(request.manualTo) ? request.manualTo : [],
+        manualCc: Array.isArray(request.manualCc) ? request.manualCc : []
+      };
+      doc.routing = computeEmailRouting_(routingRequest, employees, doc.type);
+      const templateConfig = getTemplateConfigByKey_(doc.templateKey);
+      doc.letterCode = templateConfig ? templateConfig.code : 'I';
+      doc.letterType = templateConfig ? templateConfig.name : doc.type;
+      return doc;
+    });
     const financeArtifacts = getFinanceArtifactUrls_(id);
     return serializeValue_({
       request: Object.assign(
-        enrichRequestWithDocuments_(masterRowToDto_(row), null, documents),
+        enrichRequestWithDocuments_(request, null, documents),
         financeArtifacts
       ),
       documents: documents,
       schedules: getSchedulesByRequest_(id, row),
-      employees: getEmployeesByRequest_(id),
+      employees: employees,
       generatedFiles: getGeneratedFilesByRequest_(id),
       financeArtifacts: financeArtifacts,
       financeReadiness: getFinanceReadiness_(id),
@@ -236,12 +253,7 @@
         if (generationChanged) markGeneratedFilesSuperseded_(id);
       }
 
-      const documents = replaceDocumentsForRequest_(
-        id,
-        clean.documents,
-        revision,
-        !generationChanged
-      );
+      const documents = getDocumentsByRequest_(id);
       replaceSchedulesForRequest_(id, clean.schedules);
       replaceEmployeesForRequest_(id, clean.employees);
       applyEmployeeAndRoutingColumns_(row, clean.employees, clean);
@@ -557,7 +569,10 @@
       emailStatus: row[13],
       revision: Number(row[14] || 0),
       createdAt: serializeValue_(row[15]),
-      updatedAt: serializeValue_(row[16])
+      updatedAt: serializeValue_(row[16]),
+      emailTo: row[17] || '',
+      emailCc: row[18] || '',
+      emailBcc: row[19] || ''
     };
   }
 
@@ -886,7 +901,6 @@
     if (isReady && !payload.activityName) errors.push('Nama kegiatan wajib diisi.');
     if (isReady && !payload.partnerName) errors.push('Nama mitra wajib diisi.');
     if (isReady && !schedules.length) errors.push('Minimal satu sesi jadwal wajib diisi.');
-    if (isReady && !documents.length) errors.push('Pilih minimal satu dokumen.');
 
     schedules.forEach(function(schedule, index) {
       if (!schedule.startDate) {
@@ -1026,10 +1040,13 @@
     const toRoles = [];
     const cc = [];
     const ccRoles = [];
+    const bcc = [];
     const notes = [];
     const types = documentType
       ? [documentType]
       : request.documents.map(function(document) { return document.type; });
+
+    const configs = getTemplateConfigsInternal_();
 
     function addByRole(targetEmails, targetRoles, role, unit) {
       const match = references.find(function(item) {
@@ -1050,7 +1067,6 @@
       });
     }
 
-    // Helper: add manual email from Master CC reference list
     function addManualEmail(targetEmails, targetRoles, email) {
       if (!email || targetEmails.indexOf(email) !== -1) return;
       const normalizedEmail = emailList_(email)[0];
@@ -1065,44 +1081,93 @@
       targetRoles.push(ref.role || ref.unit || normalizedEmail);
     }
 
+    function resolveConfiguredRecipients(configuredText, targetEmails, targetRoles) {
+      if (!configuredText) return;
+      const parts = configuredText.split(/[,;\n]+/).map(function(p) { return p.trim(); }).filter(Boolean);
+      parts.forEach(function(part) {
+        if (part.indexOf('@') !== -1) {
+          targetEmails.push(part.toLowerCase());
+          targetRoles.push(part);
+        } else {
+          let role = part;
+          let unit = '';
+          if (part.indexOf('|') !== -1) {
+            const split = part.split('|');
+            role = split[0].trim();
+            unit = split[1].trim();
+          }
+          addByRole(targetEmails, targetRoles, role, unit);
+        }
+      });
+    }
+
     types.forEach(function(type) {
-      if (type === 'Surat Balasan Campus Visit') {
+      let templateKey = null;
+      try {
+        templateKey = resolveTemplateKey_({
+          type: type,
+          activityType: request.activityType,
+          speakerSubtype: request.speakerSubtype,
+          speakerStatus: request.speakerStatus
+        });
+      } catch (e) {}
+
+      const cfg = configs.find(function(c) {
+        return (templateKey && c.key === templateKey && c.active) || (c.type === type && c.active);
+      });
+
+      if (cfg) {
+        resolveConfiguredRecipients(cfg.defaultTo, to, toRoles);
+        resolveConfiguredRecipients(cfg.defaultCc, cc, ccRoles);
+        resolveConfiguredRecipients(cfg.defaultBcc, bcc, []);
+      } else {
+        // Fallback rules
+        if (type === 'Surat Balasan Campus Visit') {
+          emailList_(request.partnerEmail).forEach(function(email) { to.push(email); });
+          toRoles.push(request.partnerName);
+          addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
+        } else if (type === 'Surat Rekomendasi Campus Visit - SU') {
+          addByRole(to, toRoles, 'Sekretaris Universitas', 'Rektorat');
+          addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
+        } else if (type === 'Surat izin pimpinan - Campus Visit') {
+          [
+            ['Sekretaris Universitas', 'Rektorat'],
+            ['Dekan Fakultas Ekonomi', 'Fakultas Ekonomi'],
+            ['Dekan Fakultas Hukum', 'Fakultas Hukum'],
+            ['Dekan Fakultas Ilmu Sosial dan Ilmu Politik', 'Fakultas Ilmu Sosial dan Ilmu Politik'],
+            ['Dekan Fakultas Teknik', 'Fakultas Teknik'],
+            ['Dekan Fakultas Teknologi Rekayasa', 'Fakultas Teknologi Rekayasa'],
+            ['Dekan Fakultas Sains', 'Fakultas Sains'],
+            ['Dekan Fakultas Vokasi', 'Fakultas Vokasi'],
+            ['Direktur Kemahasiswaan', 'Direktorat Kemahasiswaan'],
+            ['Direktur Manajemen Aset, Keuangan, dan Sarana Prasarana', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
+            ['Kepala Perpustakaan', 'Unit Perpustakaan']
+          ].forEach(function(pair) { addByRole(to, toRoles, pair[0], pair[1]); });
+
+          [
+            ['Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat'],
+            ['Manajer Aset dan Sarana Prasarana', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
+            ['Manajer Kemahasiswaan', 'Direktorat Kemahasiswaan'],
+            ['Koordinator Kebersihan, Keamanan dan Ketertiban', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
+            ['Koordinator Kelas dan Fasilitas Pendukung', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
+            ['Koordinator Pemeliharaan Kelas', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
+            ['Koordinator Administrasi Fakultas Ekonomi', 'Fakultas Ekonomi'],
+            ['Koordinator Administrasi Fakultas Hukum', 'Fakultas Hukum'],
+            ['Koordinator Administrasi Fakultas Ilmu Sosial dan Ilmu Politik', 'Fakultas Ilmu Sosial dan Ilmu Politik'],
+            ['Koordinator Administrasi Fakultas Sains', 'Fakultas Sains'],
+            ['Koordinator Administrasi Fakultas Teknik', 'Fakultas Teknik'],
+            ['Koordinator Administrasi Fakultas Teknologi Rekayasa', 'Fakultas Teknologi Rekayasa'],
+            ['Koordinator Administrasi Fakultas Vokasi', 'Fakultas Vokasi']
+          ].forEach(function(pair) { addByRole(cc, ccRoles, pair[0], pair[1]); });
+        }
+      }
+
+      if (type === 'Surat Balasan Campus Visit' && to.length === 0) {
         emailList_(request.partnerEmail).forEach(function(email) { to.push(email); });
         toRoles.push(request.partnerName);
-        addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
-      } else if (type === 'Surat Rekomendasi Campus Visit - SU') {
-        addByRole(to, toRoles, 'Sekretaris Universitas', 'Rektorat');
-        addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
-      } else if (type === 'Surat izin pimpinan - Campus Visit') {
-        [
-          ['Sekretaris Universitas', 'Rektorat'],
-          ['Dekan Fakultas Ekonomi', 'Fakultas Ekonomi'],
-          ['Dekan Fakultas Hukum', 'Fakultas Hukum'],
-          ['Dekan Fakultas Ilmu Sosial dan Ilmu Politik', 'Fakultas Ilmu Sosial dan Ilmu Politik'],
-          ['Dekan Fakultas Teknik', 'Fakultas Teknik'],
-          ['Dekan Fakultas Teknologi Rekayasa', 'Fakultas Teknologi Rekayasa'],
-          ['Dekan Fakultas Sains', 'Fakultas Sains'],
-          ['Dekan Fakultas Vokasi', 'Fakultas Vokasi'],
-          ['Direktur Kemahasiswaan', 'Direktorat Kemahasiswaan'],
-          ['Direktur Manajemen Aset, Keuangan, dan Sarana Prasarana', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-          ['Kepala Perpustakaan', 'Unit Perpustakaan']
-        ].forEach(function(pair) { addByRole(to, toRoles, pair[0], pair[1]); });
+      }
 
-        [
-          ['Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat'],
-          ['Manajer Aset dan Sarana Prasarana', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-          ['Manajer Kemahasiswaan', 'Direktorat Kemahasiswaan'],
-          ['Koordinator Kebersihan, Keamanan dan Ketertiban', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-          ['Koordinator Kelas dan Fasilitas Pendukung', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-          ['Koordinator Administrasi Fakultas Ekonomi', 'Fakultas Ekonomi'],
-          ['Koordinator Administrasi Fakultas Hukum', 'Fakultas Hukum'],
-          ['Koordinator Administrasi Fakultas Ilmu Sosial dan Ilmu Politik', 'Fakultas Ilmu Sosial dan Ilmu Politik'],
-          ['Koordinator Administrasi Fakultas Sains', 'Fakultas Sains'],
-          ['Koordinator Administrasi Fakultas Teknik', 'Fakultas Teknik'],
-          ['Koordinator Administrasi Fakultas Teknologi Rekayasa', 'Fakultas Teknologi Rekayasa'],
-          ['Koordinator Administrasi Fakultas Vokasi', 'Fakultas Vokasi']
-        ].forEach(function(pair) { addByRole(cc, ccRoles, pair[0], pair[1]); });
-      } else if (type === 'Surat Permohonan Narasumber kepada Dekan') {
+      if (type === 'Surat Permohonan Narasumber kepada Dekan') {
         request.faculties.forEach(function(faculty) {
           addByRole(to, toRoles, 'Dekan ' + faculty, faculty);
           addByRole(cc, ccRoles, 'Koordinator Administrasi ' + faculty, faculty);
@@ -1113,12 +1178,10 @@
       }
     });
 
-    // Apply manual To overrides (supplement auto-routing from Master CC selection)
     (request.manualTo || []).forEach(function(email) {
       addManualEmail(to, toRoles, email);
     });
 
-    // Apply manual CC overrides (supplement auto-routing from Master CC selection)
     (request.manualCc || []).forEach(function(email) {
       addManualEmail(cc, ccRoles, email);
     });
@@ -1140,6 +1203,7 @@
       ccRoles: uniqueTextList_(ccRoles).filter(function(role) {
         return overlappingCcRoles.indexOf(role) === -1;
       }),
+      bcc: uniqueTextList_(bcc),
       notes: uniqueTextList_(notes)
     };
   }

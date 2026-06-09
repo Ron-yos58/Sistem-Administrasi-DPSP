@@ -179,10 +179,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         document.getElementById('refreshButton').addEventListener('click', function () { return _this.refreshAll(); });
         document.getElementById('activityType').addEventListener('change', function () { return _this.updateFormVisibility(); });
         document.getElementById('speakerSubtype').addEventListener('change', function () { return _this.updateFormVisibility(); });
-        document.getElementById('documentChoices').addEventListener('change', function () {
-            _this.updateFormVisibility(false);
-            _this.updateReview();
-        });
         document.getElementById('speakerStatusChoices').addEventListener('change', function () {
             _this.updateEmployeeRequirements_();
             _this.updateReview();
@@ -245,8 +241,17 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 _this.openRequestDetail(button.dataset.requestId);
         });
         document.getElementById('closeDrawer').addEventListener('click', function () { return _this.closeDrawer(); });
-        document.getElementById('drawerBackdrop').addEventListener('click', function () { return _this.closeDrawer(); });
+        document.getElementById('closeLetterDrawer').addEventListener('click', function () { return _this.closeLetterDrawer(); });
+        document.getElementById('drawerBackdrop').addEventListener('click', function () { 
+            _this.closeDrawer(); 
+            _this.closeLetterDrawer();
+        });
         document.getElementById('drawerBody').addEventListener('click', function (event) { return _this.handleDetailAction(event); });
+        document.getElementById('drawerBody').addEventListener('change', function (event) {
+            var select = event.target.closest('[data-detail-document-select]');
+            if (select)
+                _this.updateDetailEmailRouting_(select.value);
+        });
         document.querySelectorAll('[data-admin-action]').forEach(function (button) {
             button.addEventListener('click', function (event) { return _this.handleAdminAction(event.currentTarget); });
         });
@@ -281,7 +286,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
             options.faculties.map(function (item) { return "\n          <label><input type=\"checkbox\" name=\"faculty\" value=\"".concat(_this.escape(item), "\"> ").concat(_this.escape(item), "</label>\n        "); }).join('');
         this.renderSignerOptions(options.signers || []);
         this.setEmployeeCatalog_(options.employeeCatalog || []);
-        this.renderDocumentChoices([]);
     },
     renderSignerOptions: function (signers) {
         var _this = this;
@@ -488,31 +492,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         }
         return types.map(function (typeName) { return ({ type: typeName, description: descriptions[typeName] }); });
     },
-    renderDocumentChoices: function (selectedDocuments) {
-        var _this = this;
-        var selected = {};
-        (selectedDocuments || this.collectDocuments()).forEach(function (item) { return selected[item.type] = item; });
-        var allowed = this.allowedDocuments();
-        document.getElementById('documentChoices').innerHTML = allowed.map(function (item, index) {
-            var checked = selected[item.type] || (allowed.length === 1 && index === 0);
-            var number = selected[item.type] ? selected[item.type].number : '';
-            return "\n          <label class=\"choice-card\">\n            <input type=\"checkbox\" name=\"documentType\" value=\"".concat(_this.escape(item.type), "\" ").concat(checked ? 'checked' : '', ">\n            <strong>").concat(_this.escape(item.type), "</strong>\n            <small>").concat(_this.escape(item.description), "</small>\n            <span class=\"document-number\"><input type=\"text\" data-document-number=\"").concat(_this.escape(item.type), "\" value=\"").concat(_this.escape(number), "\" placeholder=\"Nomor surat\"></span>\n          </label>\n        ");
-        }).join('') || '<p class="helper-text">Pilih tipe kegiatan untuk menampilkan dokumen.</p>';
-    },
-    updateFormVisibility: function (rerenderDocuments) {
-        if (rerenderDocuments === void 0) { rerenderDocuments = true; }
+    updateFormVisibility: function () {
         var type = document.getElementById('activityType').value;
-        var subtype = document.getElementById('speakerSubtype').value;
-        var oldDocuments = this.collectDocuments();
         document.querySelectorAll('.speaker-only').forEach(function (item) { return item.classList.toggle('is-hidden', type !== 'Penugasan Narasumber'); });
-        if (rerenderDocuments)
-            this.renderDocumentChoices(oldDocuments);
-        var selectedTypes = this.collectDocuments().map(function (item) { return item.type; });
-        var hasSpeakerRequest = type === 'Penugasan Narasumber' &&
-            subtype !== 'Promosi' &&
-            selectedTypes.includes('Surat Permohonan Narasumber kepada Dekan');
+        var hasSpeakerRequest = type === 'Penugasan Narasumber';
         document.querySelectorAll('.speaker-request-only').forEach(function (item) { return item.classList.toggle('is-hidden', !hasSpeakerRequest); });
-        var needsIncoming = selectedTypes.some(function (item) { return item !== 'Surat Tugas'; });
+        var needsIncoming = type === 'Campus Visit' || type === 'Penugasan Narasumber';
         document.getElementById('incomingFields').classList.toggle('is-hidden', !needsIncoming);
         this.updateEmployeeRequirements_();
         this.updateReview();
@@ -642,12 +627,11 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         this.updateReview();
     },
     updateEmployeeRequirements_: function () {
-        var selectedTypes = this.collectDocuments().map(function (item) { return item.type; });
+        var type = document.getElementById('activityType').value;
         var speakerStatusInput = document.querySelector('input[name="speakerStatus"]:checked');
         var speakerStatus = speakerStatusInput ? speakerStatusInput.value : '';
-        var needsPeople = selectedTypes.includes('Surat Tugas') ||
-            (selectedTypes.includes('Surat Permohonan Narasumber kepada Dekan') &&
-                speakerStatus === 'Tidak Dicarikan');
+        // General check: if activity type is Edu Fair, Campus Visit, or Penugasan Narasumber, we need people
+        var needsPeople = type === 'Edu Fair' || type === 'Campus Visit' || type === 'Penugasan Narasumber';
         document.querySelectorAll('.employee-card').forEach(function (card) {
             var hasValue = Array.from(card.querySelectorAll('[data-employee-field]')).some(function (input) {
                 return input.dataset.employeeField !== 'participantKey' && input.value.trim();
@@ -667,20 +651,11 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 item.unit || item.rank || item.category;
         });
     },
-    collectDocuments: function () {
-        return Array.from(document.querySelectorAll('input[name="documentType"]:checked')).map(function (input) { return ({
-            type: input.value,
-            number: (function (numberInput) {
-                return numberInput ? numberInput.value.trim() : '';
-            })(document.querySelector("[data-document-number=\"".concat(CSS.escape(input.value), "\"]")))
-        }); });
-    },
     collectForm: function (status) {
         var checked = function (selector) { return Array.from(document.querySelectorAll(selector + ':checked')).map(function (input) { return input.value; }); };
-        var documents = this.collectDocuments();
-        var hasSpeakerRequest = document.getElementById('activityType').value === 'Penugasan Narasumber' &&
-            documents.some(function (document) { return document.type === 'Surat Permohonan Narasumber kepada Dekan'; });
-        var needsIncoming = documents.some(function (document) { return document.type !== 'Surat Tugas'; });
+        var hasSpeakerRequest = document.getElementById('activityType').value === 'Penugasan Narasumber';
+        // Documents are managed separately now; we don't collect checklists from form.
+        // We can pass empty or preserve existing documents. We pass empty on form creation, saveRequest doesn't overwrite documents.
         var schedules = this.collectSchedules();
         return {
             id: document.getElementById('requestId').value,
@@ -695,11 +670,11 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 ? (function (statusInput) { return statusInput ? statusInput.value : ''; })(document.querySelector('input[name="speakerStatus"]:checked'))
                 : '',
             faculties: hasSpeakerRequest ? checked('input[name="faculty"]') : [],
-            documents: documents,
-            incomingNumber: needsIncoming ? document.getElementById('incomingNumber').value : '',
-            incomingDate: needsIncoming ? document.getElementById('incomingDate').value : '',
-            incomingSender: needsIncoming ? document.getElementById('incomingSender').value : '',
-            incomingSubject: needsIncoming ? document.getElementById('incomingSubject').value : '',
+            documents: [], // Managed independently
+            incomingNumber: document.getElementById('incomingNumber') ? document.getElementById('incomingNumber').value : '',
+            incomingDate: document.getElementById('incomingDate') ? document.getElementById('incomingDate').value : '',
+            incomingSender: document.getElementById('incomingSender') ? document.getElementById('incomingSender').value : '',
+            incomingSubject: document.getElementById('incomingSubject') ? document.getElementById('incomingSubject').value : '',
             activityName: document.getElementById('activityName').value,
             partnerName: document.getElementById('partnerName').value,
             partnerAddress: document.getElementById('partnerAddress').value,
@@ -726,7 +701,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         var _this = this;
         var type = document.getElementById('activityType').value || 'Belum dipilih';
         var name = document.getElementById('activityName').value || 'Permohonan baru';
-        var documents = this.collectDocuments();
         var employees = this.collectEmployees();
         var schedules = this.collectSchedules();
         var manualTo = this.collectCheckedValues_('input[name="manualTo"]');
@@ -734,7 +708,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         document.getElementById('reviewTitle').textContent = name;
         document.getElementById('reviewContent').innerHTML = [
             ['Tipe kegiatan', type],
-            ['Dokumen', documents.map(function (item) { return item.type; }).join(', ') || 'Belum dipilih'],
             ['Jadwal', schedules.map(function (schedule) { return _this.scheduleLabel_(schedule); }).join('\n') || 'Belum diisi'],
             ['Petugas / narasumber', employees.length + ' orang'],
             ['Tambahan To', manualTo.join(', ') || 'Routing otomatis'],
@@ -798,7 +771,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         this.addEmployee();
         var today = this.localDateIso();
         document.getElementById('letterDate').value = today;
-        this.renderDocumentChoices([]);
         this.updateFormVisibility();
     },
     openRequestDetail: function (requestId) {
@@ -835,18 +807,331 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         document.getElementById('detailDrawer').setAttribute('aria-hidden', 'true');
         document.getElementById('drawerBackdrop').classList.add('is-hidden');
     },
+    closeLetterDrawer: function () {
+        document.getElementById('letterDrawer').classList.remove('is-open');
+        document.getElementById('letterDrawer').setAttribute('aria-hidden', 'true');
+        // If the main detail drawer is still open, keep the backdrop. Otherwise, hide backdrop.
+        if (!document.getElementById('detailDrawer').classList.contains('is-open')) {
+            document.getElementById('drawerBackdrop').classList.add('is-hidden');
+        }
+    },
     renderDetail: function (detail) {
         var _this = this;
         var request = detail.request;
         var detailDocuments = this.asArray(detail.documents);
         var progress = request.documentProgress || this.summarizeDocumentProgress_(detailDocuments, request.status);
         document.getElementById('drawerTitle').textContent = request.id;
-        var documents = detailDocuments.map(function (doc) { return "\n        <div class=\"document-item\">\n          <div class=\"document-item-head\">\n            <div><strong>".concat(_this.escape(doc.type), "</strong><small>").concat(_this.escape(doc.number || 'Nomor surat belum diisi'), "</small></div>\n            ").concat(_this.documentStatusBadge_(doc, request.status), "\n          </div>\n          <div class=\"document-links\">\n            ").concat(doc.docUrl ? "<a class=\"button button-secondary button-small\" href=\"".concat(_this.escape(_this.safeExternalUrl_(doc.docUrl)), "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka Google Doc</a>") : '', "\n            ").concat(doc.pdfId ? "<a class=\"button button-secondary button-small\" href=\"".concat(_this.escape(_this.driveDownloadUrl_(doc.pdfId)), "\" target=\"_blank\" rel=\"noopener noreferrer\">Download PDF</a>") : '', "\n          </div>\n        </div>\n      "); }).join('');
-        var employees = detail.employees.map(function (item) { return "<li>".concat(_this.escape(item.name)).concat(item.identifier ? ' · ' + _this.escape(item.identifier) : '').concat(item.email ? ' · ' + _this.escape(item.email) : '', "</li>"); }).join('');
-        var schedules = this.asArray(detail.schedules).map(function (item) {
-            return "<li>".concat(_this.escape(_this.scheduleLabel_(item)), "</li>");
+
+        // Build table rows for Daftar Surat
+        var tableRowsHtml = detailDocuments.map(function (doc, idx) {
+            var hasNumber = Boolean(doc.number && doc.number.trim());
+            var numStatusBadge = hasNumber
+                ? '<span class="status status-ready">Sudah Diisi</span>'
+                : '<span class="status status-draft">Belum Diisi</span>';
+            var docStatusBadge = _this.documentStatusBadge_(doc, request.status);
+            var toDisplay = doc.emailTo ? _this.escape(doc.emailTo).split(',').map(function(e) { return '<span class="recipient-chip">' + e.trim() + '</span>'; }).join('') : '<span class="muted-text">-</span>';
+            var ccDisplay = doc.emailCc ? _this.escape(doc.emailCc).split(',').map(function(e) { return '<span class="recipient-chip">' + e.trim() + '</span>'; }).join('') : '<span class="muted-text">-</span>';
+            var docLink = doc.docUrl
+                ? '<a class="icon-link" href="' + _this.escape(_this.safeExternalUrl_(doc.docUrl)) + '" target="_blank" rel="noopener noreferrer" title="Buka Google Doc"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Doc</a>'
+                : '<span class="muted-text">-</span>';
+            var pdfLink = doc.pdfId
+                ? '<a class="icon-link" href="' + _this.escape(_this.driveDownloadUrl_(doc.pdfId)) + '" target="_blank" rel="noopener noreferrer" title="Download PDF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> PDF</a>'
+                : '<span class="muted-text">-</span>';
+            return '<tr class="letter-table-row" data-doc-id="' + _this.escape(doc.id) + '">'
+                + '<td class="lt-no">' + (idx + 1) + '</td>'
+                + '<td class="lt-type"><span class="lt-type-name">' + _this.escape(doc.type) + '</span></td>'
+                + '<td class="lt-number">' + (hasNumber ? '<span class="number-value">' + _this.escape(doc.number) + '</span>' : '<span class="muted-text">—</span>') + '</td>'
+                + '<td class="lt-numstatus">' + numStatusBadge + '</td>'
+                + '<td class="lt-docstatus">' + docStatusBadge + '</td>'
+                + '<td class="lt-to">' + toDisplay + '</td>'
+                + '<td class="lt-cc">' + ccDisplay + '</td>'
+                + '<td class="lt-gdoc">' + docLink + '</td>'
+                + '<td class="lt-pdf">' + pdfLink + '</td>'
+                + '<td class="lt-actions">'
+                    + '<button class="button button-primary button-small" onclick="App.openLetterDetail(\'' + _this.escape(doc.id) + '\')">Detail / Aksi</button>'
+                + '</td>'
+                + '</tr>';
         }).join('');
-        document.getElementById('drawerBody').innerHTML = "\n        <div class=\"detail-hero\">\n          <p class=\"eyebrow\">".concat(this.escape(request.activityType), "</p>\n          <h3>").concat(this.escape(request.activityName), "</h3>\n          <p>").concat(this.escape(request.partnerName), "</p>\n          <div class=\"status-stack detail-status\">").concat(this.requestWorkflowBadges_(request), "</div>\n        </div>\n        <div class=\"workflow-notice workflow-").concat(this.escape(String(request.status || 'DRAFT').toLowerCase()), "\">\n          ").concat(this.escape(this.requestStatusMessage_(request.status, progress)), "\n        </div>\n        ").concat(this.renderPrimaryActions_(request, progress), "\n        ").concat(this.renderDocumentToolbar_(detailDocuments, request), "\n        ").concat(this.renderFinanceToolbar_(request, detail.financeArtifacts || {}), "\n        <section class=\"detail-section\">\n          <div class=\"detail-section-head\">\n            <h3>Ringkasan Permohonan</h3>\n          </div>\n          <div class=\"detail-grid\">\n            <div><span>Honor</span><strong>").concat(this.escape(request.honor), "</strong></div>\n            <div><span>Perjadin</span><strong>").concat(this.escape(request.travel), "</strong></div>\n            <div class=\"detail-wide\">\n              <span>Jadwal kegiatan</span>\n              <ol class=\"compact-schedule-list\">").concat(schedules || '<li>Belum ada jadwal.</li>', "</ol>\n            </div>\n          </div>\n        </section>\n        <section class=\"detail-section\"><h3>Dokumen</h3><div class=\"document-list\">").concat(documents || '<p>Belum ada dokumen.</p>', "</div></section>\n        <section class=\"detail-section\"><h3>Petugas / Narasumber</h3><ol>").concat(employees || '<li>Belum ada data.</li>', "</ol></section>\n        <section class=\"detail-section\">\n          <h3>Penerima email gabungan</h3>\n          <p><strong>To:</strong><br>").concat(this.escape(request.emailTo || '-').replace(/\n/g, '<br>'), "</p>\n          <p><strong>CC:</strong><br>").concat(this.escape(request.emailCc || '-').replace(/\n/g, '<br>'), "</p>\n          ").concat(request.emailNote ? "<div class=\"notice notice-error\">".concat(this.escape(request.emailNote), "</div>") : '', "\n        </section>\n      ");
+
+        var tableHtml = '<div class="letter-table-wrap">'
+            + '<table class="letter-table">'
+            + '<thead><tr>'
+            + '<th>No</th>'
+            + '<th>Jenis Surat</th>'
+            + '<th>Nomor Surat</th>'
+            + '<th>Status Nomor</th>'
+            + '<th>Status Dokumen</th>'
+            + '<th>Penerima / To</th>'
+            + '<th>CC</th>'
+            + '<th>Google Docs</th>'
+            + '<th>PDF</th>'
+            + '<th>Aksi</th>'
+            + '</tr></thead>'
+            + '<tbody>' + (tableRowsHtml || '<tr><td colspan="10" class="letter-table-empty">Belum ada surat. Klik "+ Tambah Surat" untuk memulai.</td></tr>') + '</tbody>'
+            + '</table>'
+            + '</div>';
+
+        // Add letter form (only if status is READY)
+        var allowedList = this.allowedDocumentsForType_(request.activityType, request.speakerSubtype);
+        var selectOptions = allowedList.map(function(item) {
+            return '<option value="' + _this.escape(item.type) + '">' + _this.escape(item.type) + '</option>';
+        }).join('');
+        var addLetterFormHtml = '';
+        if (request.status === 'READY') {
+            addLetterFormHtml = '<div class="add-letter-bar">'
+                + '<select id="addLetterType" class="add-letter-select">'
+                + selectOptions
+                + '</select>'
+                + '<button class="button button-primary button-small" onclick="App.submitAddLetter()">'
+                + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+                + ' Tambah Surat</button>'
+                + '</div>';
+        }
+
+        var employees = detail.employees.map(function (item) { return '<li>' + _this.escape(item.name) + (item.identifier ? ' · ' + _this.escape(item.identifier) : '') + (item.email ? ' · ' + _this.escape(item.email) : '') + '</li>'; }).join('');
+        var schedules = this.asArray(detail.schedules).map(function (item) {
+            return '<li>' + _this.escape(_this.scheduleLabel_(item)) + '</li>';
+        }).join('');
+        document.getElementById('drawerBody').innerHTML = '<div class="detail-hero">'
+            + '<p class="eyebrow">' + this.escape(request.activityType) + '</p>'
+            + '<h3>' + this.escape(request.activityName) + '</h3>'
+            + '<p>' + this.escape(request.partnerName) + '</p>'
+            + '<div class="status-stack detail-status">' + this.requestWorkflowBadges_(request) + '</div>'
+            + '</div>'
+            + '<div class="workflow-notice workflow-' + this.escape(String(request.status || 'DRAFT').toLowerCase()) + '">'
+            + this.escape(this.requestStatusMessage_(request.status, progress))
+            + '</div>'
+            + this.renderPrimaryActions_(request, progress)
+            + this.renderFinanceToolbar_(request, detail.financeArtifacts || {})
+            + '<section class="detail-section">'
+            + '<div class="detail-section-head"><h3>Ringkasan Kegiatan</h3></div>'
+            + '<div class="detail-grid">'
+            + '<div><span>Tipe Kegiatan</span><strong>' + this.escape(request.activityType || '-') + '</strong></div>'
+            + '<div><span>Mitra / Instansi</span><strong>' + this.escape(request.partnerName || '-') + '</strong></div>'
+            + '<div><span>Honor</span><strong>' + this.escape(request.honor || '-') + '</strong></div>'
+            + '<div><span>Perjadin</span><strong>' + this.escape(request.travel || '-') + '</strong></div>'
+            + '<div class="detail-wide"><span>Jadwal Kegiatan</span><ol class="compact-schedule-list">' + (schedules || '<li>Belum ada jadwal.</li>') + '</ol></div>'
+            + '</div>'
+            + '</section>'
+            + '<section class="detail-section letter-section">'
+            + '<div class="detail-section-head"><h3>Daftar Surat untuk Kegiatan Ini</h3><span class="letter-count-badge">' + detailDocuments.length + ' surat</span></div>'
+            + tableHtml
+            + addLetterFormHtml
+            + '</section>'
+            + '<section class="detail-section"><h3>Petugas / Narasumber</h3><ol>' + (employees || '<li>Belum ada data.</li>') + '</ol></section>';
+    },
+    allowedDocumentsForType_: function (type, subtype) {
+        var descriptions = {
+            'Surat Tugas': 'Penugasan petugas atau narasumber',
+            'Surat Balasan Campus Visit': 'Balasan resmi kepada mitra',
+            'Surat Rekomendasi Campus Visit - SU': 'Rekomendasi kepada Sekretaris Universitas',
+            'Surat izin pimpinan - Campus Visit': 'Permohonan izin kepada pimpinan',
+            'Surat Permohonan Narasumber kepada Dekan': 'Permohonan penugasan atau pencarian dosen'
+        };
+        var types = [];
+        if (type === 'Edu Fair')
+            types = ['Surat Tugas'];
+        if (type === 'Campus Visit')
+            types = ['Surat Tugas', 'Surat Balasan Campus Visit', 'Surat Rekomendasi Campus Visit - SU', 'Surat izin pimpinan - Campus Visit'];
+        if (type === 'Penugasan Narasumber') {
+            types = subtype === 'Promosi' ? ['Surat Tugas'] : ['Surat Tugas', 'Surat Permohonan Narasumber kepada Dekan'];
+        }
+        return types.map(function (typeName) { return { type: typeName, description: descriptions[typeName] || '' }; });
+    },
+    submitAddLetter: function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var typeSelect, type, templateKey, requestId, result, error_add;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        typeSelect = document.getElementById('addLetterType');
+                        if (!typeSelect) return [2 /*return*/];
+                        type = typeSelect.value;
+                        templateKey = 'DEFAULT'; // Simplified, or lookup based on mapping
+                        requestId = this.state.currentDetail.request.id;
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 3, , 4]);
+                        return [4 /*yield*/, this.server('addDocument', requestId, type, templateKey)];
+                    case 2:
+                        result = _a.sent();
+                        this.state.currentDetail = result;
+                        this.renderDetail(result);
+                        this.toast('Surat ' + type + ' berhasil ditambahkan.');
+                        return [3 /*break*/, 4];
+                    case 3:
+                        error_add = _a.sent();
+                        this.toast(error_add.message, true);
+                        return [3 /*break*/, 4];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        });
+    },
+    openLetterDetail: function (documentId) {
+        var _this = this;
+        var detail = this.state.currentDetail;
+        var doc = this.asArray(detail.documents).find(function (d) { return d.id === documentId; });
+        if (!doc) return;
+
+        document.getElementById('letterDrawerTitle').textContent = doc.type;
+        document.getElementById('letterDrawer').classList.add('is-open');
+        document.getElementById('letterDrawer').setAttribute('aria-hidden', 'false');
+
+        var numStatus = doc.number ? 'Sudah Dibuat' : 'Belum Dibuat';
+        var docLetterType = doc.letterType || doc.type;
+        var docLetterCode = doc.letterCode || 'I';
+        var genDate = (doc.status === 'GENERATED' && doc.updatedAt) ? this.formatIndonesianDate_(doc.updatedAt) : '-';
+
+        document.getElementById('letterDrawerBody').innerHTML = "\n      <div style=\"display:flex; flex-direction:column; gap:16px\">\n        <div class=\"detail-hero\" style=\"background:var(--green-900); padding:20px\">\n          <p class=\"eyebrow\">Nomor Dokumen: " + this.escape(doc.id) + "</p>\n          <h3>" + this.escape(doc.type) + "</h3>\n          <div class=\"status-stack\" style=\"margin-top:10px\">" + this.documentStatusBadge_(doc, detail.request.status) + "</div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Informasi & Status Dokumen</h3>\n          <div class=\"detail-grid\" style=\"margin-top:12px\">\n            <div><span>Status Nomor</span><strong>" + this.escape(numStatus) + "</strong></div>\n            <div><span>Kode Suffix</span><strong>" + this.escape(docLetterCode) + "</strong></div>\n            <div class=\"detail-wide\"><span>Jenis Surat</span><strong>" + this.escape(docLetterType) + "</strong></div>\n            <div class=\"detail-wide\"><span>Terakhir Generate</span><strong>" + this.escape(genDate) + "</strong></div>\n          </div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Nomor Surat & Routing Penerima</h3>\n          <div style=\"display:grid; gap:12px; margin-top:12px\">\n            <label class=\"field\">\n              <span>Nomor Surat (Lengkap) *</span>\n              <input type=\"text\" id=\"letterDetailNumber\" value=\"" + this.escape(doc.number || '') + "\" placeholder=\"Isi nomor lengkap beserta suffix\">\n            </label>\n            <label class=\"field\">\n              <span>Email To *</span>\n              <input type=\"text\" id=\"letterDetailEmailTo\" value=\"" + this.escape(doc.emailTo || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <label class=\"field\">\n              <span>Email CC</span>\n              <input type=\"text\" id=\"letterDetailEmailCc\" value=\"" + this.escape(doc.emailCc || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <label class=\"field\">\n              <span>Email BCC</span>\n              <input type=\"text\" id=\"letterDetailEmailBcc\" value=\"" + this.escape(doc.emailBcc || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <div style=\"display:flex; justify-content:flex-end; gap:8px; margin-top:8px\">\n              <button class=\"button button-primary\" id=\"btnSaveLetterDetails\">Simpan Perubahan</button>\n            </div>\n          </div>\n        </div>\n\n        <div class=\"detail-section action-section\">\n          <h3>Aksi Dokumen & Email</h3>\n          <div style=\"display:flex; flex-wrap:wrap; gap:8px; margin-top:12px\">\n            <button class=\"button button-primary\" id=\"btnGenerateDoc\">Buat / Update Doc & PDF</button>\n            <button class=\"button button-secondary\" id=\"btnPreviewEmail\">Preview Email</button>\n            <button class=\"button button-secondary\" id=\"btnCreateDraft\">Buat Gmail Draft</button>\n          </div>\n          <div class=\"document-links\" style=\"margin-top:12px\">\n            " + (doc.docUrl ? "<a class=\"button button-secondary button-small\" href=\"" + this.escape(this.safeExternalUrl_(doc.docUrl)) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka Google Doc</a>" : '') + "\n            " + (doc.pdfId ? "<a class=\"button button-secondary button-small\" href=\"" + this.escape(this.driveDownloadUrl_(doc.pdfId)) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Download PDF</a>" : '') + "\n          </div>\n        </div>\n\n        <div style=\"margin-top:24px; padding-top:16px; border-top:1px solid var(--line); display:flex; justify-content:space-between\">\n          <button class=\"button button-danger\" id=\"btnDeleteLetter\">Hapus Surat</button>\n          <button class=\"button button-secondary\" onclick=\"App.closeLetterDrawer()\">Tutup</button>\n        </div>\n      </div>\n    ";
+
+        document.getElementById('btnSaveLetterDetails').addEventListener('click', function() { return _this.actionSaveLetterDetails_(documentId); });
+        document.getElementById('btnGenerateDoc').addEventListener('click', function() { return _this.actionGenerateDoc_(documentId); });
+        document.getElementById('btnPreviewEmail').addEventListener('click', function() { return _this.openEmailPreview(documentId); });
+        document.getElementById('btnCreateDraft').addEventListener('click', function() { return _this.actionCreateDraft_(documentId); });
+        document.getElementById('btnDeleteLetter').addEventListener('click', function() { return _this.actionDeleteLetter_(documentId); });
+    },
+    actionSaveLetterDetails_: function(documentId) {
+        return __awaiter(this, void 0, void 0, function () {
+            var btn, number, emailTo, emailCc, emailBcc, result, error_save;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        btn = document.getElementById('btnSaveLetterDetails');
+                        number = document.getElementById('letterDetailNumber').value.trim();
+                        emailTo = document.getElementById('letterDetailEmailTo').value.trim();
+                        emailCc = document.getElementById('letterDetailEmailCc').value.trim();
+                        emailBcc = document.getElementById('letterDetailEmailBcc').value.trim();
+                        if (!emailTo) {
+                            this.toast('Email To wajib diisi.', true);
+                            return [2 /*return*/];
+                        }
+                        this.setBusy(btn, true, 'Menyimpan...');
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 4, 5, 6]);
+                        return [4 /*yield*/, this.server('saveDocumentDetails', documentId, number, emailTo, emailCc, emailBcc, '')];
+                    case 2:
+                        result = _a.sent();
+                        this.state.currentDetail = result;
+                        this.renderDetail(result);
+                        // Refresh drawer details
+                        return [4 /*yield*/, this.openLetterDetail(documentId)];
+                    case 3:
+                        _a.sent();
+                        this.toast('Perubahan nomor dan penerima email disimpan.');
+                        return [3 /*break*/, 6];
+                    case 4:
+                        error_save = _a.sent();
+                        this.toast(error_save.message, true);
+                        return [3 /*break*/, 6];
+                    case 5:
+                        this.setBusy(btn, false);
+                        return [7 /*endfinally*/];
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    },
+    actionGenerateDoc_: function(documentId) {
+        return __awaiter(this, void 0, void 0, function () {
+            var btn, result, error_gen;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        btn = document.getElementById('btnGenerateDoc');
+                        this.setBusy(btn, true, 'Membuat...');
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 4, 5, 6]);
+                        return [4 /*yield*/, this.server('generateDocument', documentId, false)];
+                    case 2:
+                        _a.sent();
+                        return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id)];
+                    case 3:
+                        result = _a.sent();
+                        this.state.currentDetail = result;
+                        this.openLetterDetail(documentId);
+                        this.toast('Dokumen dan PDF berhasil dibuat.');
+                        return [3 /*break*/, 6];
+                    case 4:
+                        error_gen = _a.sent();
+                        this.toast(error_gen.message, true);
+                        return [3 /*break*/, 6];
+                    case 5:
+                        this.setBusy(btn, false);
+                        return [7 /*endfinally*/];
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    },
+    actionCreateDraft_: function(documentId) {
+        return __awaiter(this, void 0, void 0, function () {
+            var btn, result, error_draft;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        btn = document.getElementById('btnCreateDraft');
+                        this.setBusy(btn, true, 'Membuat draft...');
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 4, 5, 6]);
+                        return [4 /*yield*/, this.server('createEmailDraft', documentId, false)];
+                    case 2:
+                        _a.sent();
+                        return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id)];
+                    case 3:
+                        result = _a.sent();
+                        this.state.currentDetail = result;
+                        this.openLetterDetail(documentId);
+                        this.toast('Draft Gmail berhasil dibuat.');
+                        return [3 /*break*/, 6];
+                    case 4:
+                        error_draft = _a.sent();
+                        this.toast(error_draft.message, true);
+                        return [3 /*break*/, 6];
+                    case 5:
+                        this.setBusy(btn, false);
+                        return [7 /*endfinally*/];
+                    case 6: return [2 /*return*/];
+                }
+            });
+        });
+    },
+    actionDeleteLetter_: function(documentId) {
+        return __awaiter(this, void 0, void 0, function () {
+            var btn, requestId, result, error_del;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!confirm('Apakah Anda yakin ingin menghapus surat ini? File Drive yang terkait juga akan dihapus.'))
+                            return [2 /*return*/];
+                        btn = document.getElementById('btnDeleteLetter');
+                        requestId = this.state.currentDetail.request.id;
+                        this.setBusy(btn, true, 'Menghapus...');
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 3, 4, 5]);
+                        return [4 /*yield*/, this.server('deleteDocument', documentId)];
+                    case 2:
+                        result = _a.sent();
+                        this.state.currentDetail = result;
+                        this.renderDetail(result);
+                        this.closeLetterDrawer();
+                        this.toast('Surat berhasil dihapus.');
+                        return [3 /*break*/, 5];
+                    case 3:
+                        error_del = _a.sent();
+                        this.toast(error_del.message, true);
+                        return [3 /*break*/, 5];
+                    case 4:
+                        this.setBusy(btn, false);
+                        return [7 /*endfinally*/];
+                    case 5: return [2 /*return*/];
+                }
+            });
+        });
     },
     renderPrimaryActions_: function (request, progress) {
         if (request.status === 'ARCHIVED')
@@ -957,6 +1242,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                     case 8:
                         if (!(action === 'draft-email')) return [3 /*break*/, 10];
                         documentId = button.dataset.documentId || this.selectedDetailDocumentId_();
+                        var doc = this.asArray(this.state.currentDetail.documents).find(function (d) { return d.id === documentId; });
+                        var routing = doc ? doc.routing : null;
+                        if (!routing || !routing.to || !routing.to.length) {
+                            this.toast('Penerima To belum tersedia atau kosong. Gmail Draft tidak dapat dibuat.', true);
+                            return [2 /*return*/];
+                        }
                         this.setBusy(button, true, 'Membuat draft...');
                         return [4 /*yield*/, this.server('createEmailDraft', documentId, false)];
                     case 9:
@@ -1071,7 +1362,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 place: request.activityPlace
             });
         }
-        this.renderDocumentChoices(detail.documents);
         var statusInput = document.querySelector("input[name=\"speakerStatus\"][value=\"".concat(CSS.escape(request.speakerStatus || ''), "\"]"));
         if (statusInput)
             statusInput.checked = true;
@@ -1086,8 +1376,9 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         this.updateReview();
     },
     openEmailPreview: function (documentId) {
+        var _this = this;
         return __awaiter(this, void 0, void 0, function () {
-            var modal, preview, error_6;
+            var modal, preview, error_6, createDraftBtn;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -1102,7 +1393,51 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                     case 2:
                         preview = _a.sent();
                         document.getElementById('emailModalTitle').textContent = preview.type;
-                        document.getElementById('emailModalBody').innerHTML = "\n          <div class=\"email-envelope\">\n            <div><span>To</span>".concat(this.escape(preview.to.join(', ')), "</div>\n            <div><span>CC</span>").concat(this.escape(preview.cc.join(', ') || '-'), "</div>\n            <div><span>Subjek</span><strong>").concat(this.escape(preview.subject), "</strong></div>\n            <div><span>Lampiran</span>").concat(preview.hasAttachment ? 'PDF siap' : 'PDF belum dibuat', "</div>\n          </div>\n          ").concat(preview.notes.length ? "<div class=\"notice notice-error\">".concat(this.escape(preview.notes.join('\n')), "</div>") : '', "\n          <iframe class=\"email-preview-frame\" sandbox=\"\" referrerpolicy=\"no-referrer\" srcdoc=\"").concat(this.escape(this.emailPreviewDocument(preview.htmlBody)), "\"></iframe>\n        ");
+                        document.getElementById('emailModalBody').innerHTML = "\n          <div class=\"email-envelope\">\n            <input type=\"hidden\" id=\"emailPreviewDocId\" value=\"".concat(_this.escape(preview.documentId), "\">\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewTo\"><strong>To:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewTo\" value=\"").concat(_this.escape(preview.to.join(', ')), "\">\n            </div>\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewCc\"><strong>CC:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewCc\" value=\"").concat(_this.escape(preview.cc.join(', ')), "\">\n            </div>\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewBcc\"><strong>BCC:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewBcc\" value=\"").concat(_this.escape((preview.bcc || []).join(', ')), "\">\n            </div>\n            <div style=\"margin-top:8px\"><span>Subjek</span><br><strong>").concat(_this.escape(preview.subject), "</strong></div>\n            <div style=\"margin-top:8px\"><span>Lampiran</span><br>").concat(preview.hasAttachment ? 'PDF siap' : 'PDF belum dibuat', "</div>\n          </div>\n          ").concat(preview.notes.length ? "<div class=\"notice notice-error\">".concat(_this.escape(preview.notes.join('\n')), "</div>") : '', "\n          <div style=\"margin: 12px 0; display: flex; gap: 8px;\">\n            <button class=\"button button-primary\" id=\"emailModalCreateDraftBtn\">Buat / Update Gmail Draft</button>\n          </div>\n          <iframe class=\"email-preview-frame\" sandbox=\"\" referrerpolicy=\"no-referrer\" srcdoc=\"").concat(_this.escape(_this.emailPreviewDocument(preview.htmlBody)), "\"></iframe>\n        ");
+                        createDraftBtn = document.getElementById('emailModalCreateDraftBtn');
+                        if (createDraftBtn) {
+                            createDraftBtn.addEventListener('click', function () {
+                                return __awaiter(_this, void 0, void 0, function () {
+                                    var docId, toVal, ccVal, bccVal, customRecipients, error_modal;
+                                    return __generator(this, function (_a) {
+                                        switch (_a.label) {
+                                            case 0:
+                                                docId = document.getElementById('emailPreviewDocId').value;
+                                                toVal = document.getElementById('emailPreviewTo').value.trim();
+                                                ccVal = document.getElementById('emailPreviewCc').value.trim();
+                                                bccVal = document.getElementById('emailPreviewBcc').value.trim();
+                                                if (!toVal) {
+                                                    this.toast('Penerima To wajib diisi.', true);
+                                                    return [2 /*return*/];
+                                                }
+                                                customRecipients = {
+                                                    to: toVal,
+                                                    cc: ccVal,
+                                                    bcc: bccVal
+                                                };
+                                                this.setBusy(createDraftBtn, true, 'Membuat draft...');
+                                                _a.label = 1;
+                                            case 1:
+                                                _a.trys.push([1, 3, 4, 5]);
+                                                return [4 /*yield*/, this.server('createEmailDraft', docId, false, JSON.stringify(customRecipients))];
+                                            case 2:
+                                                _a.sent();
+                                                this.toast('Draft Gmail siap.');
+                                                modal.close();
+                                                return [3 /*break*/, 5];
+                                            case 3:
+                                                error_modal = _a.sent();
+                                                this.toast(error_modal.message, true);
+                                                return [3 /*break*/, 5];
+                                            case 4:
+                                                this.setBusy(createDraftBtn, false);
+                                                return [7 /*endfinally*/];
+                                            case 5: return [2 /*return*/];
+                                        }
+                                    });
+                                });
+                            });
+                        }
                         return [3 /*break*/, 4];
                     case 3:
                         error_6 = _a.sent();
@@ -1122,6 +1457,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                     case 0:
                         button = document.getElementById('refreshButton');
                         this.setBusy(button, true, 'Memuat...');
+                        if (showToast)
+                            this.toast('Memperbarui data...');
                         _a.label = 1;
                     case 1:
                         _a.trys.push([1, 6, 7, 8]);
@@ -1143,7 +1480,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                     case 5:
                         this.renderReferences(data.references);
                         if (showToast)
-                            this.toast('Data diperbarui.');
+                            this.toast('Data berhasil diperbarui.');
                         return [3 /*break*/, 8];
                     case 6:
                         error_11 = _a.sent();
@@ -1427,8 +1764,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
             return false;
         }
         var errors = [];
-        if (!payload.documents.length)
-            errors.push('Pilih minimal satu dokumen.');
         if (!payload.schedules.length)
             errors.push('Minimal satu sesi jadwal wajib diisi.');
         payload.schedules.forEach(function (schedule, index) {
@@ -1443,13 +1778,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
                 errors.push('Waktu selesai sesi ke-' + (index + 1) + ' tidak boleh sebelum waktu mulai.');
             }
         });
-        payload.documents.forEach(function (document) {
-            if (!document.number)
-                errors.push('Nomor surat wajib: ' + document.type);
-        });
-        var needsPeople = payload.documents.some(function (document) { return document.type === 'Surat Tugas'; }) ||
-            (payload.documents.some(function (document) { return document.type === 'Surat Permohonan Narasumber kepada Dekan'; }) &&
-                payload.speakerStatus === 'Tidak Dicarikan');
+        
+        var needsPeople = payload.activityType === 'Edu Fair' || payload.activityType === 'Campus Visit' || payload.activityType === 'Penugasan Narasumber';
         if (needsPeople && !payload.employees.length)
             errors.push('Minimal satu pegawai/narasumber wajib diisi.');
         payload.employees.forEach(function (employee, index) {
@@ -1469,12 +1799,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         });
         if (payload.activityType === 'Penugasan Narasumber' && !payload.speakerSubtype) {
             errors.push('Sub-tipe narasumber wajib diisi.');
-        }
-        if (payload.documents.some(function (document) { return document.type === 'Surat Permohonan Narasumber kepada Dekan'; })) {
-            if (!payload.speakerStatus)
-                errors.push('Status narasumber wajib diisi.');
-            if (!payload.faculties.length)
-                errors.push('Fakultas tujuan wajib dipilih.');
         }
         if (errors.length) {
             this.toast(errors.join('\n'), true);
@@ -1561,6 +1885,18 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
             label.textContent = Math.round(percent) + '%';
         if (message && text)
             message.textContent = text;
+    },
+    formatIndonesianDate_: function (dateValue) {
+        if (!dateValue)
+            return '-';
+        var date = dateValue instanceof Date ? dateValue : this.parseLocalIsoDate_(String(dateValue).split('T')[0]);
+        if (!date)
+            return String(dateValue);
+        var months = [
+            'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+            'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+        ];
+        return date.getDate() + ' ' + months[date.getMonth()] + ' ' + date.getFullYear();
     },
     escape: function (value) {
         return String(value == null ? '' : value)

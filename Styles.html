@@ -648,7 +648,7 @@
     position: fixed;
     z-index: 51;
     inset: 0 0 0 auto;
-    width: min(680px, 100%);
+    width: min(900px, 100%);
     padding: 30px;
     overflow-y: auto;
     background: var(--paper);
@@ -695,7 +695,136 @@
   .action-panel { margin-top: 0; }
   .toolbar-row { align-items: center; }
   .toolbar-row select { min-height: 42px; min-width: min(100%, 250px); padding: 0 36px 0 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
-  
+
+  /* Letter Table (Daftar Surat) */
+  .letter-section { padding: 20px; }
+  .letter-section .detail-section-head { margin-bottom: 14px; }
+  .letter-count-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 99px;
+    background: var(--green-50);
+    border: 1px solid var(--green-100);
+    color: var(--green-800);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .04em;
+  }
+  .letter-table-wrap {
+    overflow-x: auto;
+    margin: 0 -20px;
+    padding: 0 20px;
+  }
+  .letter-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 12px;
+  }
+  .letter-table th {
+    padding: 10px 12px;
+    color: var(--muted);
+    background: var(--green-50);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+  }
+  .letter-table td {
+    padding: 12px;
+    border-top: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  .letter-table-row { transition: background-color .15s var(--ease-out); }
+  .letter-table-row:hover { background: rgba(240, 247, 245, 0.5); }
+  .letter-table-empty {
+    text-align: center;
+    padding: 36px 20px !important;
+    color: var(--muted);
+    font-size: 13px;
+    font-style: italic;
+  }
+  .lt-no { width: 36px; font-weight: 700; color: var(--muted); text-align: center; }
+  .lt-type-name {
+    display: block;
+    font-weight: 700;
+    color: var(--ink);
+    max-width: 180px;
+    line-height: 1.4;
+  }
+  .lt-number .number-value {
+    display: inline-block;
+    max-width: 140px;
+    font-weight: 600;
+    color: var(--green-900);
+    word-break: break-all;
+    font-size: 11px;
+  }
+  .lt-to, .lt-cc {
+    max-width: 140px;
+  }
+  .recipient-chip {
+    display: inline-block;
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 1px 0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--green-50);
+    border: 1px solid var(--green-100);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--green-900);
+    vertical-align: middle;
+  }
+  .muted-text { color: var(--muted); font-size: 12px; }
+  .icon-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--green-50);
+    border: 1px solid var(--green-100);
+    color: var(--green-800);
+    font-size: 11px;
+    font-weight: 700;
+    transition: all .15s var(--ease-out);
+    white-space: nowrap;
+  }
+  .icon-link:hover { background: var(--green-100); color: var(--green-950); }
+
+  /* Add Letter Bar */
+  .add-letter-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 14px 16px;
+    border: 1.5px dashed var(--green-100);
+    border-radius: var(--radius-md);
+    background: var(--green-50);
+  }
+  .add-letter-select {
+    flex: 1;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--paper);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+  }
+
   .action-section h3 { margin-bottom: 12px; }
   .finance-output-list { display: grid; }
   .finance-output { display: grid; grid-template-columns: minmax(120px, .35fr) minmax(0, 1fr); gap: 18px; padding: 18px 0; border-top: 1px solid var(--line); }
@@ -929,5 +1058,46 @@
     *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
     .loader-spinner { animation-duration: 1.2s !important; }
     .loader-spinner::before { animation-duration: .9s !important; }
+  }
+
+  /* Busy / loading spinner for icon buttons & regular buttons */
+  button[aria-busy="true"] {
+    opacity: 0.8;
+    cursor: not-allowed !important;
+  }
+  button[aria-busy="true"] svg {
+    animation: spin-loader 0.8s linear infinite;
+  }
+  @keyframes spin-loader {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* Form input inside email envelope preview */
+  .envelope-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 8px;
+  }
+  .envelope-row label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .envelope-row input.form-input {
+    width: 100%;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fafafa;
+    color: var(--foreground);
+    transition: border-color 0.15s ease;
+  }
+  .envelope-row input.form-input:focus {
+    outline: none;
+    border-color: var(--green-700);
+    background: #ffffff;
   }
 </style>

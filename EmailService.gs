@@ -1,17 +1,25 @@
-function previewEmail(documentId) {
+function previewEmail(documentId, customRecipientsJson) {
   assertAuthorized_();
   const document = getDocumentById_(text_(documentId));
-  return serializeValue_(buildEmailPreviewForDocument_(document));
+  let customRecipients = null;
+  if (customRecipientsJson) {
+    try {
+      customRecipients = JSON.parse(customRecipientsJson);
+    } catch (e) {
+      console.error('Failed to parse customRecipientsJson: ' + e.message);
+    }
+  }
+  return serializeValue_(buildEmailPreviewForDocument_(document, customRecipients));
 }
 
-function createEmailDraft(documentId, force) {
+function createEmailDraft(documentId, force, customRecipientsJson) {
   const user = assertAuthorized_();
   assertCanWrite_(user);
   const id = text_(documentId);
 
   return withScriptLock_(function() {
     try {
-      const result = createEmailDraftInternal_(id, Boolean(force), user);
+      const result = createEmailDraftInternal_(id, Boolean(force), user, customRecipientsJson);
       logAudit_('CREATE_EMAIL_DRAFT', result.requestId, true, {
         documentId: id,
         reused: result.reused
@@ -24,29 +32,6 @@ function createEmailDraft(documentId, force) {
   });
 }
 
-function createAllEmailDrafts(requestId, force) {
-  const user = assertAuthorized_();
-  assertCanWrite_(user);
-  const id = text_(requestId);
-
-  return withScriptLock_(function() {
-    const documents = getDocumentsByRequest_(id);
-    const results = [];
-    const errors = [];
-    documents.forEach(function(document) {
-      try {
-        results.push(createEmailDraftInternal_(document.id, Boolean(force), user));
-      } catch (error) {
-        errors.push({ documentId: document.id, type: document.type, error: error.message });
-      }
-    });
-    logAudit_('CREATE_ALL_EMAIL_DRAFTS', id, errors.length === 0, {
-      created: results.length,
-      errors: errors
-    });
-    return serializeValue_({ ok: errors.length === 0, results: results, errors: errors });
-  });
-}
 
 function processRequest(requestId, revision) {
   const user = assertAuthorized_();
@@ -74,19 +59,40 @@ function buildEmailPreviewInternal_(requestId, suppressErrors) {
   });
 }
 
-function buildEmailPreviewForDocument_(document) {
+function buildEmailPreviewForDocument_(document, customRecipients) {
   const detail = getRequestDetailInternal_(document.requestId);
   const request = detail.request;
-  const routingRequest = {
-    documents: detail.documents,
-    partnerEmail: request.partnerEmail,
-    partnerName: request.partnerName,
-    faculties: request.faculties,
-    speakerStatus: request.speakerStatus,
-    manualTo: Array.isArray(request.manualTo) ? request.manualTo : [],
-    manualCc: Array.isArray(request.manualCc) ? request.manualCc : []
-  };
-  const routing = computeEmailRouting_(routingRequest, detail.employees, document.type);
+  let routing;
+
+  if (customRecipients && (customRecipients.to || customRecipients.cc || customRecipients.bcc)) {
+    const to = parseAndValidateEmailString_(customRecipients.to || '');
+    const cc = parseAndValidateEmailString_(customRecipients.cc || '');
+    const bcc = parseAndValidateEmailString_(customRecipients.bcc || '');
+
+    saveFinalRecipientsToMaster_(document.requestId, to, cc, document.id);
+
+    routing = {
+      to: to,
+      cc: cc,
+      bcc: bcc,
+      toRoles: customRecipients.toRoles ? customRecipients.toRoles.split(/[,;\n\s]+/).filter(Boolean) : to,
+      ccRoles: customRecipients.ccRoles ? customRecipients.ccRoles.split(/[,;\n\s]+/).filter(Boolean) : cc,
+      notes: []
+    };
+  } else {
+    const to = parseAndValidateEmailString_(document.emailTo || '');
+    const cc = parseAndValidateEmailString_(document.emailCc || '');
+    const bcc = parseAndValidateEmailString_(document.emailBcc || '');
+    routing = {
+      to: to,
+      cc: cc,
+      bcc: bcc,
+      toRoles: to,
+      ccRoles: cc,
+      notes: []
+    };
+  }
+
   if (!routing.to.length) {
     throw new Error('Penerima To belum tersedia. Periksa email pegawai, mitra, atau Master CC.');
   }
@@ -107,6 +113,7 @@ function buildEmailPreviewForDocument_(document) {
     type: document.type,
     to: routing.to,
     cc: routing.cc,
+    bcc: routing.bcc || [],
     toRoles: routing.toRoles,
     ccRoles: routing.ccRoles,
     notes: routing.notes,
@@ -163,7 +170,7 @@ function isExplicitHtmlTemplate_(value) {
   return /<(?:!doctype|html|head|body|title|style|script|p|div|span|br|hr|table|thead|tbody|tr|td|th|ul|ol|li|strong|em|b|i|u|h[1-6]|a|blockquote)\b|<\/[a-z][^>]*>/i.test(text);
 }
 
-function createEmailDraftInternal_(documentId, force, user) {
+function createEmailDraftInternal_(documentId, force, user, customRecipientsJson) {
   const sheet = getSheet_('DOCUMENTS');
   const rowNumber = findRowById_(sheet, documentId, 1);
   if (!rowNumber) throw new Error('Dokumen tidak ditemukan: ' + documentId);
@@ -216,7 +223,16 @@ function createEmailDraftInternal_(documentId, force, user) {
   if (document.status !== 'GENERATED' || !document.pdfId || !driveFileExists_(document.pdfId)) {
     throw new Error('Buat dokumen dan PDF sebelum membuat draft email.');
   }
-  const preview = buildEmailPreviewForDocument_(document);
+
+  let customRecipients = null;
+  if (customRecipientsJson) {
+    try {
+      customRecipients = JSON.parse(customRecipientsJson);
+    } catch (e) {
+      console.error('Failed to parse customRecipientsJson: ' + e.message);
+    }
+  }
+  const preview = buildEmailPreviewForDocument_(document, customRecipients);
   const markerHtml = '<span style="display:none;color:transparent;font-size:0">' +
     escapeHtml_(marker) + '</span>';
   const htmlBody = preview.htmlBody + markerHtml;
@@ -228,6 +244,7 @@ function createEmailDraftInternal_(documentId, force, user) {
     {
       htmlBody: htmlBody,
       cc: preview.cc.join(','),
+      bcc: (preview.bcc || []).join(','),
       attachments: [attachment],
       markImportant: true
     }
@@ -266,10 +283,7 @@ function getEmailTemplate_(documentType, speakerStatus) {
 function buildEmailPlaceholders_(detail, document, routing) {
   const request = detail.request;
   const employees = detail.employees;
-  const employeeLines = employees.map(function(employee, index) {
-    return (index + 1) + '. ' + employee.name +
-      (employee.identifier ? ' (' + employee.identifier + ')' : '');
-  });
+  const employeeJoin = buildEmployeeJoinPlaceholders_(employees);
   const plain = {
     kepadaYth: routing.toRoles.join('\n'),
     jenisSurat: document.type,
@@ -277,7 +291,21 @@ function buildEmailPlaceholders_(detail, document, routing) {
     statusNarasumber: request.speakerStatus,
     namaKegiatan: request.activityName,
     namaMitra: request.partnerName,
-    narasumber: employeeLines.join('\n'),
+    narasumber: employeeJoin.narasumber,
+    textJoinNomor: employeeJoin.textJoinNomor,
+    textJoinNama: employeeJoin.textJoinNama,
+    textJoinNikNpm: employeeJoin.textJoinNikNpm,
+    textJoinJabatan: employeeJoin.textJoinJabatan,
+    textJoinProdi: employeeJoin.textJoinProdi,
+    textJoinFakultas: employeeJoin.textJoinFakultas,
+    textJoinEmail: employeeJoin.textJoinEmail,
+    'Text Join Nomor': employeeJoin.textJoinNomor,
+    'Text Join Nama': employeeJoin.textJoinNama,
+    'Text Join NIK/NPM': employeeJoin.textJoinNikNpm,
+    'Text Join Jabatan': employeeJoin.textJoinJabatan,
+    'Text Join Prodi': employeeJoin.textJoinProdi,
+    'Text Join Fakultas': employeeJoin.textJoinFakultas,
+    'Text Join Email': employeeJoin.textJoinEmail,
     hari: request.day,
     tanggal: request.dateDisplay,
     tempat: request.activityPlace,
@@ -304,7 +332,9 @@ function replaceTemplateTokens_(template, placeholders, html) {
   let output = String(template || '');
   Object.keys(placeholders).forEach(function(key) {
     const value = html ? placeholders[key].html : placeholders[key].plain;
-    output = output.replace(new RegExp(escapeRegex_('{' + key + '}'), 'g'), value);
+    ['{' + key + '}', '{{' + key + '}}', '<<' + key + '>>'].forEach(function(pattern) {
+      output = output.replace(new RegExp(escapeRegex_(pattern), 'g'), value);
+    });
   });
   return output;
 }
@@ -378,4 +408,46 @@ function stripHtml_(html) {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .trim();
+}
+
+function isValidEmail_(email) {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(String(email).trim().toLowerCase());
+}
+
+function parseAndValidateEmailString_(str) {
+  if (!str) return [];
+  const parts = str.split(/[,;\n\s]+/).map(function(p) { return p.trim(); }).filter(Boolean);
+  parts.forEach(function(email) {
+    if (!isValidEmail_(email)) {
+      throw new Error('Format email tidak valid: "' + email + '"');
+    }
+  });
+  return parts;
+}
+
+function saveFinalRecipientsToMaster_(requestId, toList, ccList, documentId) {
+  try {
+    const sheet = getSheet_('MASTER');
+    const rowNumber = findRowById_(sheet, requestId, 1);
+    if (rowNumber) {
+      const row = sheet.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
+      setMaster_(row, 'Email To', toList.join('\n'));
+      setMaster_(row, 'Email CC', ccList.join('\n'));
+      sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+    }
+
+    if (documentId) {
+      const docSheet = getSheet_('DOCUMENTS');
+      const docRowNumber = findRowById_(docSheet, documentId, 1);
+      if (docRowNumber) {
+        const row = docSheet.getRange(docRowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
+        row[17] = toList.join(', ');
+        row[18] = ccList.join(', ');
+        docSheet.getRange(docRowNumber, 1, 1, row.length).setValues([row]);
+      }
+    }
+  } catch (e) {
+    console.error('Gagal menyimpan penerima email final: ' + e.message);
+  }
 }

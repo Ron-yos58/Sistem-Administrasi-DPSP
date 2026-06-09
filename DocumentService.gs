@@ -19,32 +19,6 @@ function generateDocument(documentId, force) {
   });
 }
 
-function generateAllDocuments(requestId, force) {
-  const user = assertAuthorized_();
-  assertCanWrite_(user);
-  const id = text_(requestId);
-
-  return withScriptLock_(function() {
-    const documents = getDocumentsByRequest_(id);
-    if (!documents.length) throw new Error('Tidak ada dokumen untuk permohonan ' + id);
-    const results = [];
-    const errors = [];
-
-    documents.forEach(function(document) {
-      try {
-        results.push(generateDocumentInternal_(document.id, Boolean(force), user));
-      } catch (error) {
-        markDocumentError_(document.id, error.message);
-        errors.push({ documentId: document.id, type: document.type, error: error.message });
-      }
-    });
-    logAudit_('GENERATE_ALL_DOCUMENTS', id, errors.length === 0, {
-      generated: results.length,
-      errors: errors
-    });
-    return serializeValue_({ ok: errors.length === 0, results: results, errors: errors });
-  });
-}
 
 function generateDocumentInternal_(documentId, force, user) {
   const documentSheet = getSheet_('DOCUMENTS');
@@ -62,6 +36,7 @@ function generateDocumentInternal_(documentId, force, user) {
   }
 
   validateDocumentGeneration_(detail.request, document, detail.employees);
+
   if (
     !force &&
     document.status === 'GENERATED' &&
@@ -78,8 +53,9 @@ function generateDocumentInternal_(documentId, force, user) {
     };
   }
 
-  const templateId = APP_CONFIG.TEMPLATES[document.templateKey];
-  if (!templateId) throw new Error('Template ID tidak ditemukan: ' + document.templateKey);
+  const templateConfig = getTemplateConfigByKey_(document.templateKey);
+  if (!templateConfig) throw new Error('Konfigurasi template tidak ditemukan atau tidak aktif: ' + document.templateKey);
+  const templateId = templateConfig.templateId;
   const folder = getOutputFolder_();
   const fileName = buildDocumentFileName_(detail.request, document);
   const templateFile = DriveApp.getFileById(templateId);
@@ -157,10 +133,7 @@ function buildDocumentPlaceholders_(detail, document) {
     faculties: request.faculties,
     speakerStatus: request.speakerStatus
   }, employees, document.type);
-  const people = employees.map(function(employee, index) {
-    const id = employee.identifier ? ' (' + employee.identifier + ')' : '';
-    return (index + 1) + '. ' + employee.name + id;
-  }).join('\n');
+  const employeeJoin = buildEmployeeJoinPlaceholders_(employees);
 
   const values = {
     idPermohonan: request.id,
@@ -188,13 +161,21 @@ function buildDocumentPlaceholders_(detail, document) {
     jabatanPenandatangan: request.signerRole,
     honor: request.honor,
     perjalananDinas: request.travel,
-    namaPegawai: employees.map(function(item) { return item.name; }).join('\n'),
-    nipPegawai: employees.map(function(item) { return item.identifier; }).join('\n'),
-    jabatanPegawai: employees.map(function(item) { return item.role; }).join('\n'),
-    prodiPegawai: employees.map(function(item) { return item.unit; }).join('\n'),
-    fakultasPegawai: employees.map(function(item) { return item.unit; }).join('\n'),
-    emailPegawai: employees.map(function(item) { return item.email; }).join('\n'),
-    narasumber: people,
+    nomorUrutPegawai: employeeJoin.textJoinNomor,
+    namaPegawai: employeeJoin.namaPegawai,
+    nipPegawai: employeeJoin.nipPegawai,
+    jabatanPegawai: employeeJoin.jabatanPegawai,
+    prodiPegawai: employeeJoin.prodiPegawai,
+    fakultasPegawai: employeeJoin.fakultasPegawai,
+    emailPegawai: employeeJoin.emailPegawai,
+    textJoinNomor: employeeJoin.textJoinNomor,
+    textJoinNama: employeeJoin.textJoinNama,
+    textJoinNikNpm: employeeJoin.textJoinNikNpm,
+    textJoinJabatan: employeeJoin.textJoinJabatan,
+    textJoinProdi: employeeJoin.textJoinProdi,
+    textJoinFakultas: employeeJoin.textJoinFakultas,
+    textJoinEmail: employeeJoin.textJoinEmail,
+    narasumber: employeeJoin.narasumber,
     kepadaYth: routing.toRoles.join('\n'),
     tembusan: routing.ccRoles.join('\n')
   };
@@ -220,6 +201,8 @@ function buildDocumentPlaceholders_(detail, document) {
     'Nama Penandatangan Surat Tugas': values.namaPenandatangan,
     'NIK Penandatangan Surat Tugas': values.nikPenandatangan,
     'Jabatan Penandatangan Surat Tugas': values.jabatanPenandatangan,
+    'Text Join Nomor': values.textJoinNomor,
+    'Nomor Urut Pegawai': values.textJoinNomor,
     'Text Join Nama': values.namaPegawai,
     'Text Join NIK/NPM': values.nipPegawai,
     'Text Join Jabatan': values.jabatanPegawai,
@@ -418,4 +401,164 @@ function markDocumentError_(documentId, message) {
   sheet.getRange(rowNumber, 8).setValue('ERROR');
   sheet.getRange(rowNumber, 17).setValue(new Date());
   console.error('Dokumen ' + documentId + ': ' + message);
+}
+
+
+
+function updateMasterDocumentNumbers_(requestId) {
+  const masterSheet = getSheet_('MASTER');
+  const rowNumber = findRowById_(masterSheet, requestId, 1);
+  if (!rowNumber) return;
+  const docs = getDocumentsByRequest_(requestId);
+  const numberText = docs.map(function(doc) {
+    return doc.number ? doc.type + ': ' + doc.number : '';
+  }).filter(Boolean).join('\n');
+  masterSheet.getRange(rowNumber, masterColumn_('Nomor Surat')).setValue(numberText);
+}
+
+function getTemplateConfigsInternal_() {
+  const cached = getJsonCache_('template_configs');
+  if (cached) return cached;
+
+  const sheet = getSheet_('TEMPLATE_CONFIG', false);
+  if (!sheet) return [];
+
+  const lastRow = lastNonEmptyRowInColumn_(sheet, 1);
+  if (lastRow < 2) return [];
+
+  const values = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
+  const configs = values.map(function(row) {
+    return {
+      key: text_(row[0]),
+      name: text_(row[1]),
+      type: text_(row[2]),
+      code: text_(row[3]),
+      defaultTo: text_(row[4]),
+      defaultCc: text_(row[5]),
+      defaultBcc: text_(row[6]),
+      emailTemplate: text_(row[7]),
+      templateId: text_(row[8]),
+      active: String(row[9]).trim().toUpperCase() === 'TRUE'
+    };
+  });
+  
+  return putJsonCache_('template_configs', configs);
+}
+
+function getTemplateConfigByKey_(key) {
+  const configs = getTemplateConfigsInternal_();
+  return configs.find(function(cfg) { return cfg.key === key && cfg.active; }) || null;
+}
+
+function addDocument(requestId, type, templateKey) {
+  const user = assertAuthorized_();
+  assertCanWrite_(user);
+  
+  return withScriptLock_(function() {
+    const sheet = getSheet_('DOCUMENTS');
+    const now = new Date();
+    const docId = 'DOC-' + Utilities.getUuid().slice(0, 12).toUpperCase();
+    
+    const detail = getRequestDetailInternal_(text_(requestId));
+    const request = detail.request;
+    
+    const routingRequest = {
+      documents: [{ type: type, templateKey: templateKey }],
+      partnerEmail: request.partnerEmail,
+      partnerName: request.partnerName,
+      faculties: request.faculties,
+      speakerStatus: request.speakerStatus,
+      manualTo: [],
+      manualCc: []
+    };
+    const routing = computeEmailRouting_(routingRequest, detail.employees, type);
+
+    const row = new Array(DOCUMENT_HEADERS.length).fill('');
+    row[0] = docId;
+    row[1] = text_(requestId);
+    row[2] = type;
+    row[3] = request.speakerSubtype || '';
+    row[4] = request.speakerStatus || '';
+    row[5] = '';
+    row[6] = templateKey;
+    row[7] = 'DRAFT';
+    row[8] = '';
+    row[9] = '';
+    row[10] = '';
+    row[11] = '';
+    row[12] = '';
+    row[13] = 'PENDING';
+    row[14] = 1;
+    row[15] = now;
+    row[16] = now;
+    row[17] = routing.to.join(', ');
+    row[18] = routing.cc.join(', ');
+    row[19] = routing.bcc.join(', ');
+    
+    appendDataRow_(sheet, row);
+    
+    logAudit_('ADD_DOCUMENT', text_(requestId), true, { docId: docId, type: type });
+    clearAppCache_();
+    
+    return getRequestDetail(requestId);
+  });
+}
+
+function saveDocumentDetails(documentId, number, emailTo, emailCc, emailBcc, status) {
+  const user = assertAuthorized_();
+  assertCanWrite_(user);
+  
+  return withScriptLock_(function() {
+    const sheet = getSheet_('DOCUMENTS');
+    const rowNumber = findRowById_(sheet, text_(documentId), 1);
+    if (!rowNumber) throw new Error('Dokumen tidak ditemukan.');
+    
+    const row = sheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
+    row[5] = text_(number);
+    if (status) {
+      row[7] = text_(status);
+    }
+    row[16] = new Date();
+    row[17] = text_(emailTo);
+    row[18] = text_(emailCc);
+    row[19] = text_(emailBcc);
+    
+    sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+    
+    const requestId = row[1];
+    updateMasterDocumentNumbers_(requestId);
+    
+    logAudit_('UPDATE_DOCUMENT', text_(documentId), true, { number: number });
+    clearAppCache_();
+    
+    return getRequestDetail(requestId);
+  });
+}
+
+function deleteDocument(documentId) {
+  const user = assertAuthorized_();
+  assertCanWrite_(user);
+  
+  return withScriptLock_(function() {
+    const sheet = getSheet_('DOCUMENTS');
+    const rowNumber = findRowById_(sheet, text_(documentId), 1);
+    if (!rowNumber) throw new Error('Dokumen tidak ditemukan.');
+    const row = sheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
+    const requestId = row[1];
+    
+    sheet.deleteRow(rowNumber);
+    
+    try {
+      if (row[8]) DriveApp.getFileById(row[8]).setTrashed(true);
+      if (row[10]) DriveApp.getFileById(row[10]).setTrashed(true);
+    } catch (e) {
+      console.warn('Gagal men-trash file: ' + e.message);
+    }
+    
+    updateMasterDocumentNumbers_(requestId);
+    logAudit_('DELETE_DOCUMENT', text_(documentId), true, { type: row[2] });
+    clearAppCache_();
+    
+    return getRequestDetail(requestId);
+  });
 }

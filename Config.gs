@@ -18,7 +18,8 @@ const APP_CONFIG = Object.freeze({
     AUDIT: { name: 'Audit Log', aliases: [] },
     FILES: { name: 'Generated Files', aliases: [] },
     ACCESS: { name: 'Config_Access', aliases: [] },
-    SIGNATURE: { name: 'Signature_Config', aliases: [] }
+    SIGNATURE: { name: 'Signature_Config', aliases: [] },
+    TEMPLATE_CONFIG: { name: 'Template_Config', aliases: ['Templates', 'Master Template'] }
   },
   ACTIVITY_TYPES: ['Edu Fair', 'Campus Visit', 'Penugasan Narasumber'],
   DOCUMENT_TYPES: [
@@ -40,7 +41,23 @@ const APP_CONFIG = Object.freeze({
     'Fakultas Sains',
     'Fakultas Teknik',
     'Fakultas Teknologi Rekayasa',
-    'Fakultas Vokasi'
+    'Fakultas Vokasi',
+    'Direktorat Akademik',
+    'Direktorat Digitalisasi',
+    'Direktorat Kemahasiswaan',
+    'Direktorat Manajemen Aset, Keuangan, Dan Sarana Prasarana',
+    'Direktorat Organisasi dan Sumber Daya Insani',
+    'Direktorat Pemelajaran',
+    'Direktorat Pengelolaan Bisnis, Inovasi dan Kewirausahaan',
+    'Direktorat Perencanaan Strategis dan Pemasaran',
+    'Direktorat Urusan Internasional, Kerja Sama, dan Alumni',
+    'Kantor Legal',
+    'Kantor Media Digital',
+    'Kantor Sekretariat Rektorat',
+    'Lembaga Penelitian dan Pengabdian kepada Masyarakat',
+    'Lembaga Penjaminan Mutu',
+    'Lembaga Pengembangan Humaniora',
+    'Perpustakaan'
   ],
   TEMPLATES: {
     EDU_FAIR_TASK: '1GxHt4CYcsmKHjuMlLwzfpolhblG6GUtOOazaX70zuws',
@@ -202,7 +219,10 @@ const DOCUMENT_HEADERS = Object.freeze([
   'Email Status',
   'Revision',
   'Dibuat Pada',
-  'Diubah Pada'
+  'Diubah Pada',
+  'Email To',
+  'Email CC',
+  'Email BCC'
 ]);
 
 const TRAVEL_HEADERS = Object.freeze([
@@ -237,4 +257,17 @@ const AUDIT_HEADERS = Object.freeze([
 const GENERATED_FILE_HEADERS = Object.freeze([
   'Request ID', 'Artifact Key', 'Revision', 'Type', 'File ID', 'URL',
   'Created At', 'Created By', 'Status', 'Metadata JSON'
+]);
+
+const TEMPLATE_CONFIG_HEADERS = Object.freeze([
+  'Template Key',
+  'Nama Template',
+  'Jenis Surat',
+  'Kode Surat',
+  'Default To',
+  'Default CC',
+  'Default BCC',
+  'Template Email',
+  'Template Google Docs',
+  'Status Aktif'
 ]);

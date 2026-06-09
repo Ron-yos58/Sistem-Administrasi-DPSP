@@ -16,10 +16,31 @@ function setupSystem() {
     ensureSheet_(ss, 'FILES', GENERATED_FILE_HEADERS, report);
     ensureSheet_(ss, 'ACCESS', ACCESS_HEADERS, report);
     ensureSheet_(ss, 'SIGNATURE', SIGNATURE_HEADERS, report);
+    
+    // Auto-migrate TEMPLATE_CONFIG columns if legacy structure detected
+    const tempSheet = getSheet_('TEMPLATE_CONFIG', false);
+    if (tempSheet && tempSheet.getLastRow() >= 1) {
+      const currentHeaders = tempSheet.getRange(1, 1, 1, Math.max(1, tempSheet.getLastColumn())).getValues()[0].map(function(h) {
+        return String(h).trim();
+      });
+      if (currentHeaders.indexOf('Default CC') === -1) {
+        const oldRows = tempSheet.getRange(1, 1, tempSheet.getLastRow(), Math.max(1, tempSheet.getLastColumn())).getValues();
+        tempSheet.clear();
+        const newRows = oldRows.map(function(row, idx) {
+          if (idx === 0) return TEMPLATE_CONFIG_HEADERS;
+          return [row[0], row[1], row[2], row[3], '', '', '', '', row[4], row[5]];
+        });
+        tempSheet.getRange(1, 1, newRows.length, TEMPLATE_CONFIG_HEADERS.length).setValues(newRows);
+        report.push('Migrasi struktur TEMPLATE_CONFIG ke 10 kolom selesai.');
+      }
+    }
+    
+    ensureSheet_(ss, 'TEMPLATE_CONFIG', TEMPLATE_CONFIG_HEADERS, report);
 
     seedInitialAccessUser_(user.email, report);
     seedExportFolder_();
     seedEmailTemplates_();
+    seedTemplateConfigs_();
     formatSystemSheets_();
     clearAppCache_();
     logAudit_('SETUP_SYSTEM', '', true, { report: report, user: user.email });
@@ -106,7 +127,10 @@ function seedEmailTemplates_() {
     '{namaKegiatan}', '{namaMitra}', '{narasumber}', '{hari}', '{tanggal}',
     '{tempat}', '{tembusan}', '{nomorSurat}', '{nomorSuratMasuk}',
     '{tanggalSuratMasuk}', '{pengirimSuratMasuk}', '{perihalSuratMasuk}',
-    '{alamatMitra}', '{waktuKegiatan}'
+    '{alamatMitra}', '{waktuKegiatan}', '{textJoinNomor}', '{textJoinNama}',
+    '{textJoinNikNpm}', '{textJoinJabatan}', '{textJoinProdi}', '{textJoinEmail}',
+    '<<Text Join Nomor>>', '<<Text Join Nama>>', '<<Text Join NIK/NPM>>',
+    '<<Text Join Jabatan>>', '<<Text Join Prodi>>', '<<Text Join Email>>'
   ].join(', ');
 
   const commonClosing = '<br><br>Hormat kami,<br><strong>Direktur Perencanaan Strategis dan Pemasaran</strong>';
@@ -152,7 +176,7 @@ function seedEmailTemplates_() {
 }
 
 function formatSystemSheets_() {
-  ['MASTER', 'DOCUMENTS', 'SCHEDULES', 'EMPLOYEES', 'TRAVEL', 'CC', 'EMAIL_TEMPLATE', 'EXPORT', 'AUDIT', 'FILES', 'ACCESS', 'SIGNATURE']
+  ['MASTER', 'DOCUMENTS', 'SCHEDULES', 'EMPLOYEES', 'TRAVEL', 'CC', 'EMAIL_TEMPLATE', 'EXPORT', 'AUDIT', 'FILES', 'ACCESS', 'SIGNATURE', 'TEMPLATE_CONFIG']
     .forEach(function(key) {
       const sheet = getSheet_(key);
       const width = Math.max(1, sheet.getLastColumn());
@@ -163,4 +187,22 @@ function formatSystemSheets_() {
         .setWrap(true);
       sheet.setFrozenRows(1);
     });
+}
+
+function seedTemplateConfigs_() {
+  const sheet = getSheet_('TEMPLATE_CONFIG');
+  if (sheet.getLastRow() > 1) return;
+
+  const rows = [
+    ['EDU_FAIR_TASK', 'Surat Tugas - Edu Fair', 'Surat Tugas', 'ST', '', '', '', '', '1GxHt4CYcsmKHjuMlLwzfpolhblG6GUtOOazaX70zuws', 'TRUE'],
+    ['SPEAKER_WORKSHOP_TASK', 'Surat Tugas - Narasumber (Workshop)', 'Surat Tugas', 'ST', '', '', '', '', '1PcVlBo6Q81x9FjU6hpOECgI5Q5Pio0wD3-mwHsA4wRc', 'TRUE'],
+    ['SPEAKER_PROMOTION_TASK', 'Surat Tugas - Narasumber (Promosi)', 'Surat Tugas', 'ST', '', '', '', '', '1uaEvHJxPqdhgcNTqpjG-LcssPo-7bAboaa_rsrglrQI', 'TRUE'],
+    ['CAMPUS_VISIT_TASK', 'Surat Tugas - Campus Visit', 'Surat Tugas', 'ST', '', '', '', '', '1FB-0BchuGmPDEda7NyAdtGhxWv07VrMWz2YHbgR_L5o', 'TRUE'],
+    ['CAMPUS_VISIT_PERMISSION', 'Surat Izin Pimpinan - Campus Visit', 'Surat izin pimpinan - Campus Visit', 'I', 'Sekretaris Universitas', 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis, Manajer Aset dan Sarana Prasarana, Manajer Kemahasiswaan, Koordinator Kebersihan, Keamanan dan Ketertiban, Koordinator Kelas dan Fasilitas Pendukung', '', '', '1yjEBTJ4d-KODomgJqmFCeu6jeDhlEbF0E26Qx3mGoNQ', 'TRUE'],
+    ['CAMPUS_VISIT_RECOMMENDATION', 'Surat Rekomendasi Campus Visit - SU', 'Surat Rekomendasi Campus Visit - SU', 'I', 'Sekretaris Universitas', 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', '', '', '1K_yPfDoq0ePXlJtYiLzpSBCxdOGDgubTsrtj4CeQGRA', 'TRUE'],
+    ['CAMPUS_VISIT_REPLY', 'Surat Balasan Campus Visit', 'Surat Balasan Campus Visit', 'E', '', 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', '', '', '1kK5MORz9alFtAct2gAkygivqkpDTpN1MLXaGhkqVOMM', 'TRUE'],
+    ['SPEAKER_REQUEST_SEARCH', 'Surat Permohonan Narasumber (Dicarikan)', 'Surat Permohonan Narasumber kepada Dekan', 'I', '', '', '', '', '1ZhLP76Ysse6IKMlO_mN-61IwMZc0iWcQqk6OMyFdSK8', 'TRUE'],
+    ['SPEAKER_REQUEST_KNOWN', 'Surat Permohonan Narasumber (Sudah Ada)', 'Surat Permohonan Narasumber kepada Dekan', 'I', '', '', '', '', '1K5aik94SZW20X0TPLqIXZEmJ0p-r5ZoxJy9FO4Ywd24', 'TRUE']
+  ];
+  sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
 }

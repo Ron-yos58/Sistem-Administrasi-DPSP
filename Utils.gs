@@ -433,5 +433,66 @@ function logAudit_(action, entityId, success, details) {
 }
 
 function clearAppCache_() {
-  CacheService.getScriptCache().removeAll(['bootstrap', 'references', 'signers', 'employeeCatalog']);
+  CacheService.getScriptCache().removeAll(['bootstrap', 'references', 'signers', 'employeeCatalog', 'template_configs']);
 }
+
+
+/**
+ * Membuat nilai placeholder join pegawai/narasumber untuk template dokumen dan email.
+ * Mendukung placeholder baru ({textJoinNomor}) dan placeholder lama Autocrat
+ * (<<Text Join Nomor>>, <<Text Join Nama>>, dst.).
+ */
+function buildEmployeeJoinPlaceholders_(employees) {
+  const rows = Array.isArray(employees) ? employees : [];
+  const numbers = rows.map(function(_, index) { return String(index + 1); });
+  const names = rows.map(function(item) { return text_(item && item.name); });
+  const identifiers = rows.map(function(item) { return text_(item && item.identifier); });
+  const roles = rows.map(function(item) { return text_(item && item.role); });
+  const units = rows.map(function(item) { return text_(item && item.unit); });
+  const emails = rows.map(function(item) { return text_(item && item.email); });
+
+  const narasumber = rows.map(function(item, index) {
+    const lines = [(index + 1) + '. ' + text_(item && item.name)];
+    if (text_(item && item.identifier)) lines.push('   NIK/NPM: ' + text_(item.identifier));
+    if (text_(item && item.role)) lines.push('   Jabatan: ' + text_(item.role));
+    if (text_(item && item.unit)) lines.push('   Prodi/Unit: ' + text_(item.unit));
+    if (text_(item && item.email)) lines.push('   Email: ' + text_(item.email));
+    return lines.join('\n');
+  }).join('\n\n');
+
+  const values = {
+    textJoinNomor: numbers.join('\n'),
+    textJoinNama: names.join('\n'),
+    textJoinNikNpm: identifiers.join('\n'),
+    textJoinJabatan: roles.join('\n'),
+    textJoinProdi: units.join('\n'),
+    textJoinFakultas: units.join('\n'),
+    textJoinEmail: emails.filter(Boolean).join('\n'),
+    namaPegawai: names.join('\n'),
+    nipPegawai: identifiers.join('\n'),
+    jabatanPegawai: roles.join('\n'),
+    prodiPegawai: units.join('\n'),
+    fakultasPegawai: units.join('\n'),
+    emailPegawai: emails.filter(Boolean).join('\n'),
+    narasumber: narasumber
+  };
+
+  const aliases = {
+    'Text Join Nomor': values.textJoinNomor,
+    'Text Join Nama': values.textJoinNama,
+    'Text Join NIK/NPM': values.textJoinNikNpm,
+    'Text Join Jabatan': values.textJoinJabatan,
+    'Text Join Prodi': values.textJoinProdi,
+    'Text Join Fakultas': values.textJoinFakultas,
+    'Text Join Email': values.textJoinEmail,
+    'Nomor Urut Pegawai': values.textJoinNomor,
+    'Nama Pegawai': values.textJoinNama,
+    'NIP/NPM Pegawai': values.textJoinNikNpm,
+    'Jabatan Pegawai': values.textJoinJabatan,
+    'Prodi/Unit Pegawai': values.textJoinProdi,
+    'Email Pegawai': values.textJoinEmail
+  };
+  Object.keys(aliases).forEach(function(key) { values[key] = aliases[key]; });
+  return values;
+}
+
