@@ -22,12 +22,17 @@ function generateAndExportFinance(requestId, kind, format) {
   }
 
   return withScriptLock_(function() {
-    const generated = generateFinanceSheetInternal_(id, reportKind);
+    assertFinanceExportReady_(id, reportKind);
+    const sheetName = generatedSheetName_(reportKind, id);
+    const sheet = getSpreadsheet_().getSheetByName(sheetName);
+    if (!sheet || !isGeneratedSheet_(sheet)) {
+      throw new Error('Kelola dan lengkapi Google Sheet ' + reportKind + ' terlebih dahulu.');
+    }
     const exportOptions = reportKind === 'PERJADIN'
       ? { paperSize: 'A4', orientation: 'PORTRAIT' }
       : { paperSize: 'A4', orientation: 'LANDSCAPE' };
     return exportGeneratedSheetInternal_(
-      generated.sheetName,
+      sheetName,
       exportFormat,
       exportOptions,
       user
@@ -50,7 +55,8 @@ function exportGeneratedSheetInternal_(sheetName, format, options, user) {
   const requestId = metadata.requestId;
   const contentHash = sheetContentHash_(sheet, format, options);
   const existing = getGeneratedFilesByRequest_(requestId).find(function(file) {
-    return file.type === format &&
+    return file.status === 'ACTIVE' &&
+      file.type === format &&
       file.metadata.sheetName === sheetName &&
       file.metadata.contentHash === contentHash &&
       driveFileExists_(file.fileId);
@@ -62,7 +68,7 @@ function exportGeneratedSheetInternal_(sheetName, format, options, user) {
       requestId: requestId,
       format: format,
       fileId: existing.fileId,
-      url: existing.url
+      url: driveDownloadUrl_(existing.fileId)
     };
   }
 
@@ -71,12 +77,15 @@ function exportGeneratedSheetInternal_(sheetName, format, options, user) {
     : exportSheetXlsxBlob_(sheet);
   const fileName = sheetName + '.' + (format === 'PDF' ? 'pdf' : 'xlsx');
   const file = getOutputFolder_().createFile(blob.setName(fileName));
-  recordGeneratedArtifact_(
+  const artifactKey = 'FINANCE_' + metadata.kind;
+  supersedeGeneratedArtifacts_(requestId, artifactKey, [format]);
+  recordGeneratedArtifactData_(
     requestId,
-    'FINANCE_' + metadata.kind,
-    1,
+    artifactKey,
+    getRequestDetailInternal_(requestId).request.revision,
     format,
-    file,
+    file.getId(),
+    driveDownloadUrl_(file.getId()),
     {
       sheetName: sheetName,
       sheetId: sheet.getSheetId(),
@@ -95,7 +104,7 @@ function exportGeneratedSheetInternal_(sheetName, format, options, user) {
     requestId: requestId,
     format: format,
     fileId: file.getId(),
-    url: file.getUrl()
+    url: driveDownloadUrl_(file.getId())
   };
 }
 

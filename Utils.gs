@@ -170,13 +170,33 @@ function joinIndonesian_(values) {
   return items.slice(0, -1).join(', ') + ', dan ' + items[items.length - 1];
 }
 
+function normalizeTimeValue_(value) {
+  if (value == null || value === '') return '';
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, APP_CONFIG.TIME_ZONE, 'HH:mm');
+  }
+  if (typeof value === 'number' && isFinite(value)) {
+    const minutes = Math.round(((value % 1) + 1) % 1 * 24 * 60) % (24 * 60);
+    return String(Math.floor(minutes / 60)).padStart(2, '0') + ':' +
+      String(minutes % 60).padStart(2, '0');
+  }
+
+  const input = text_(value);
+  const match = input.match(/(?:^|\s)(\d{1,2})[.:](\d{2})(?::\d{2})?/);
+  if (!match) return '';
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return '';
+  return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+}
+
 function formatTimeRange_(startTime, endTime) {
-  const start = text_(startTime).replace(':', '.');
-  const end = text_(endTime).replace(':', '.');
+  const start = normalizeTimeValue_(startTime).replace(':', '.');
+  const end = normalizeTimeValue_(endTime).replace(':', '.');
   if (!start && !end) return '';
   if (!start) return end + ' WIB';
   if (!end || end === start) return start + ' WIB';
-  return start + ' - ' + end + ' WIB';
+  return start + '\u2013' + end + ' WIB';
 }
 
 function parseTimeRange_(value) {
@@ -191,12 +211,11 @@ function parseTimeRange_(value) {
   const input = text_(value)
     .replace(/\b(?:wib|wita|wit)\b/gi, '')
     .replace(/\bpukul\b/gi, '')
+    .replace(/GMT[+-]\d{2}:?\d{2}/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const match = input.match(
-    /(\d{1,2})[.:](\d{2})(?:\s*(?:-|\u2013|\u2014|s\.?\s*d\.?|sampai)\s*(\d{1,2})[.:](\d{2}))?/i
-  );
-  if (!match) return { startTime: '', endTime: '' };
+  const matches = Array.from(input.matchAll(/(\d{1,2})[.:](\d{2})(?::\d{2})?/g));
+  if (!matches.length) return { startTime: '', endTime: '' };
 
   function clock_(hour, minute) {
     const hours = Number(hour);
@@ -206,8 +225,10 @@ function parseTimeRange_(value) {
   }
 
   return {
-    startTime: clock_(match[1], match[2]),
-    endTime: match[3] ? clock_(match[3], match[4]) : ''
+    startTime: clock_(matches[0][1], matches[0][2]),
+    endTime: matches.length > 1
+      ? clock_(matches[matches.length - 1][1], matches[matches.length - 1][2])
+      : ''
   };
 }
 
@@ -235,6 +256,21 @@ function formatScheduleDateList_(items) {
     return String(parseIsoDate_(item.startDate).getDate());
   }));
   return joinIndonesian_(days) + ' ' + months[first.getMonth()] + ' ' + first.getFullYear();
+}
+
+function formatScheduleItem_(schedule) {
+  const item = schedule || {};
+  const startDate = text_(item.startDate);
+  const endDate = text_(item.endDate) || startDate;
+  const dateLabel = startDate
+    ? formatDayRange_(startDate, endDate).replace(/ - /g, '\u2013') + ', ' +
+      formatDateRange_(startDate, endDate).replace(/ - /g, '\u2013')
+    : '';
+  return [
+    dateLabel,
+    formatTimeRange_(item.startTime, item.endTime),
+    text_(item.place)
+  ].filter(Boolean).join(' | ');
 }
 
 function buildScheduleSummary_(schedules) {

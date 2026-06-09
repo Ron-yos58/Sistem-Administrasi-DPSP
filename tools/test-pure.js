@@ -18,7 +18,10 @@ const context = {
   isFinite,
   Utilities: {
     getUuid: () => '00000000-0000-4000-8000-000000000000',
-    formatDate: date => {
+    formatDate: (date, timeZone, pattern) => {
+      if (pattern === 'HH:mm') {
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+      }
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -28,7 +31,7 @@ const context = {
 };
 vm.createContext(context);
 
-for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'Migration.gs']) {
+for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'Migration.gs', 'DocumentService.gs']) {
   vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
 }
 
@@ -82,7 +85,7 @@ test('non-contiguous sessions stay one schedule summary', () => {
   equal(summary.dateDisplay, '25 dan 30 Juni 2026');
   equal(
     summary.timeDisplay,
-    '25 Juni 2026: 09.00 - 12.00 WIB\n30 Juni 2026: 13.00 - 15.00 WIB'
+    '25 Juni 2026: 09.00–12.00 WIB\n30 Juni 2026: 13.00–15.00 WIB'
   );
   equal(summary.placeDisplay, 'Aula');
 });
@@ -98,7 +101,7 @@ test('one continuous session remains a date range', () => {
   }]);
 
   equal(summary.dateDisplay, '25 - 27 Juni 2026');
-  equal(summary.timeDisplay, '09.00 - 15.00 WIB');
+  equal(summary.timeDisplay, '09.00–15.00 WIB');
 });
 
 test('legacy time range parsing', () => {
@@ -106,6 +109,140 @@ test('legacy time range parsing', () => {
     context.parseTimeRange_('Pukul 09.00 - 12.30 WIB'),
     { startTime: '09:00', endTime: '12:30' }
   );
+});
+
+test('legacy Date strings retain both clocks without the 1899 serial date', () => {
+  equal(
+    context.parseTimeRange_(
+      'Sat Dec 30 1899 09:00:00 GMT+0707 (Western Indonesia Time) - ' +
+      'Sat Dec 30 1899 18:00:00 GMT+0707 (Western Indonesia Time)'
+    ),
+    { startTime: '09:00', endTime: '18:00' }
+  );
+});
+
+test('spreadsheet time Date objects do not leak the 1899 serial date', () => {
+  const start = new Date(1899, 11, 30, 9, 0, 0);
+  const end = new Date(1899, 11, 30, 18, 0, 0);
+  equal(context.normalizeTimeValue_(start), '09:00');
+  equal(context.normalizeTimeValue_(end), '18:00');
+  equal(context.formatTimeRange_(start, end), '09.00–18.00 WIB');
+});
+
+test('spreadsheet numeric time serials are normalized', () => {
+  equal(context.normalizeTimeValue_(0.375), '09:00');
+  equal(context.normalizeTimeValue_(0.75), '18:00');
+});
+
+test('schedule detail label uses concise Indonesian format', () => {
+  equal(
+    context.formatScheduleItem_({
+      startDate: '2026-06-25',
+      endDate: '2026-06-25',
+      startTime: new Date(1899, 11, 30, 9, 0, 0),
+      endTime: new Date(1899, 11, 30, 18, 0, 0),
+      place: 'Jakarta'
+    }),
+    'Kamis, 25 Juni 2026 | 09.00–18.00 WIB | Jakarta'
+  );
+});
+
+test('schedule detail label supports a cross-day date range', () => {
+  equal(
+    context.formatScheduleItem_({
+      startDate: '2026-06-25',
+      endDate: '2026-06-26',
+      startTime: '09:00',
+      endTime: '18:00',
+      place: 'Jakarta'
+    }),
+    'Kamis–Jumat, 25–26 Juni 2026 | 09.00–18.00 WIB | Jakarta'
+  );
+});
+
+test('empty schedule detail does not leave dangling separators', () => {
+  equal(context.formatScheduleItem_({}), '');
+});
+
+test('finance artifact links use active files and direct downloads', () => {
+  const previous = context.getGeneratedFilesByRequest_;
+  context.getGeneratedFilesByRequest_ = () => [
+    {
+      artifactKey: 'FINANCE_HONOR',
+      type: 'PDF',
+      fileId: 'old-pdf',
+      url: 'https://drive.google.com/file/d/old-pdf/view',
+      status: 'SUPERSEDED'
+    },
+    {
+      artifactKey: 'FINANCE_HONOR',
+      type: 'SHEET',
+      fileId: 'spreadsheet-id',
+      url: 'https://docs.google.com/spreadsheets/d/spreadsheet-id/edit#gid=12',
+      status: 'ACTIVE'
+    },
+    {
+      artifactKey: 'FINANCE_HONOR',
+      type: 'PDF',
+      fileId: 'new-pdf',
+      url: 'https://drive.google.com/file/d/new-pdf/view',
+      status: 'ACTIVE'
+    },
+    {
+      artifactKey: 'FINANCE_PERJADIN',
+      type: 'XLSX',
+      fileId: 'travel-xlsx',
+      url: 'https://drive.google.com/file/d/travel-xlsx/view',
+      status: 'ACTIVE'
+    }
+  ];
+  try {
+    equal(
+      context.getFinanceArtifactUrls_('REQ-1'),
+      {
+        honorSheetUrl: 'https://docs.google.com/spreadsheets/d/spreadsheet-id/edit#gid=12',
+        honorPdfUrl: 'https://drive.google.com/uc?export=download&id=new-pdf',
+        honorExcelUrl: '',
+        perjadinSheetUrl: '',
+        perjadinPdfUrl: '',
+        perjadinExcelUrl: 'https://drive.google.com/uc?export=download&id=travel-xlsx'
+      }
+    );
+  } finally {
+    context.getGeneratedFilesByRequest_ = previous;
+  }
+});
+
+test('finance artifact invalidation is scoped by request and artifact key', () => {
+  const rows = [
+    ['REQ-1', 'FINANCE_PERJADIN', 1, 'SHEET', 'sheet', 'url', '', '', 'ACTIVE', '{}'],
+    ['REQ-1', 'FINANCE_PERJADIN', 1, 'PDF', 'pdf', 'url', '', '', 'ACTIVE', '{}'],
+    ['REQ-1', 'FINANCE_HONOR', 1, 'PDF', 'honor-pdf', 'url', '', '', 'ACTIVE', '{}'],
+    ['REQ-2', 'FINANCE_PERJADIN', 1, 'PDF', 'other-pdf', 'url', '', '', 'ACTIVE', '{}']
+  ];
+  const fakeSheet = {
+    getLastRow: () => rows.length + 1,
+    getRange: () => ({
+      getValues: () => rows.map(row => row.slice()),
+      clearContent: () => { rows.length = 0; },
+      setValues: values => {
+        rows.length = 0;
+        values.forEach(row => rows.push(row.slice()));
+      }
+    })
+  };
+  const previousGetSheet = context.getSheet_;
+  context.getSheet_ = () => fakeSheet;
+  try {
+    context.supersedeGeneratedArtifacts_(
+      'REQ-1',
+      'FINANCE_PERJADIN',
+      ['SHEET', 'PDF', 'XLSX']
+    );
+    equal(rows.map(row => row[8]), ['SUPERSEDED', 'SUPERSEDED', 'ACTIVE', 'ACTIVE']);
+  } finally {
+    context.getSheet_ = previousGetSheet;
+  }
 });
 
 test('document workflow summary keeps request and processing states separate', () => {
@@ -310,6 +447,28 @@ test('incomplete draft remains valid', () => {
   });
 });
 
+test('draft preserves partially filled employee rows', () => {
+  const normalized = context.normalizeRequestPayload_({
+    status: 'DRAFT',
+    activityType: 'Edu Fair',
+    documents: [],
+    employees: [{
+      name: '',
+      identifier: '',
+      email: '',
+      role: 'Dosen',
+      unit: 'Fakultas Teknik',
+      rank: '',
+      category: ''
+    }],
+    schedules: [],
+    faculties: []
+  });
+  equal(normalized.employees.length, 1);
+  equal(normalized.employees[0].role, 'Dosen');
+  equal(normalized.employees[0].unit, 'Fakultas Teknik');
+});
+
 test('ready task requires document number and employee', () => {
   let failed = false;
   try {
@@ -334,6 +493,117 @@ test('ready task requires document number and employee', () => {
     failed = /Nomor surat/.test(error.message) && /Minimal satu/.test(error.message);
   }
   if (!failed) throw new Error('validation did not reject incomplete ready request');
+});
+
+test('ready employee requires identity, contact, role, and faculty', () => {
+  let failed = false;
+  try {
+    context.validateRequestPayload_({
+      status: 'READY',
+      activityType: 'Edu Fair',
+      activityName: 'Edu Fair',
+      partnerName: 'Sekolah',
+      schedules: [{
+        startDate: '2026-06-01',
+        endDate: '2026-06-01',
+        startTime: '09:00',
+        endTime: '12:00',
+        place: 'Bandung'
+      }],
+      documents: [{ type: 'Surat Tugas', number: '001/DPSP/2026' }],
+      employees: [{
+        name: 'Budi',
+        identifier: '',
+        email: '',
+        role: '',
+        unit: '',
+        rank: '',
+        category: ''
+      }],
+      travel: 'Tidak',
+      speakerSubtype: '',
+      speakerStatus: '',
+      faculties: [],
+      incomingDate: '',
+      letterDate: '2026-06-01'
+    });
+  } catch (error) {
+    failed = /NIP\/NPM/.test(error.message) &&
+      /Email/.test(error.message) &&
+      /Jabatan/.test(error.message) &&
+      /Fakultas/.test(error.message);
+  }
+  if (!failed) throw new Error('incomplete employee data was accepted');
+});
+
+test('rank and category remain optional for travel requests', () => {
+  context.validateRequestPayload_({
+    status: 'READY',
+    activityType: 'Edu Fair',
+    activityName: 'Edu Fair',
+    partnerName: 'Sekolah',
+    schedules: [{
+      startDate: '2026-06-01',
+      endDate: '2026-06-01',
+      startTime: '09:00',
+      endTime: '12:00',
+      place: 'Bandung'
+    }],
+    documents: [{ type: 'Surat Tugas', number: '001/DPSP/2026' }],
+    employees: [{
+      name: 'Budi',
+      identifier: '12345',
+      email: 'budi@example.com',
+      role: 'Dosen',
+      unit: 'Fakultas Teknik',
+      rank: '',
+      category: ''
+    }],
+    travel: 'Ya',
+    speakerSubtype: '',
+    speakerStatus: '',
+    faculties: [],
+    incomingDate: '',
+    letterDate: '2026-06-01'
+  });
+});
+
+test('ready employee faculty must use configured faculty list', () => {
+  let failed = false;
+  try {
+    context.validateRequestPayload_({
+      status: 'READY',
+      activityType: 'Edu Fair',
+      activityName: 'Edu Fair',
+      partnerName: 'Sekolah',
+      schedules: [{
+        startDate: '2026-06-01',
+        endDate: '2026-06-01',
+        startTime: '09:00',
+        endTime: '12:00',
+        place: 'Bandung'
+      }],
+      documents: [{ type: 'Surat Tugas', number: '001/DPSP/2026' }],
+      employees: [{
+        name: 'Budi',
+        identifier: '12345',
+        email: 'budi@example.com',
+        role: 'Dosen',
+        unit: 'Unit Tidak Terdaftar',
+        rank: '',
+        category: ''
+      }],
+      travel: 'Tidak',
+      speakerSubtype: '',
+      speakerStatus: '',
+      faculties: [],
+      incomingDate: '',
+      letterDate: '2026-06-01'
+    });
+  } catch (error) {
+    failed = /Fakultas orang ke-1 tidak valid/.test(error.message);
+  }
+  if (!failed) throw new Error('unknown faculty was accepted');
 });
 
 test('readDataRows reads rows even when first column is blank', () => {
@@ -408,6 +678,119 @@ test('request document rewrite invalidates stale generated files', () => {
     equal(output[0].emailStatus, '');
   } finally {
     context.getSheet_ = previousGetSheet;
+  }
+});
+
+test('request status changes do not change generation fingerprint', () => {
+  const base = {
+    status: 'DRAFT',
+    activityType: 'Edu Fair',
+    activityName: 'Pameran',
+    partnerName: 'Mitra',
+    documents: [{ type: 'Surat Tugas', number: '001' }],
+    schedules: [{
+      startDate: '2026-06-20',
+      endDate: '2026-06-20',
+      startTime: '09:00',
+      endTime: '12:00',
+      place: 'Aula'
+    }],
+    employees: [{
+      name: 'Andi',
+      identifier: '123',
+      role: 'Staf',
+      unit: 'Fakultas Ekonomi',
+      email: 'andi@example.com'
+    }]
+  };
+  equal(
+    context.requestGenerationFingerprint_(base),
+    context.requestGenerationFingerprint_(Object.assign({}, base, { status: 'READY' }))
+  );
+});
+
+test('unchanged document rewrite preserves generated artifacts', () => {
+  const rows = [[
+    'DOC-1', 'REQ-1', 'Surat Tugas', '', '', '001', 'EDU_FAIR_TASK',
+    'GENERATED', 'doc-id', 'doc-url', 'pdf-id', 'pdf-url',
+    'draft-id', 'DRAFTED', 1, '2026-06-01', '2026-06-01'
+  ]];
+  const fakeSheet = {
+    getLastRow: () => rows.length + 1,
+    getRange: (row, column, rowCount, columnCount) => ({
+      getValues: () => rows.map(item => item.slice(0, columnCount)),
+      clearContent: () => { rows.length = 0; },
+      setValues: values => {
+        rows.length = 0;
+        values.forEach(value => rows.push(value.slice()));
+      }
+    })
+  };
+  const previousGetSheet = context.getSheet_;
+  context.getSheet_ = () => fakeSheet;
+  try {
+    const output = context.replaceDocumentsForRequest_('REQ-1', [{
+      activityType: 'Edu Fair',
+      type: 'Surat Tugas',
+      speakerSubtype: '',
+      speakerStatus: '',
+      number: '001'
+    }], 2, true);
+    equal(output[0].docId, 'doc-id');
+    equal(output[0].pdfId, 'pdf-id');
+    equal(output[0].emailDraftId, 'draft-id');
+  } finally {
+    context.getSheet_ = previousGetSheet;
+  }
+});
+
+test('process request only activates workflow', () => {
+  const source = fs.readFileSync(path.join(root, 'EmailService.gs'), 'utf8');
+  const match = source.match(/function processRequest\([\s\S]*?\n}\n\nfunction buildEmailPreviewInternal_/);
+  if (!match) throw new Error('processRequest function was not found');
+  if (!match[0].includes('activateRequestInternal_')) {
+    throw new Error('processRequest does not activate the request');
+  }
+  if (/generateDocumentInternal_|createEmailDraftInternal_/.test(match[0])) {
+    throw new Error('processRequest still generates documents or Gmail drafts');
+  }
+});
+
+test('finance input is managed only in generated spreadsheets', () => {
+  const index = fs.readFileSync(path.join(root, 'Index.html'), 'utf8');
+  const scripts = fs.readFileSync(path.join(root, 'Scripts.html'), 'utf8');
+  const finance = fs.readFileSync(path.join(root, 'FinanceService.gs'), 'utf8');
+  if (/view-finance|travelCostForm|travelModal|travelTableBody/.test(index + scripts)) {
+    throw new Error('legacy web finance editor is still exposed');
+  }
+  if (!finance.includes('isTravelSheetComplete_')) {
+    throw new Error('Perjadin readiness does not inspect the generated spreadsheet');
+  }
+  if (!finance.includes(".setFormula('=C' + sourceRow)")) {
+    throw new Error('Perjadin duplicate amount table is not linked to the primary input');
+  }
+  if (!finance.includes('reused: reused')) {
+    throw new Error('existing finance sheets are not explicitly reused');
+  }
+  if (!finance.includes('SpreadsheetApp.create(generatedSpreadsheetFileName_')) {
+    throw new Error('finance output is not created as a separate spreadsheet');
+  }
+  if (/preview-document|documentPreviewModal/.test(index + scripts)) {
+    throw new Error('removed document preview is still exposed');
+  }
+  const toolbar = scripts.match(/renderFinanceToolbar_:[\s\S]*?\n    handleDetailAction:/);
+  if (!toolbar || /export-finance|Buat \/ Update PDF|Buat \/ Update Excel/.test(toolbar[0])) {
+    throw new Error('finance export actions are still exposed in request detail');
+  }
+});
+
+test('requests page keeps archived items visible by default', () => {
+  const data = fs.readFileSync(path.join(root, 'DataService.gs'), 'utf8');
+  if (data.includes('includeArchived') && data.includes("item.status === 'ARCHIVED'")) {
+    const listRequests = data.match(/function listRequestsInternal_\([\s\S]*?\n  }\n\n  function saveRequest/);
+    if (listRequests && /includeArchived[\s\S]*ARCHIVED/.test(listRequests[0])) {
+      throw new Error('request list still hides archived items by default');
+    }
   }
 });
 

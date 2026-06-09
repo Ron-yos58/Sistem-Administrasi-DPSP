@@ -99,7 +99,9 @@ function saveTravelCosts(payload) {
     if (index === -1) throw new Error('Data perjadin tidak ditemukan. Jalankan sinkronisasi.');
     for (let i = 0; i < normalized.length; i++) rows[index][8 + i] = normalized[i];
     rewriteDataRows_(sheet, rows, TRAVEL_HEADERS.length);
-    logAudit_('SAVE_TRAVEL_COSTS', rows[index][0], true, { participantKey: participantKey });
+    const requestId = text_(rows[index][0]);
+    supersedeGeneratedArtifacts_(requestId, 'FINANCE_PERJADIN', ['SHEET', 'PDF', 'XLSX']);
+    logAudit_('SAVE_TRAVEL_COSTS', requestId, true, { participantKey: participantKey });
     return { ok: true, item: travelRowToDto_(rows[index]) };
   });
 }
@@ -156,26 +158,50 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
   if (reportKind === 'PERJADIN' && detail.request.travel !== 'Ya') {
     throw new Error('Permohonan ini tidak ditandai memiliki perjalanan dinas.');
   }
+  if (reportKind === 'HONOR' && !detail.employees.length) {
+    throw new Error('Data Honor belum dapat dikelola karena belum ada penerima honor.');
+  }
+  if (reportKind === 'PERJADIN' && !detail.travel.length) {
+    throw new Error('Data Perjadin belum tersedia. Proses permohonan terlebih dahulu.');
+  }
 
-  const ss = getSpreadsheet_();
   const sheetName = generatedSheetName_(reportKind, requestId);
-  let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
-    sheet.addDeveloperMetadata('DPSP_GENERATED', reportKind + '|' + requestId);
-  } else {
-    if (!isGeneratedSheet_(sheet)) {
-      throw new Error('Sheet bernama ' + sheetName + ' sudah ada tetapi bukan artefak sistem.');
-    }
-    sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).breakApart();
-    sheet.clear();
-  }
+  const existingOutput = getFinanceSpreadsheetOutput_(requestId, reportKind, false);
+  let spreadsheet = existingOutput ? existingOutput.spreadsheet : null;
+  let sheet = existingOutput ? existingOutput.sheet : null;
+  const reused = Boolean(spreadsheet && spreadsheet.getId() !== getSpreadsheet_().getId());
 
-  if (reportKind === 'HONOR') {
-    renderHonorSheet_(sheet, detail);
-  } else {
-    renderTravelSheet_(sheet, detail);
+  if (!reused) {
+    spreadsheet = SpreadsheetApp.create(generatedSpreadsheetFileName_(reportKind, requestId));
+    DriveApp.getFileById(spreadsheet.getId()).moveTo(getOutputFolder_());
+    spreadsheet.setSpreadsheetTimeZone(APP_CONFIG.TIME_ZONE);
+    sheet = spreadsheet.getSheets()[0];
+    sheet.setName(sheetName);
+    sheet.addDeveloperMetadata('DPSP_GENERATED', reportKind + '|' + requestId);
+    if (reportKind === 'HONOR') {
+      renderHonorSheet_(sheet, detail);
+    } else {
+      renderTravelSheet_(sheet, detail);
+    }
   }
+  const artifactKey = 'FINANCE_' + reportKind;
+  const sheetUrl = spreadsheet.getUrl();
+  supersedeGeneratedArtifacts_(requestId, artifactKey, ['SHEET']);
+  recordGeneratedArtifactData_(
+    requestId,
+    artifactKey,
+    detail.request.revision,
+    'SHEET',
+    spreadsheet.getId(),
+    sheetUrl,
+    {
+      kind: reportKind,
+      sheetName: sheetName,
+      sheetId: sheet.getSheetId(),
+      spreadsheetId: spreadsheet.getId(),
+      storage: 'SEPARATE_SPREADSHEET'
+    }
+  );
   logAudit_('GENERATE_FINANCE_SHEET', requestId, true, {
     kind: reportKind,
     sheetId: sheet.getSheetId(),
@@ -186,10 +212,127 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
     ok: true,
     requestId: requestId,
     kind: reportKind,
+    reused: reused,
+    spreadsheetId: spreadsheet.getId(),
     sheetName: sheetName,
     sheetId: sheet.getSheetId(),
-    url: ss.getUrl() + '#gid=' + sheet.getSheetId()
+    url: sheetUrl
   };
+}
+
+function getFinanceReadiness_(requestId) {
+  const detail = getRequestDetailInternal_(requestId);
+  const honorOutput = getFinanceSpreadsheetOutput_(requestId, 'HONOR', true);
+  const travelOutput = getFinanceSpreadsheetOutput_(requestId, 'PERJADIN', true);
+  const honorSheet = honorOutput ? honorOutput.sheet : null;
+  const travelSheet = travelOutput ? travelOutput.sheet : null;
+  const honor = {
+    required: detail.request.honor === 'Ya',
+    complete: false,
+    message: 'Honor tidak diperlukan.'
+  };
+  if (honor.required) {
+    if (!detail.employees.length) {
+      honor.message = 'Tambahkan penerima Honor terlebih dahulu.';
+    } else if (!honorSheet || !isGeneratedSheet_(honorSheet)) {
+      honor.message = 'Buat dan lengkapi Google Sheet Honor terlebih dahulu.';
+    } else {
+      const startRow = 9;
+      const count = detail.employees.length;
+      const values = honorSheet.getRange(startRow, 1, count, 9).getValues();
+      honor.complete = values.every(function(row) {
+        if (detail.request.activityType === 'Penugasan Narasumber') {
+          return Boolean(text_(row[1]) && text_(row[2]) && text_(row[3]) && Number(row[6]) > 0);
+        }
+        return Boolean(
+          text_(row[1]) && text_(row[2]) && text_(row[3]) && text_(row[4]) &&
+          Number(row[8]) > 0
+        );
+      });
+      honor.message = honor.complete
+        ? 'Data Honor pada spreadsheet sudah lengkap.'
+        : 'Silakan lengkapi data Honor terlebih dahulu.';
+    }
+  }
+
+  const travel = {
+    required: detail.request.travel === 'Ya',
+    complete: false,
+    message: 'Perjadin tidak diperlukan.'
+  };
+  if (travel.required) {
+    if (!detail.travel.length) {
+      travel.message = 'Tambahkan pelaksana Perjadin terlebih dahulu.';
+    } else if (!travelSheet || !isGeneratedSheet_(travelSheet)) {
+      travel.message = 'Buat dan lengkapi Google Sheet Perjadin terlebih dahulu.';
+    } else {
+      travel.complete = isTravelSheetComplete_(travelSheet, detail.travel.length);
+      travel.message = travel.complete
+        ? 'Data Perjadin pada spreadsheet sudah lengkap.'
+        : 'Silakan lengkapi nominal Perjadin pada Google Sheet terlebih dahulu.';
+    }
+  }
+  return { honor: honor, perjadin: travel };
+}
+
+function isTravelSheetComplete_(sheet, participantCount) {
+  const componentCount = 11;
+  const sectionHeight = 72;
+  let titleRow = 1;
+  for (let index = 0; index < participantCount; index++) {
+    const amounts = sheet.getRange(titleRow + 16, 3, componentCount, 1).getValues();
+    const hasAmount = amounts.some(function(row) {
+      const amount = Number(row[0] || 0);
+      return isFinite(amount) && amount > 0;
+    });
+    if (!hasAmount) {
+      return false;
+    }
+    titleRow += sectionHeight;
+  }
+  return true;
+}
+
+function getFinanceSpreadsheetOutput_(requestId, reportKind, allowLegacy) {
+  const artifactKey = 'FINANCE_' + reportKind;
+  const mainSpreadsheetId = getSpreadsheet_().getId();
+  const artifact = getGeneratedFilesByRequest_(requestId).filter(function(file) {
+    const isActive = text_(file.status).toUpperCase() === 'ACTIVE';
+    const isSeparateSpreadsheet = text_(file.fileId) !== mainSpreadsheetId;
+    return (allowLegacy ? isActive : isSeparateSpreadsheet) &&
+      text_(file.type).toUpperCase() === 'SHEET' &&
+      file.artifactKey === artifactKey &&
+      driveFileExists_(file.fileId);
+  }).pop();
+  if (artifact) {
+    try {
+      const spreadsheet = SpreadsheetApp.openById(artifact.fileId);
+      if (!allowLegacy && spreadsheet.getId() === getSpreadsheet_().getId()) {
+        return null;
+      }
+      const sheetName = text_(artifact.metadata.sheetName) || generatedSheetName_(reportKind, requestId);
+      const sheet = spreadsheet.getSheetByName(sheetName);
+      if (sheet && isGeneratedSheet_(sheet)) {
+        return { spreadsheet: spreadsheet, sheet: sheet, artifact: artifact };
+      }
+    } catch (error) {
+      console.warn('Artefak spreadsheet keuangan tidak dapat dibuka: ' + error.message);
+    }
+  }
+  if (!allowLegacy) return null;
+  const legacySpreadsheet = getSpreadsheet_();
+  const legacySheet = legacySpreadsheet.getSheetByName(generatedSheetName_(reportKind, requestId));
+  if (!legacySheet || !isGeneratedSheet_(legacySheet)) return null;
+  return { spreadsheet: legacySpreadsheet, sheet: legacySheet, artifact: null };
+}
+
+function assertFinanceExportReady_(requestId, reportKind) {
+  const readiness = getFinanceReadiness_(requestId);
+  const state = reportKind === 'HONOR' ? readiness.honor : readiness.perjadin;
+  if (!state.required || !state.complete) {
+    throw new Error(state.message);
+  }
+  return state;
 }
 
 function previewGeneratedSheetCleanup() {
@@ -214,7 +357,13 @@ function deleteGeneratedSheets(sheetNames) {
       if (!sheet || !isGeneratedSheet_(sheet)) {
         throw new Error('Sheet bukan artefak sistem dan tidak boleh dihapus: ' + name);
       }
+      const metadata = generatedSheetMetadata_(sheet);
       ss.deleteSheet(sheet);
+      supersedeGeneratedArtifacts_(
+        metadata.requestId,
+        'FINANCE_' + metadata.kind,
+        ['SHEET']
+      );
       deleted.push(name);
     });
     logAudit_('DELETE_GENERATED_SHEETS', '', true, { deleted: deleted });
@@ -552,10 +701,14 @@ function renderTravelParticipantSection_(sheet, startRow, request, item, sequenc
     .setWrap(true);
   componentLabels.forEach(function(label, idx) {
     const row = table2StartRow + 1 + idx;
+    const sourceRow = tableStartRow + 1 + idx;
     sheet.getRange(row, 1, 1, 3).setBorder(true, true, true, true, true, true);
     sheet.getRange(row, 1).setValue(idx + 1).setHorizontalAlignment('center');
     sheet.getRange(row, 2).setValue(label);
-    sheet.getRange(row, 3).setValue(Number(item.costs[idx] || 0)).setBackground('#d9d9d9').setNumberFormat('"Rp"#,##0');
+    sheet.getRange(row, 3)
+      .setFormula('=C' + sourceRow)
+      .setBackground('#f3f4f4')
+      .setNumberFormat('"Rp"#,##0');
   });
   const totalRow2 = table2StartRow + 1 + componentLabels.length;
   sheet.getRange(totalRow2, 1, 1, 2).merge()
@@ -727,6 +880,11 @@ function countTravelDays_(startDate, endDate) {
 function generatedSheetName_(kind, requestId) {
   const safeId = requestId.replace(/[^A-Za-z0-9_-]/g, '-').slice(-40);
   return ('GEN-' + kind + '-' + safeId).slice(0, 99);
+}
+
+function generatedSpreadsheetFileName_(kind, requestId) {
+  const safeId = requestId.replace(/[^A-Za-z0-9_-]/g, '-').slice(-60);
+  return (kind + ' - ' + safeId).slice(0, 180);
 }
 
 function isGeneratedSheet_(sheet) {

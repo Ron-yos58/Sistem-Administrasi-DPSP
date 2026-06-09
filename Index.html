@@ -19,27 +19,41 @@
             <strong>DPSP</strong>
             <span>Sistem Surat</span>
           </div>
-          <button class="icon-button sidebar-close" id="sidebarClose" type="button" aria-label="Tutup menu"><i data-lucide="x" aria-hidden="true">×</i></button>
+          <button class="icon-button sidebar-close" id="sidebarClose" type="button" aria-label="Tutup menu">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
 
         <nav class="main-nav" aria-label="Navigasi utama">
           <button class="nav-item is-active" data-view="dashboard">
-            <span class="nav-icon"><i data-lucide="layout-dashboard" aria-hidden="true">⌂</i></span><span>Ringkasan</span>
+            <span class="nav-icon" aria-hidden="true">
+              <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </span>
+            <span>Ringkasan</span>
           </button>
           <button class="nav-item" data-view="requests">
-            <span class="nav-icon"><i data-lucide="files" aria-hidden="true">▤</i></span><span>Permohonan</span>
+            <span class="nav-icon" aria-hidden="true">
+              <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </span>
+            <span>Permohonan</span>
           </button>
           <button class="nav-item" data-view="form">
-            <span class="nav-icon"><i data-lucide="file-plus-2" aria-hidden="true">＋</i></span><span>Buat Permohonan</span>
-          </button>
-          <button class="nav-item" data-view="finance">
-            <span class="nav-icon"><i data-lucide="wallet-cards" aria-hidden="true">Rp</i></span><span>Honor & Perjadin</span>
+            <span class="nav-icon" aria-hidden="true">
+              <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            </span>
+            <span>Buat Permohonan</span>
           </button>
           <button class="nav-item" data-view="references">
-            <span class="nav-icon"><i data-lucide="database" aria-hidden="true">◇</i></span><span>Data Referensi</span>
+            <span class="nav-icon" aria-hidden="true">
+              <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+            </span>
+            <span>Data Referensi</span>
           </button>
           <button class="nav-item" data-view="admin" data-admin-only>
-            <span class="nav-icon"><i data-lucide="settings" aria-hidden="true">⚙</i></span><span>Admin</span>
+            <span class="nav-icon" aria-hidden="true">
+              <svg class="nav-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </span>
+            <span>Admin</span>
           </button>
         </nav>
 
@@ -52,11 +66,15 @@
 
       <div class="workspace">
         <header class="topbar">
-          <button class="icon-button menu-toggle" id="menuToggle" aria-label="Buka menu" aria-expanded="false" aria-controls="sidebar"><i data-lucide="menu" aria-hidden="true">☰</i></button>
+          <button class="icon-button menu-toggle" id="menuToggle" aria-label="Buka menu" aria-expanded="false" aria-controls="sidebar">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
           <h1 id="pageTitle">Ringkasan</h1>
           <div class="topbar-actions">
             <span class="topbar-user" id="userEmail">Memuat pengguna...</span>
-            <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
+            <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            </button>
           </div>
         </header>
 
@@ -78,7 +96,7 @@
                     <p class="eyebrow">TERBARU</p>
                     <h3>Permohonan terkini</h3>
                   </div>
-                  <button class="text-button" data-view-target="requests">Lihat semua <i data-lucide="arrow-right" aria-hidden="true"></i></button>
+                  <button class="text-button" data-view-target="requests">Lihat semua</button>
                 </div>
                 <div id="recentRequests" class="request-list"></div>
               </article>
@@ -99,7 +117,7 @@
           <section class="view" id="view-requests">
             <div class="section-toolbar">
               <div class="search-box">
-                <span aria-hidden="true">⌕</span>
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input id="requestSearch" type="search" placeholder="Cari ID, kegiatan, mitra, nomor surat">
               </div>
               <select id="requestTypeFilter" aria-label="Filter tipe kegiatan">
@@ -207,7 +225,7 @@
                     <div class="field">
                       <span>Jadwal kegiatan *</span>
                       <div id="scheduleList" class="schedule-list"></div>
-                      <button class="button button-secondary button-small schedule-add" type="button" id="addSchedule"><i data-lucide="calendar-plus" aria-hidden="true"></i>Tambah sesi</button>
+                      <button class="button button-secondary button-small schedule-add" type="button" id="addSchedule">Tambah sesi</button>
                     </div>
                   </section>
 
@@ -226,7 +244,7 @@
                   <section class="form-card">
                     <div class="step-heading"><span>05</span><div><h3>Petugas atau narasumber</h3><p>Data orang dipakai untuk surat, email, honor, dan perjadin.</p></div></div>
                     <div id="employeeList" class="employee-list"></div>
-                    <button class="button button-secondary" type="button" id="addEmployee"><i data-lucide="user-plus" aria-hidden="true"></i>Tambah orang</button>
+                    <button class="button button-secondary" type="button" id="addEmployee">Tambah orang</button>
                   </section>
 
                   <section class="form-card">
@@ -235,7 +253,23 @@
                       <label class="field"><span>Honor</span><select id="honor"><option>Tidak</option><option>Ya</option></select></label>
                       <label class="field"><span>Perjalanan dinas</span><select id="travel"><option>Tidak</option><option>Ya</option></select></label>
                     </div>
-                    <p class="helper-text">Jika Perjalanan Dinas = Ya, pangkat dan kategori setiap orang wajib diisi.</p>
+                    <p class="helper-text">Pangkat penunjang dan kategori penerima tugas bersifat opsional.</p>
+                  </section>
+
+                  <section class="form-card" id="emailRoutingCard">
+                    <div class="step-heading"><span>07</span><div><h3>Penerima CC tambahan</h3><p>Opsional. Pilih penerima <strong>To</strong> dan <strong>CC</strong> tambahan dari Master CC. Kosongkan untuk menggunakan routing otomatis saja.</p></div></div>
+                    <div class="field">
+                      <span>Tambahan To</span>
+                      <div class="check-list routing-check-list" id="emailToChoices">
+                        <p class="helper-text">Memuat data Master CC…</p>
+                      </div>
+                    </div>
+                    <div class="field">
+                      <span>CC</span>
+                      <div class="check-list routing-check-list" id="emailCcChoices">
+                        <p class="helper-text">Memuat data Master CC…</p>
+                      </div>
+                    </div>
                   </section>
                 </div>
 
@@ -249,31 +283,13 @@
               </div>
 
               <div class="form-actions">
-                <button class="button button-secondary" type="button" id="resetForm"><i data-lucide="rotate-ccw" aria-hidden="true"></i>Reset</button>
+                <button class="button button-secondary" type="button" id="resetForm">Reset</button>
                 <div>
-                  <button class="button button-secondary" type="submit" data-save-status="DRAFT"><i data-lucide="save" aria-hidden="true"></i>Simpan draft</button>
-                  <button class="button button-primary" type="submit" data-save-status="READY"><i data-lucide="circle-check" aria-hidden="true"></i>Simpan & tandai siap</button>
+                  <button class="button button-secondary" type="submit" data-save-status="DRAFT" formnovalidate>Simpan draft</button>
+                  <button class="button button-primary" type="submit" data-save-status="READY">Simpan & tandai siap</button>
                 </div>
               </div>
             </form>
-          </section>
-
-          <section class="view" id="view-finance">
-            <div class="section-toolbar">
-              <div>
-                <p class="eyebrow">DATA TURUNAN</p>
-                <h2>Perjalanan dinas</h2>
-              </div>
-            </div>
-            <div class="panel table-panel">
-              <div class="table-scroll">
-                <table class="data-table">
-                  <thead><tr><th>Permohonan</th><th>Nama</th><th>Kategori</th><th>Tempat</th><th>Total</th><th></th></tr></thead>
-                  <tbody id="travelTableBody"></tbody>
-                </table>
-              </div>
-              <div class="empty-state is-hidden" id="travelEmpty"><strong>Belum ada data perjadin</strong><span>Data akan muncul otomatis dari permohonan dengan Perjalanan Dinas = Ya.</span></div>
-            </div>
           </section>
 
           <section class="view" id="view-references">
@@ -310,15 +326,15 @@
                   </div>
                 </div>
                 <div class="admin-actions">
-                  <button class="button button-primary" data-admin-action="system-status"><i data-lucide="shield-check" aria-hidden="true"></i>Periksa sistem</button>
-                  <button class="button button-secondary" data-admin-action="setup-system"><i data-lucide="wrench" aria-hidden="true"></i>Setup struktur</button>
-                  <button class="button button-secondary" data-admin-action="preview-migration"><i data-lucide="scan-search" aria-hidden="true"></i>Preview migrasi</button>
-                  <button class="button button-accent" data-admin-action="run-migration"><i data-lucide="database-zap" aria-hidden="true"></i>Jalankan migrasi</button>
-                  <button class="button button-secondary" data-admin-action="cleanup-autocrat"><i data-lucide="columns-3" aria-hidden="true"></i>Bersihkan kolom Autocrat</button>
-                  <button class="button button-secondary" data-admin-action="repair-master"><i data-lucide="database-backup" aria-hidden="true"></i>Repair ID Master</button>
-                  <button class="button button-secondary" data-admin-action="repair-employee"><i data-lucide="users" aria-hidden="true"></i>Repair ID Pegawai</button>
-                  <button class="button button-secondary" data-admin-action="preview-cleanup"><i data-lucide="list-checks" aria-hidden="true"></i>Tinjau sheet generate</button>
-                  <button class="button button-danger" data-admin-action="delete-generated"><i data-lucide="trash-2" aria-hidden="true"></i>Hapus sheet terpilih</button>
+                  <button class="button button-primary" data-admin-action="system-status">Periksa sistem</button>
+                  <button class="button button-secondary" data-admin-action="setup-system">Setup struktur</button>
+                  <button class="button button-secondary" data-admin-action="preview-migration">Preview migrasi</button>
+                  <button class="button button-accent" data-admin-action="run-migration">Jalankan migrasi</button>
+                  <button class="button button-secondary" data-admin-action="cleanup-autocrat">Bersihkan kolom Autocrat</button>
+                  <button class="button button-secondary" data-admin-action="repair-master">Repair ID Master</button>
+                  <button class="button button-secondary" data-admin-action="repair-employee">Repair ID Pegawai</button>
+                  <button class="button button-secondary" data-admin-action="preview-cleanup">Tinjau sheet generate</button>
+                  <button class="button button-danger" data-admin-action="delete-generated">Hapus sheet terpilih</button>
                 </div>
                 <div class="admin-result" id="adminResult">
                   <div class="empty-state"><strong>Belum ada pemeriksaan</strong><span>Pilih salah satu aksi admin.</span></div>
@@ -340,46 +356,113 @@
     </div>
 
     <nav class="mobile-nav" aria-label="Navigasi mobile">
-      <button class="is-active" data-view="dashboard"><span><i data-lucide="layout-dashboard" aria-hidden="true">⌂</i></span>Ringkasan</button>
-      <button data-view="requests"><span><i data-lucide="files" aria-hidden="true">▤</i></span>Data</button>
-      <button class="mobile-create" data-view="form"><span><i data-lucide="file-plus-2" aria-hidden="true">＋</i></span>Buat</button>
-      <button data-view="finance"><span><i data-lucide="wallet-cards" aria-hidden="true">Rp</i></span>Biaya</button>
-      <button data-view="references"><span><i data-lucide="database" aria-hidden="true">◇</i></span>Lainnya</button>
-      <button data-view="admin" data-admin-only><span><i data-lucide="settings" aria-hidden="true">⚙</i></span>Admin</button>
+      <button class="is-active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Ringkasan
+      </button>
+      <button data-view="requests">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Data
+      </button>
+      <button class="mobile-create" data-view="form">
+        <span class="mobile-create-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </span>
+        Buat
+      </button>
+      <button data-view="references">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>
+        Lainnya
+      </button>
+      <button data-view="admin" data-admin-only>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Admin
+      </button>
     </nav>
 
     <div class="drawer-backdrop is-hidden" id="drawerBackdrop"></div>
     <aside class="detail-drawer" id="detailDrawer" aria-hidden="true">
       <div class="drawer-head">
         <div><p class="eyebrow">DETAIL PERMOHONAN</p><h2 id="drawerTitle">-</h2></div>
-        <button class="icon-button" id="closeDrawer" aria-label="Tutup detail"><i data-lucide="x" aria-hidden="true">×</i></button>
+        <button class="icon-button" id="closeDrawer" aria-label="Tutup detail">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
       <div class="drawer-body" id="drawerBody"></div>
     </aside>
 
     <dialog class="modal" id="emailModal">
-      <div class="modal-head"><div><p class="eyebrow">PREVIEW EMAIL</p><h2 id="emailModalTitle">-</h2></div><button class="icon-button" data-close-dialog="emailModal" aria-label="Tutup preview email"><i data-lucide="x" aria-hidden="true">×</i></button></div>
+      <div class="modal-head"><div><p class="eyebrow">PREVIEW EMAIL</p><h2 id="emailModalTitle">-</h2></div><button class="icon-button" data-close-dialog="emailModal" aria-label="Tutup preview email"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
       <div class="modal-body" id="emailModalBody"></div>
-    </dialog>
-
-    <dialog class="modal" id="travelModal">
-      <div class="modal-head"><div><p class="eyebrow">KOMPONEN BIAYA</p><h2 id="travelModalTitle">-</h2></div><button class="icon-button" data-close-dialog="travelModal" aria-label="Tutup komponen biaya"><i data-lucide="x" aria-hidden="true">×</i></button></div>
-      <form id="travelCostForm">
-        <div class="modal-body" id="travelModalBody"></div>
-        <div class="modal-actions"><button class="button button-secondary" type="button" data-close-dialog="travelModal"><i data-lucide="x" aria-hidden="true"></i>Batal</button><button class="button button-primary" type="submit"><i data-lucide="save" aria-hidden="true"></i>Simpan biaya</button></div>
-      </form>
     </dialog>
 
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
     <div class="boot-loader" id="bootLoader" role="status" aria-live="polite">
-      <div class="loader-mark">D</div>
+      <div class="loader-spinner" aria-hidden="true">
+        <span></span>
+      </div>
       <strong id="bootProgressText">Menyiapkan sistem...</strong>
       <div class="boot-progress" aria-hidden="true">
         <span id="bootProgressBar"></span>
       </div>
       <span class="boot-percent" id="bootProgressValue">0%</span>
     </div>
-    <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+    <script>
+      (function() {
+        var bar = document.getElementById('bootProgressBar');
+        var value = document.getElementById('bootProgressValue');
+        var text = document.getElementById('bootProgressText');
+        window.__dpspBootState = { started: false, finished: false };
+        window.__dpspShowBootFailure = function(message) {
+          if (window.__dpspBootState.finished) return;
+          if (text) text.textContent = message || 'Aplikasi gagal dimulai.';
+          if (value) value.textContent = '!';
+          if (bar) bar.style.width = '100%';
+        };
+        if (bar) bar.style.width = '1%';
+        if (value) value.textContent = '1%';
+        if (text) text.textContent = 'Memulai aplikasi...';
+        window.__dpspBootWatchdog = window.setTimeout(function() {
+          if (window.__dpspBootState.finished) return;
+          var lastError = window.__dpspBootState.lastError;
+          var detail = lastError
+            ? ' (' + lastError.message +
+              (lastError.line ? ' baris ' + lastError.line + ':' + lastError.column : '') + ')'
+            : '';
+          var message = window.__dpspBootState.started
+            ? 'Waktu pemuatan data terlalu lama. Periksa koneksi lalu muat ulang halaman.' + detail
+            : 'Kode aplikasi tidak berhasil dijalankan. Deploy versi terbaru lalu muat ulang halaman.' + detail;
+          window.__dpspShowBootFailure(message);
+        }, 60000);
+        window.addEventListener('error', function(event) {
+          window.__dpspBootState.lastError = {
+            message: event.message || 'kesalahan JavaScript tidak dikenal',
+            source: event.filename || '',
+            line: event.lineno || 0,
+            column: event.colno || 0
+          };
+        });
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event.reason;
+          window.__dpspBootState.lastError = {
+            message: reason && reason.message ? reason.message : String(reason || 'kesalahan tidak dikenal'),
+            source: '',
+            line: 0,
+            column: 0
+          };
+        });
+      })();
+    </script>
     <?!= include('Scripts'); ?>
+    <script>
+      window.setTimeout(function() {
+        if (window.__dpspAppBundleLoaded || window.__dpspBootState.finished) return;
+        var error = window.__dpspBootState.lastError;
+        var detail = error
+          ? ': ' + error.message + (error.line ? ' (baris ' + error.line + ':' + error.column + ')' : '')
+          : '';
+        window.__dpspShowBootFailure('Kode aplikasi tidak dapat dibaca' + detail);
+      }, 1500);
+    </script>
   </body>
 </html>

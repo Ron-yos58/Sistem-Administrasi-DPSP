@@ -48,57 +48,14 @@ function createAllEmailDrafts(requestId, force) {
   });
 }
 
-function processRequest(requestId) {
+function processRequest(requestId, revision) {
   const user = assertAuthorized_();
   assertCanWrite_(user);
   const id = text_(requestId);
 
   return withScriptLock_(function() {
-    const request = getRequestDetailInternal_(id).request;
-    if (request.status !== 'READY') {
-      throw new Error(
-        request.status === 'ARCHIVED'
-          ? 'Permohonan sudah selesai dan tidak dapat diproses ulang.'
-          : 'Tandai permohonan sebagai Siap Diproses sebelum menjalankan proses dokumen.'
-      );
-    }
-    const documents = getDocumentsByRequest_(id);
-    if (!documents.length) throw new Error('Tidak ada dokumen untuk diproses.');
-    const results = [];
-    const errors = [];
-
-    documents.forEach(function(document) {
-      let generated;
-      try {
-        generated = generateDocumentInternal_(document.id, false, user);
-      } catch (error) {
-        markDocumentError_(document.id, error.message);
-        errors.push({
-          documentId: document.id,
-          type: document.type,
-          stage: 'DOCUMENT',
-          error: error.message
-        });
-        return;
-      }
-
-      try {
-        const draft = createEmailDraftInternal_(document.id, false, user);
-        results.push({ document: generated.document, draft: draft });
-      } catch (error) {
-        errors.push({
-          documentId: document.id,
-          type: document.type,
-          stage: 'EMAIL',
-          error: error.message
-        });
-      }
-    });
-    logAudit_('PROCESS_REQUEST', id, errors.length === 0, {
-      processed: results.length,
-      errors: errors
-    });
-    return serializeValue_({ ok: errors.length === 0, results: results, errors: errors });
+    const result = activateRequestInternal_(id, revision, user);
+    return serializeValue_(result);
   });
 }
 
@@ -125,7 +82,9 @@ function buildEmailPreviewForDocument_(document) {
     partnerEmail: request.partnerEmail,
     partnerName: request.partnerName,
     faculties: request.faculties,
-    speakerStatus: request.speakerStatus
+    speakerStatus: request.speakerStatus,
+    manualTo: Array.isArray(request.manualTo) ? request.manualTo : [],
+    manualCc: Array.isArray(request.manualCc) ? request.manualCc : []
   };
   const routing = computeEmailRouting_(routingRequest, detail.employees, document.type);
   if (!routing.to.length) {

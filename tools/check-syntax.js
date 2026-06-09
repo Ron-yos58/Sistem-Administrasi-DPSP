@@ -62,6 +62,27 @@ try {
 }
 
 const indexHtml = fs.readFileSync(path.join(root, 'Index.html'), 'utf8');
+const stylesHtml = fs.readFileSync(path.join(root, 'Styles.html'), 'utf8');
+if (/<script\b[^>]*\bsrc=["'][^"']*lucide/i.test(indexHtml)) {
+  failed = true;
+  console.error('FAIL app startup must not depend on an external Lucide script');
+}
+if (/data-lucide|\bwindow\.lucide\b|lucide-ready/.test(indexHtml + scriptsHtml + stylesHtml)) {
+  failed = true;
+  console.error('FAIL Lucide must be fully disabled');
+}
+if (scriptsHtml.includes('refreshIcons(')) {
+  failed = true;
+  console.error('FAIL removed icon runtime is still referenced');
+}
+if (scriptsHtml.includes('?.')) {
+  failed = true;
+  console.error('FAIL optional chaining is not allowed in the Apps Script web UI bundle');
+}
+if (scriptsHtml.includes("document.addEventListener('DOMContentLoaded', () => App.init()")) {
+  failed = true;
+  console.error('FAIL app startup must not depend solely on DOMContentLoaded');
+}
 const includeNames = new Set(Array.from(indexHtml.matchAll(/include\(['"]([^'"]+)['"]\)/g), match => match[1]));
 for (const name of includeNames) {
   const file = `${name}.html`;
@@ -115,6 +136,10 @@ if ((scriptsHtml.match(/data-action="process-all"/g) || []).length > 1) {
 if (scriptsHtml.includes('<h3>Sesi kegiatan</h3>')) {
   failed = true;
   console.error('FAIL duplicate standalone Sesi kegiatan block');
+}
+if (/\.loader-spinner[^{]*\{[^}]*animation:\s*none/i.test(stylesHtml)) {
+  failed = true;
+  console.error('FAIL boot loader animation is disabled');
 }
 
 const topbarSource = indexHtml.match(/<header class="topbar">[\s\S]*?<\/header>/);

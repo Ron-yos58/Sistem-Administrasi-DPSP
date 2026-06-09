@@ -192,6 +192,7 @@ function buildDocumentPlaceholders_(detail, document) {
     nipPegawai: employees.map(function(item) { return item.identifier; }).join('\n'),
     jabatanPegawai: employees.map(function(item) { return item.role; }).join('\n'),
     prodiPegawai: employees.map(function(item) { return item.unit; }).join('\n'),
+    fakultasPegawai: employees.map(function(item) { return item.unit; }).join('\n'),
     emailPegawai: employees.map(function(item) { return item.email; }).join('\n'),
     narasumber: people,
     kepadaYth: routing.toRoles.join('\n'),
@@ -223,6 +224,7 @@ function buildDocumentPlaceholders_(detail, document) {
     'Text Join NIK/NPM': values.nipPegawai,
     'Text Join Jabatan': values.jabatanPegawai,
     'Text Join Prodi': values.prodiPegawai,
+    'Text Join Fakultas': values.fakultasPegawai,
     'Text Join Email': values.emailPegawai
   };
   Object.keys(aliases).forEach(function(key) { values[key] = aliases[key]; });
@@ -282,19 +284,53 @@ function updateMasterDocumentLinks_(requestId, docFile, pdfFile) {
 }
 
 function recordGeneratedArtifact_(requestId, artifactKey, revision, type, file, metadata) {
-  const sheet = getSheet_('FILES');
-  appendDataRow_(sheet, [
+  recordGeneratedArtifactData_(
     requestId,
     artifactKey,
     revision,
     type,
     file.getId(),
     file.getUrl(),
+    metadata
+  );
+}
+
+function recordGeneratedArtifactData_(requestId, artifactKey, revision, type, fileId, url, metadata) {
+  const sheet = getSheet_('FILES');
+  appendDataRow_(sheet, [
+    requestId,
+    artifactKey,
+    revision,
+    type,
+    fileId,
+    url,
     new Date(),
     getCurrentUser_(),
     'ACTIVE',
     JSON.stringify(metadata || {})
   ]);
+}
+
+function supersedeGeneratedArtifacts_(requestId, artifactKey, types) {
+  const sheet = getSheet_('FILES', false);
+  if (!sheet) return;
+  const allowedTypes = (types || []).map(function(type) {
+    return text_(type).toUpperCase();
+  });
+  const rows = readDataRows_(sheet, GENERATED_FILE_HEADERS.length);
+  let changed = false;
+  rows.forEach(function(row) {
+    if (
+      text_(row[0]) === requestId &&
+      text_(row[1]) === artifactKey &&
+      text_(row[8]).toUpperCase() === 'ACTIVE' &&
+      (!allowedTypes.length || allowedTypes.indexOf(text_(row[3]).toUpperCase()) !== -1)
+    ) {
+      row[8] = 'SUPERSEDED';
+      changed = true;
+    }
+  });
+  if (changed) rewriteDataRows_(sheet, rows, GENERATED_FILE_HEADERS.length);
 }
 
 function getGeneratedFilesByRequest_(requestId) {
@@ -314,6 +350,57 @@ function getGeneratedFilesByRequest_(requestId) {
         metadata: parseJsonSafe_(row[9])
       };
     });
+}
+
+function getFinanceArtifactUrls_(requestId) {
+  const result = {
+    honorSheetUrl: '',
+    honorPdfUrl: '',
+    honorExcelUrl: '',
+    perjadinSheetUrl: '',
+    perjadinPdfUrl: '',
+    perjadinExcelUrl: ''
+  };
+  getGeneratedFilesByRequest_(requestId).forEach(function(file) {
+    if (text_(file.status).toUpperCase() !== 'ACTIVE') return;
+    const kind = file.artifactKey === 'FINANCE_HONOR'
+      ? 'honor'
+      : file.artifactKey === 'FINANCE_PERJADIN'
+        ? 'perjadin'
+        : '';
+    if (!kind) return;
+    if (file.type === 'SHEET') result[kind + 'SheetUrl'] = file.url;
+    const fileAvailable = typeof DriveApp === 'undefined' || driveFileExists_(file.fileId);
+    if (file.type === 'PDF' && fileAvailable) {
+      result[kind + 'PdfUrl'] = driveDownloadUrl_(file.fileId);
+    }
+    if (file.type === 'XLSX' && fileAvailable) {
+      result[kind + 'ExcelUrl'] = driveDownloadUrl_(file.fileId);
+    }
+  });
+  if (typeof SpreadsheetApp !== 'undefined') {
+    [
+      { kind: 'HONOR', field: 'honorSheetUrl' },
+      { kind: 'PERJADIN', field: 'perjadinSheetUrl' }
+    ].forEach(function(descriptor) {
+      if (result[descriptor.field]) return;
+      const ss = getSpreadsheet_();
+      const sheet = ss.getSheetByName(generatedSheetName_(descriptor.kind, requestId));
+      if (!sheet || !isGeneratedSheet_(sheet)) return;
+      const metadata = sheet.getDeveloperMetadata().find(function(item) {
+        return item.getKey() === 'DPSP_GENERATED';
+      });
+      if (metadata && metadata.getValue() === descriptor.kind + '|' + requestId) {
+        result[descriptor.field] = ss.getUrl() + '#gid=' + sheet.getSheetId();
+      }
+    });
+  }
+  return result;
+}
+
+function driveDownloadUrl_(fileId) {
+  const id = text_(fileId);
+  return id ? 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(id) : '';
 }
 
 function parseJsonSafe_(value) {

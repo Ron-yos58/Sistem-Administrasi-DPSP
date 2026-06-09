@@ -51,7 +51,6 @@
       return enrichRequestWithDocuments_(masterRowToDto_(row), documentsByRequest);
     }).filter(function(item) {
       if (!item.id) return false;
-      if (!filters.includeArchived && status !== 'ARCHIVED' && item.status === 'ARCHIVED') return false;
       if (type && item.activityType !== type) return false;
       if (status && item.status !== status) return false;
       if (query) {
@@ -78,12 +77,18 @@
 
     const row = master.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
     const documents = getDocumentsByRequest_(id);
+    const financeArtifacts = getFinanceArtifactUrls_(id);
     return serializeValue_({
-      request: enrichRequestWithDocuments_(masterRowToDto_(row), null, documents),
+      request: Object.assign(
+        enrichRequestWithDocuments_(masterRowToDto_(row), null, documents),
+        financeArtifacts
+      ),
       documents: documents,
       schedules: getSchedulesByRequest_(id, row),
       employees: getEmployeesByRequest_(id),
       generatedFiles: getGeneratedFilesByRequest_(id),
+      financeArtifacts: financeArtifacts,
+      financeReadiness: getFinanceReadiness_(id),
       travel: getTravelByRequestInternal_(id)
     });
   }
@@ -167,6 +172,17 @@
           'Data sudah diubah pengguna lain. Muat ulang detail sebelum menyimpan.'
         );
       }
+      const previousClean = isNew ? null : normalizeRequestPayload_(Object.assign(
+        {},
+        masterRowToDto_(existing),
+        {
+          documents: getDocumentsByRequest_(id),
+          schedules: getSchedulesByRequest_(id, existing),
+          employees: getEmployeesByRequest_(id)
+        }
+      ));
+      const generationChanged = isNew ||
+        requestGenerationFingerprint_(previousClean) !== requestGenerationFingerprint_(clean);
 
       const revision = currentRevision + 1;
       const now = new Date();
@@ -212,21 +228,26 @@
         setMaster_(row, 'Dibuat Pada', now);
       }
 
-      clearGeneratedStateColumns_(row);
+      if (generationChanged) clearGeneratedStateColumns_(row);
       if (isNew) {
         rowNumber = appendDataRow_(sheet, row);
       } else {
         sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
-        markGeneratedFilesSuperseded_(id);
+        if (generationChanged) markGeneratedFilesSuperseded_(id);
       }
 
-      const documents = replaceDocumentsForRequest_(id, clean.documents, revision);
+      const documents = replaceDocumentsForRequest_(
+        id,
+        clean.documents,
+        revision,
+        !generationChanged
+      );
       replaceSchedulesForRequest_(id, clean.schedules);
       replaceEmployeesForRequest_(id, clean.employees);
       applyEmployeeAndRoutingColumns_(row, clean.employees, clean);
       sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
 
-      syncTravelDataInternal_(id);
+      if (clean.status === 'READY') syncTravelDataInternal_(id);
       clearAppCache_();
       logAudit_('SAVE_REQUEST', id, true, {
         revision: revision,
@@ -279,6 +300,44 @@
       logAudit_('ARCHIVE_REQUEST', id, true, {});
       return { ok: true };
     });
+  }
+
+  function activateRequestInternal_(requestId, revision, user) {
+    const id = text_(requestId);
+    const sheet = getSheet_('MASTER');
+    const rowNumber = findRowById_(sheet, id, 1);
+    if (!rowNumber) throw new Error('Permohonan tidak ditemukan: ' + id);
+
+    const row = sheet.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
+    const request = masterRowToDto_(row);
+    if (request.status === 'ARCHIVED') {
+      throw new Error('Permohonan selesai bersifat hanya-baca.');
+    }
+    if (request.status === 'READY') {
+      return { ok: true, reused: true, id: id, revision: request.revision };
+    }
+    if (revision != null && Number(revision) !== Number(request.revision)) {
+      throw new Error('Revision tidak cocok. Muat ulang data sebelum memproses permohonan.');
+    }
+
+    const clean = normalizeRequestPayload_(Object.assign({}, request, {
+      status: 'READY',
+      documents: getDocumentsByRequest_(id),
+      schedules: getSchedulesByRequest_(id, row),
+      employees: getEmployeesByRequest_(id)
+    }));
+    validateRequestPayload_(clean);
+
+    const nextRevision = Number(request.revision || 0) + 1;
+    setMaster_(row, 'Status Permohonan', 'READY');
+    setMaster_(row, 'Diubah Oleh', user.email);
+    setMaster_(row, 'Diubah Pada', new Date());
+    setMaster_(row, 'Revision', nextRevision);
+    sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+    syncTravelDataInternal_(id);
+    clearAppCache_();
+    logAudit_('ACTIVATE_REQUEST', id, true, { revision: nextRevision });
+    return { ok: true, reused: false, id: id, revision: nextRevision };
   }
 
   function getReferenceData() {
@@ -413,6 +472,23 @@
   }
 
   function masterRowToDto_(row) {
+    // Parse manual To/CC selections stored as MANUAL_JSON prefix in Keterangan Email
+    var rawNote = String(masterValue_(row, 'Keterangan Email') || '');
+    var manualTo = [];
+    var manualCc = [];
+    var emailNote = rawNote;
+    if (rawNote.indexOf('MANUAL_JSON:') === 0) {
+      try {
+        var newlinePos = rawNote.indexOf('\n');
+        var jsonStr = newlinePos === -1 ? rawNote.slice(12) : rawNote.slice(12, newlinePos);
+        var parsed = JSON.parse(jsonStr);
+        manualTo = Array.isArray(parsed.to) ? parsed.to : [];
+        manualCc = Array.isArray(parsed.cc) ? parsed.cc : [];
+        emailNote = newlinePos === -1 ? '' : rawNote.slice(newlinePos + 1);
+      } catch (e) {
+        // Parsing failed, treat raw as note
+      }
+    }
     return {
       id: masterValue_(row, 'ID Permohonan'),
       activityType: masterValue_(row, 'Tipe Kegiatan'),
@@ -443,7 +519,7 @@
       travel: masterValue_(row, 'Perjalanan Dinas') || 'Tidak',
       emailTo: masterValue_(row, 'Email To'),
       emailCc: masterValue_(row, 'Email CC'),
-      emailNote: masterValue_(row, 'Keterangan Email'),
+      emailNote: emailNote,
       emailStatus: masterValue_(row, 'Email Status'),
       status: masterValue_(row, 'Status Permohonan') || 'DRAFT',
       createdBy: masterValue_(row, 'Dibuat Oleh'),
@@ -451,7 +527,9 @@
       updatedBy: masterValue_(row, 'Diubah Oleh'),
       updatedAt: serializeValue_(masterValue_(row, 'Diubah Pada')),
       clientToken: masterValue_(row, 'Client Token'),
-      revision: Number(masterValue_(row, 'Revision') || 0)
+      revision: Number(masterValue_(row, 'Revision') || 0),
+      manualTo: manualTo,
+      manualCc: manualCc
     };
   }
 
@@ -515,7 +593,7 @@
     const startDate = normalizeIsoDateString_(masterValue_(row, 'Tanggal Mulai ISO'));
     if (!startDate) return [];
     const legacyTime = parseTimeRange_(masterValue_(row, 'Waktu Kegiatan'));
-    return [{
+    const legacySchedule = {
       id: '',
       requestId: requestId,
       startDate: startDate,
@@ -524,23 +602,27 @@
       endTime: legacyTime.endTime,
       place: text_(masterValue_(row, 'Tempat Kegiatan')),
       sequence: 1
-    }];
+    };
+    legacySchedule.label = formatScheduleItem_(legacySchedule);
+    return [legacySchedule];
   }
 
   function scheduleRowToDto_(row) {
-    return {
+    const schedule = {
       id: row[0],
       requestId: row[1],
       startDate: normalizeIsoDateString_(row[2]),
       endDate: normalizeIsoDateString_(row[3]) || normalizeIsoDateString_(row[2]),
-      startTime: text_(row[4]),
-      endTime: text_(row[5]),
+      startTime: normalizeTimeValue_(row[4]),
+      endTime: normalizeTimeValue_(row[5]),
       place: text_(row[6]),
       sequence: Number(row[7] || 0)
     };
+    schedule.label = formatScheduleItem_(schedule);
+    return schedule;
   }
 
-  function replaceDocumentsForRequest_(requestId, documents, revision) {
+  function replaceDocumentsForRequest_(requestId, documents, revision, preserveGenerated) {
     const sheet = getSheet_('DOCUMENTS');
     const allRows = readDataRows_(sheet, DOCUMENT_HEADERS.length);
     const existing = allRows.filter(function(row) { return text_(row[1]) === requestId; });
@@ -560,10 +642,10 @@
       });
       const row = old ? old.slice() : new Array(DOCUMENT_HEADERS.length).fill('');
       const reusable = old &&
+        preserveGenerated &&
         text_(old[2]) === document.type &&
         text_(old[5]) === document.number &&
-        text_(old[6]) === templateKey &&
-        Number(old[14] || 0) === Number(revision);
+        text_(old[6]) === templateKey;
       row[0] = old ? old[0] : 'DOC-' + Utilities.getUuid().slice(0, 12).toUpperCase();
       row[1] = requestId;
       row[2] = document.type;
@@ -632,6 +714,44 @@
     setMaster_(row, 'Email Status', '');
   }
 
+  function requestGenerationFingerprint_(request) {
+    const clean = request || {};
+    return JSON.stringify({
+      activityType: clean.activityType,
+      speakerSubtype: clean.speakerSubtype,
+      speakerStatus: clean.speakerStatus,
+      faculties: clean.faculties || [],
+      incomingNumber: clean.incomingNumber,
+      incomingDate: clean.incomingDate,
+      incomingSender: clean.incomingSender,
+      incomingSubject: clean.incomingSubject,
+      activityName: clean.activityName,
+      partnerName: clean.partnerName,
+      partnerAddress: clean.partnerAddress,
+      partnerEmail: clean.partnerEmail,
+      letterDate: clean.letterDate,
+      signerName: clean.signerName,
+      signerId: clean.signerId,
+      signerRole: clean.signerRole,
+      honor: clean.honor,
+      travel: clean.travel,
+      manualTo: clean.manualTo || [],
+      manualCc: clean.manualCc || [],
+      documents: (clean.documents || []).map(function(item) {
+        return [item.type, item.number, item.speakerSubtype, item.speakerStatus];
+      }),
+      schedules: (clean.schedules || []).map(function(item) {
+        return [item.startDate, item.endDate, item.startTime, item.endTime, item.place];
+      }),
+      employees: (clean.employees || []).map(function(item) {
+        return [
+          item.name, item.identifier, item.role, item.unit, item.email,
+          item.rank, item.category
+        ];
+      })
+    });
+  }
+
   function markGeneratedFilesSuperseded_(requestId) {
     const sheet = getSheet_('FILES', false);
     if (!sheet) return;
@@ -672,7 +792,8 @@
         participantKey: text_(employee.participantKey) || buildParticipantKey_(payload.id, employee)
       };
     }).filter(function(employee) {
-      return employee.name || employee.identifier || employee.email;
+      return employee.name || employee.identifier || employee.email || employee.role ||
+        employee.unit || employee.rank || employee.category;
     });
     let schedules = (payload.schedules || []).map(function(schedule, index) {
       return {
@@ -704,6 +825,11 @@
       timeDisplay: text_(payload.activityTime, 100),
       placeDisplay: text_(payload.activityPlace, 500)
     };
+    const manualTo = emailList_(Array.isArray(payload.manualTo) ? payload.manualTo : []);
+    const manualCc = emailList_(Array.isArray(payload.manualCc) ? payload.manualCc : [])
+      .filter(function(email) {
+        return manualTo.indexOf(email) === -1;
+      });
 
     return {
       id: text_(payload.id),
@@ -736,7 +862,9 @@
       travel: text_(payload.travel) === 'Ya' ? 'Ya' : 'Tidak',
       documents: documents,
       employees: employees,
-      schedules: schedules
+      schedules: schedules,
+      manualTo: manualTo,
+      manualCc: manualCc
     };
   }
 
@@ -781,7 +909,12 @@
     if (payload.letterDate) parseIsoDate_(payload.letterDate);
 
     const allowed = allowedDocumentsFor_(payload.activityType, payload.speakerSubtype);
+    const seenDocumentTypes = {};
     documents.forEach(function(document) {
+      if (seenDocumentTypes[document.type]) {
+        errors.push('Jenis dokumen tidak boleh dipilih lebih dari sekali: ' + document.type);
+      }
+      seenDocumentTypes[document.type] = true;
       if (allowed.indexOf(document.type) === -1) {
         errors.push('Jenis dokumen tidak sesuai kegiatan: ' + document.type);
       }
@@ -800,6 +933,29 @@
     if (isReady && needsPeople && !employees.length) {
       errors.push('Minimal satu pegawai/narasumber wajib diisi.');
     }
+    if (isReady) {
+      employees.forEach(function(employee, index) {
+        const missing = [
+          ['Nama', employee.name],
+          ['NIP/NPM', employee.identifier],
+          ['Email', employee.email],
+          ['Jabatan', employee.role],
+          ['Fakultas', employee.unit]
+        ].filter(function(item) {
+          return !item[1];
+        }).map(function(item) {
+          return item[0];
+        });
+        if (missing.length) {
+          errors.push(
+            'Data orang ke-' + (index + 1) + ' belum lengkap: ' + missing.join(', ') + '.'
+          );
+        }
+        if (employee.unit && APP_CONFIG.FACULTIES.indexOf(employee.unit) === -1) {
+          errors.push('Fakultas orang ke-' + (index + 1) + ' tidak valid.');
+        }
+      });
+    }
 
     if (isReady && payload.activityType === 'Penugasan Narasumber') {
       if (APP_CONFIG.SPEAKER_SUBTYPES.indexOf(payload.speakerSubtype) === -1) {
@@ -816,13 +972,6 @@
       }
     }
 
-    if (isReady && payload.travel === 'Ya') {
-      employees.forEach(function(employee, index) {
-        if (!employee.rank || !employee.category) {
-          errors.push('Pangkat dan kategori perjadin wajib untuk orang ke-' + (index + 1) + '.');
-        }
-      });
-    }
     if (errors.length) throw new Error(errors.join('\n'));
   }
 
@@ -860,7 +1009,15 @@
     setMaster_(row, 'Jabatan Email To', routing.toRoles.join('\n'));
     setMaster_(row, 'Email CC', routing.cc.join('\n'));
     setMaster_(row, 'Jabatan Email CC', routing.ccRoles.join('\n'));
-    setMaster_(row, 'Keterangan Email', routing.notes.join(' | '));
+
+    // Store manual To/CC selections as structured JSON prefix in Keterangan Email
+    // so they can be restored when the form is re-opened for editing.
+    const manualMeta = 'MANUAL_JSON:' + JSON.stringify({
+      to: request.manualTo || [],
+      cc: request.manualCc || []
+    });
+    const noteText = routing.notes.length ? routing.notes.join(' | ') : '';
+    setMaster_(row, 'Keterangan Email', manualMeta + (noteText ? '\n' + noteText : ''));
   }
 
   function computeEmailRouting_(request, employees, documentType) {
@@ -891,6 +1048,21 @@
         emailList_(employee.email).forEach(function(email) { to.push(email); });
         if (employee.name) toRoles.push(employee.name);
       });
+    }
+
+    // Helper: add manual email from Master CC reference list
+    function addManualEmail(targetEmails, targetRoles, email) {
+      if (!email || targetEmails.indexOf(email) !== -1) return;
+      const normalizedEmail = emailList_(email)[0];
+      const ref = references.find(function(item) {
+        return String(item.email || '').trim().toLowerCase() === normalizedEmail;
+      });
+      if (!ref) {
+        notes.push('Penerima manual tidak ditemukan di Master CC: ' + email);
+        return;
+      }
+      targetEmails.push(normalizedEmail);
+      targetRoles.push(ref.role || ref.unit || normalizedEmail);
     }
 
     types.forEach(function(type) {
@@ -941,11 +1113,33 @@
       }
     });
 
+    // Apply manual To overrides (supplement auto-routing from Master CC selection)
+    (request.manualTo || []).forEach(function(email) {
+      addManualEmail(to, toRoles, email);
+    });
+
+    // Apply manual CC overrides (supplement auto-routing from Master CC selection)
+    (request.manualCc || []).forEach(function(email) {
+      addManualEmail(cc, ccRoles, email);
+    });
+
+    const normalizedTo = emailList_(to);
+    const normalizedCc = emailList_(cc).filter(function(email) {
+      return normalizedTo.indexOf(email) === -1;
+    });
+    const overlappingCcRoles = references.filter(function(item) {
+      return normalizedTo.indexOf(String(item.email || '').trim().toLowerCase()) !== -1;
+    }).map(function(item) {
+      return item.role || item.unit || item.email;
+    });
+
     return {
-      to: emailList_(to),
+      to: normalizedTo,
       toRoles: uniqueTextList_(toRoles),
-      cc: emailList_(cc),
-      ccRoles: uniqueTextList_(ccRoles),
+      cc: normalizedCc,
+      ccRoles: uniqueTextList_(ccRoles).filter(function(role) {
+        return overlappingCcRoles.indexOf(role) === -1;
+      }),
       notes: uniqueTextList_(notes)
     };
   }
