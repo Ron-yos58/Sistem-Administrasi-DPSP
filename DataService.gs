@@ -10,8 +10,7 @@
       options: {
         activityTypes: APP_CONFIG.ACTIVITY_TYPES,
         documentTypes: APP_CONFIG.DOCUMENT_TYPES,
-        speakerSubtypes: APP_CONFIG.SPEAKER_SUBTYPES,
-        speakerStatuses: APP_CONFIG.SPEAKER_STATUSES,
+        officialLetterMapping: OFFICIAL_LETTER_MAPPING,
         faculties: APP_CONFIG.FACULTIES,
         signers: getSignatureConfigsInternal_(),
         employeeCatalog: getEmployeeCatalogInternal_()
@@ -253,7 +252,9 @@
         if (generationChanged) markGeneratedFilesSuperseded_(id);
       }
 
-      const documents = getDocumentsByRequest_(id);
+      const documents = isNew && clean.documents.length
+        ? replaceDocumentsForRequest_(id, clean.documents, revision, false)
+        : getDocumentsByRequest_(id);
       replaceSchedulesForRequest_(id, clean.schedules);
       replaceEmployeesForRequest_(id, clean.employees);
       applyEmployeeAndRoutingColumns_(row, clean.employees, clean);
@@ -922,27 +923,41 @@
     if (payload.incomingDate) parseIsoDate_(payload.incomingDate);
     if (payload.letterDate) parseIsoDate_(payload.letterDate);
 
-    const allowed = allowedDocumentsFor_(payload.activityType, payload.speakerSubtype);
     const seenDocumentTypes = {};
     documents.forEach(function(document) {
       if (seenDocumentTypes[document.type]) {
         errors.push('Jenis dokumen tidak boleh dipilih lebih dari sekali: ' + document.type);
       }
       seenDocumentTypes[document.type] = true;
-      if (allowed.indexOf(document.type) === -1) {
-        errors.push('Jenis dokumen tidak sesuai kegiatan: ' + document.type);
+
+      const condition = (function() {
+        if (payload.activityType === 'Penugasan Narasumber') {
+          if (document.type === 'Surat Tugas') return document.speakerSubtype || '-';
+          if (document.type === 'Surat Permohonan Narasumber kepada Dekan') return document.speakerStatus || '-';
+        }
+        return '-';
+      })();
+
+      const mapping = findOfficialMapping_(payload.activityType, document.type, condition);
+      if (!mapping) {
+        errors.push(
+          'Kombinasi Tipe Kegiatan (' + payload.activityType + '), Sub-Tipe (' + document.type + 
+          '), dan Kondisi Tambahan (' + condition + ') tidak ada pada mapping resmi.'
+        );
       }
+
       if (isReady && !document.number) {
         errors.push('Nomor surat wajib untuk status siap: ' + document.type);
       }
     });
 
+    const hasRequestLetter = documents.find(function(document) {
+      return document.type === 'Surat Permohonan Narasumber kepada Dekan';
+    });
     const needsPeople = documents.some(function(document) {
       return document.type === 'Surat Tugas';
     }) || (
-      documents.some(function(document) {
-        return document.type === 'Surat Permohonan Narasumber kepada Dekan';
-      }) && payload.speakerStatus === 'Tidak Dicarikan'
+      hasRequestLetter && hasRequestLetter.speakerStatus === 'Tidak Dicarikan'
     );
     if (isReady && needsPeople && !employees.length) {
       errors.push('Minimal satu pegawai/narasumber wajib diisi.');
@@ -972,16 +987,7 @@
     }
 
     if (isReady && payload.activityType === 'Penugasan Narasumber') {
-      if (APP_CONFIG.SPEAKER_SUBTYPES.indexOf(payload.speakerSubtype) === -1) {
-        errors.push('Sub-tipe narasumber wajib diisi.');
-      }
-      const hasRequestLetter = documents.some(function(document) {
-        return document.type === 'Surat Permohonan Narasumber kepada Dekan';
-      });
       if (hasRequestLetter) {
-        if (APP_CONFIG.SPEAKER_STATUSES.indexOf(payload.speakerStatus) === -1) {
-          errors.push('Status pencarian narasumber wajib diisi.');
-        }
         if (!(payload.faculties || []).length) errors.push('Fakultas tujuan wajib dipilih.');
       }
     }
@@ -989,22 +995,16 @@
     if (errors.length) throw new Error(errors.join('\n'));
   }
 
-  function allowedDocumentsFor_(activityType, speakerSubtype) {
-    if (activityType === 'Edu Fair') return ['Surat Tugas'];
-    if (activityType === 'Campus Visit') {
-      return [
-        'Surat Tugas',
-        'Surat Balasan Campus Visit',
-        'Surat Rekomendasi Campus Visit - SU',
-        'Surat izin pimpinan - Campus Visit'
-      ];
-    }
-    if (activityType === 'Penugasan Narasumber') {
-      return speakerSubtype === 'Promosi'
-        ? ['Surat Tugas']
-        : ['Surat Tugas', 'Surat Permohonan Narasumber kepada Dekan'];
-    }
-    return [];
+  function allowedDocumentsFor_(activityType) {
+    const list = [];
+    OFFICIAL_LETTER_MAPPING.forEach(function(item) {
+      if (item.activityType === activityType) {
+        if (list.indexOf(item.subType) === -1) {
+          list.push(item.subType);
+        }
+      }
+    });
+    return list;
   }
 
   function applyEmployeeAndRoutingColumns_(row, employees, request) {
@@ -1104,11 +1104,12 @@
     types.forEach(function(type) {
       let templateKey = null;
       try {
+        const docObj = (request.documents || []).find(function(d) { return d.type === type; }) || {};
         templateKey = resolveTemplateKey_({
           type: type,
           activityType: request.activityType,
-          speakerSubtype: request.speakerSubtype,
-          speakerStatus: request.speakerStatus
+          speakerSubtype: docObj.speakerSubtype || request.speakerSubtype || '',
+          speakerStatus: docObj.speakerStatus || request.speakerStatus || ''
         });
       } catch (e) {}
 
@@ -1118,17 +1119,17 @@
 
       if (cfg) {
         resolveConfiguredRecipients(cfg.defaultTo, to, toRoles);
-        resolveConfiguredRecipients(cfg.defaultCc, cc, ccRoles);
+        // resolveConfiguredRecipients(cfg.defaultCc, cc, ccRoles);
         resolveConfiguredRecipients(cfg.defaultBcc, bcc, []);
       } else {
         // Fallback rules
         if (type === 'Surat Balasan Campus Visit') {
           emailList_(request.partnerEmail).forEach(function(email) { to.push(email); });
           toRoles.push(request.partnerName);
-          addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
+          // addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
         } else if (type === 'Surat Rekomendasi Campus Visit - SU') {
           addByRole(to, toRoles, 'Sekretaris Universitas', 'Rektorat');
-          addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
+          // addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
         } else if (type === 'Surat izin pimpinan - Campus Visit') {
           [
             ['Sekretaris Universitas', 'Rektorat'],
@@ -1144,6 +1145,7 @@
             ['Kepala Perpustakaan', 'Unit Perpustakaan']
           ].forEach(function(pair) { addByRole(to, toRoles, pair[0], pair[1]); });
 
+          /*
           [
             ['Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat'],
             ['Manajer Aset dan Sarana Prasarana', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
@@ -1159,6 +1161,7 @@
             ['Koordinator Administrasi Fakultas Teknologi Rekayasa', 'Fakultas Teknologi Rekayasa'],
             ['Koordinator Administrasi Fakultas Vokasi', 'Fakultas Vokasi']
           ].forEach(function(pair) { addByRole(cc, ccRoles, pair[0], pair[1]); });
+          */
         }
       }
 
@@ -1170,9 +1173,11 @@
       if (type === 'Surat Permohonan Narasumber kepada Dekan') {
         request.faculties.forEach(function(faculty) {
           addByRole(to, toRoles, 'Dekan ' + faculty, faculty);
-          addByRole(cc, ccRoles, 'Koordinator Administrasi ' + faculty, faculty);
+          // addByRole(cc, ccRoles, 'Koordinator Administrasi ' + faculty, faculty);
         });
-        if (request.speakerStatus === 'Tidak Dicarikan') addEmployees();
+        const docObj = (request.documents || []).find(function(d) { return d.type === type; }) || {};
+        const docSpeakerStatus = docObj.speakerStatus || request.speakerStatus || '';
+        if (docSpeakerStatus === 'Tidak Dicarikan') addEmployees();
       } else if (type === 'Surat Tugas') {
         addEmployees();
       }
@@ -1208,32 +1213,35 @@
     };
   }
 
+  function findOfficialMapping_(activityType, subType, condition) {
+    const normActivity = String(activityType || '').trim();
+    const normSubType = String(subType || '').trim();
+    const normCondition = String(condition || '').trim() || '-';
+    
+    return OFFICIAL_LETTER_MAPPING.find(function(item) {
+      return item.activityType === normActivity &&
+             item.subType === normSubType &&
+             item.condition === normCondition;
+    }) || null;
+  }
+
   function resolveTemplateKey_(document) {
     const descriptor = normalizeDocumentDescriptor_(document);
+    
+    const condition = (function() {
+      if (descriptor.activityType === 'Penugasan Narasumber') {
+        if (descriptor.type === 'Surat Tugas') return descriptor.speakerSubtype || '-';
+        if (descriptor.type === 'Surat Permohonan Narasumber kepada Dekan') return descriptor.speakerStatus || '-';
+      }
+      return '-';
+    })();
 
-    if (descriptor.activityType === 'Edu Fair' && descriptor.type === 'Surat Tugas') {
-      return 'EDU_FAIR_TASK';
-    }
-    if (descriptor.activityType === 'Campus Visit') {
-      if (descriptor.type === 'Surat Tugas') return 'CAMPUS_VISIT_TASK';
-      if (descriptor.type === 'Surat izin pimpinan - Campus Visit') return 'CAMPUS_VISIT_PERMISSION';
-      if (descriptor.type === 'Surat Rekomendasi Campus Visit - SU') return 'CAMPUS_VISIT_RECOMMENDATION';
-      if (descriptor.type === 'Surat Balasan Campus Visit') return 'CAMPUS_VISIT_REPLY';
-    }
-    if (descriptor.activityType === 'Penugasan Narasumber') {
-      if (descriptor.type === 'Surat Tugas' && descriptor.speakerSubtype === 'Promosi') {
-        return 'SPEAKER_PROMOTION_TASK';
-      }
-      if (descriptor.type === 'Surat Tugas') return 'SPEAKER_WORKSHOP_TASK';
-      if (descriptor.type === 'Surat Permohonan Narasumber kepada Dekan') {
-        return descriptor.speakerStatus === 'Dicarikan'
-          ? 'SPEAKER_REQUEST_SEARCH'
-          : 'SPEAKER_REQUEST_KNOWN';
-      }
-    }
+    const mapping = findOfficialMapping_(descriptor.activityType, descriptor.type, condition);
+    if (mapping) return mapping.templateKey;
+
     throw new Error(
       'Template tidak tersedia untuk kombinasi dokumen: ' +
-      [descriptor.activityType, descriptor.type, descriptor.speakerSubtype, descriptor.speakerStatus]
+      [descriptor.activityType, descriptor.type, condition]
         .map(function(value) { return text_(value) || '-'; })
         .join(' | ')
     );

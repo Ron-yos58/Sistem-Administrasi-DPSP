@@ -126,21 +126,38 @@ function detailSchedulesAvailable_(request) {
 function buildDocumentPlaceholders_(detail, document) {
   const request = detail.request;
   const employees = detail.employees;
+  
+  const docPayload = {
+    type: document.type,
+    speakerSubtype: document.speakerSubtype || '',
+    speakerStatus: document.speakerStatus || ''
+  };
+
   const routing = computeEmailRouting_({
-    documents: detail.documents,
+    activityType: request.activityType,
+    speakerSubtype: document.speakerSubtype || '',
+    speakerStatus: document.speakerStatus || '',
+    documents: [docPayload],
     partnerEmail: request.partnerEmail,
     partnerName: request.partnerName,
-    faculties: request.faculties,
-    speakerStatus: request.speakerStatus
+    faculties: request.faculties
   }, employees, document.type);
   const employeeJoin = buildEmployeeJoinPlaceholders_(employees);
+
+  const kondisiTambahan = (function() {
+    if (request.activityType === 'Penugasan Narasumber') {
+      if (document.type === 'Surat Tugas') return document.speakerSubtype || '-';
+      if (document.type === 'Surat Permohonan Narasumber kepada Dekan') return document.speakerStatus || '-';
+    }
+    return '-';
+  })();
 
   const values = {
     idPermohonan: request.id,
     tipeKegiatan: request.activityType,
     jenisSurat: document.type,
-    subTipe: request.speakerSubtype,
-    statusNarasumber: request.speakerStatus,
+    subTipe: document.speakerSubtype || '',
+    statusNarasumber: document.speakerStatus || '',
     fakultas: request.faculties.join(', '),
     nomorSurat: document.number,
     nomorSuratMasuk: request.incomingNumber,
@@ -177,7 +194,13 @@ function buildDocumentPlaceholders_(detail, document) {
     textJoinEmail: employeeJoin.textJoinEmail,
     narasumber: employeeJoin.narasumber,
     kepadaYth: routing.toRoles.join('\n'),
-    tembusan: routing.ccRoles.join('\n')
+    tembusan: routing.ccRoles.join('\n'),
+    
+    // Exact placeholders requested by user
+    NomorSurat: document.number || '',
+    TipeKegiatan: request.activityType || '',
+    SubTipe: document.type || '',
+    KondisiTambahan: kondisiTambahan
   };
 
   const aliases = {
@@ -450,9 +473,14 @@ function getTemplateConfigByKey_(key) {
   return configs.find(function(cfg) { return cfg.key === key && cfg.active; }) || null;
 }
 
-function addDocument(requestId, type, templateKey) {
+function addDocument(requestId, activityType, subType, condition) {
   const user = assertAuthorized_();
   assertCanWrite_(user);
+  
+  const mapping = findOfficialMapping_(activityType, subType, condition);
+  if (!mapping) {
+    throw new Error('Kombinasi Tipe Kegiatan, Sub-Tipe, dan Kondisi Tambahan tidak valid.');
+  }
   
   return withScriptLock_(function() {
     const sheet = getSheet_('DOCUMENTS');
@@ -462,25 +490,36 @@ function addDocument(requestId, type, templateKey) {
     const detail = getRequestDetailInternal_(text_(requestId));
     const request = detail.request;
     
+    const speakerSubtype = subType === 'Surat Tugas' ? condition : '';
+    const speakerStatus = subType === 'Surat Permohonan Narasumber kepada Dekan' ? condition : '';
+    
+    const docPayload = {
+      type: subType,
+      speakerSubtype: speakerSubtype,
+      speakerStatus: speakerStatus
+    };
+    
     const routingRequest = {
-      documents: [{ type: type, templateKey: templateKey }],
+      activityType: activityType,
+      speakerSubtype: speakerSubtype,
+      speakerStatus: speakerStatus,
+      documents: [docPayload],
       partnerEmail: request.partnerEmail,
       partnerName: request.partnerName,
       faculties: request.faculties,
-      speakerStatus: request.speakerStatus,
       manualTo: [],
       manualCc: []
     };
-    const routing = computeEmailRouting_(routingRequest, detail.employees, type);
+    const routing = computeEmailRouting_(routingRequest, detail.employees, subType);
 
     const row = new Array(DOCUMENT_HEADERS.length).fill('');
     row[0] = docId;
     row[1] = text_(requestId);
-    row[2] = type;
-    row[3] = request.speakerSubtype || '';
-    row[4] = request.speakerStatus || '';
+    row[2] = subType;
+    row[3] = speakerSubtype;
+    row[4] = speakerStatus;
     row[5] = '';
-    row[6] = templateKey;
+    row[6] = mapping.templateKey;
     row[7] = 'DRAFT';
     row[8] = '';
     row[9] = '';
@@ -497,14 +536,15 @@ function addDocument(requestId, type, templateKey) {
     
     appendDataRow_(sheet, row);
     
-    logAudit_('ADD_DOCUMENT', text_(requestId), true, { docId: docId, type: type });
+    updateMasterDocumentNumbers_(requestId);
+    logAudit_('ADD_DOCUMENT', text_(requestId), true, { docId: docId, type: subType });
     clearAppCache_();
     
     return getRequestDetail(requestId);
   });
 }
 
-function saveDocumentDetails(documentId, number, emailTo, emailCc, emailBcc, status) {
+function saveDocumentDetails(documentId, number, emailTo, emailCc, emailBcc, status, activityType, subType, condition) {
   const user = assertAuthorized_();
   assertCanWrite_(user);
   
@@ -514,10 +554,51 @@ function saveDocumentDetails(documentId, number, emailTo, emailCc, emailBcc, sta
     if (!rowNumber) throw new Error('Dokumen tidak ditemukan.');
     
     const row = sheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
+    
+    let comboChanged = false;
+    
+    if (activityType && subType) {
+      const mapping = findOfficialMapping_(activityType, subType, condition);
+      if (!mapping) {
+        throw new Error('Kombinasi Tipe Kegiatan, Sub-Tipe, dan Kondisi Tambahan tidak valid.');
+      }
+      
+      const currentType = row[2];
+      const currentSubtype = row[3];
+      const currentStatus = row[4];
+      
+      const newSpeakerSubtype = subType === 'Surat Tugas' ? condition : '';
+      const newSpeakerStatus = subType === 'Surat Permohonan Narasumber kepada Dekan' ? condition : '';
+      
+      if (currentType !== subType || currentSubtype !== newSpeakerSubtype || currentStatus !== newSpeakerStatus) {
+        comboChanged = true;
+        row[2] = subType;
+        row[3] = newSpeakerSubtype;
+        row[4] = newSpeakerStatus;
+        row[6] = mapping.templateKey;
+      }
+    }
+    
     row[5] = text_(number);
-    if (status) {
+    
+    if (comboChanged) {
+      try {
+        if (row[8]) DriveApp.getFileById(row[8]).setTrashed(true);
+        if (row[10]) DriveApp.getFileById(row[10]).setTrashed(true);
+      } catch (e) {
+        console.warn('Gagal men-trash file saat ganti kombinasi: ' + e.message);
+      }
+      row[7] = 'DRAFT';
+      row[8] = '';
+      row[9] = '';
+      row[10] = '';
+      row[11] = '';
+      row[12] = '';
+      row[13] = 'PENDING';
+    } else if (status) {
       row[7] = text_(status);
     }
+    
     row[16] = new Date();
     row[17] = text_(emailTo);
     row[18] = text_(emailCc);
@@ -528,7 +609,7 @@ function saveDocumentDetails(documentId, number, emailTo, emailCc, emailBcc, sta
     const requestId = row[1];
     updateMasterDocumentNumbers_(requestId);
     
-    logAudit_('UPDATE_DOCUMENT', text_(documentId), true, { number: number });
+    logAudit_('UPDATE_DOCUMENT', text_(documentId), true, { number: number, comboChanged: comboChanged });
     clearAppCache_();
     
     return getRequestDetail(requestId);
@@ -560,5 +641,39 @@ function deleteDocument(documentId) {
     clearAppCache_();
     
     return getRequestDetail(requestId);
+  });
+}
+
+function getDefaultRecipientsForLetter(requestId, activityType, subType, condition) {
+  const user = assertAuthorized_();
+  const detail = getRequestDetailInternal_(text_(requestId));
+  
+  const speakerSubtype = subType === 'Surat Tugas' ? condition : '';
+  const speakerStatus = subType === 'Surat Permohonan Narasumber kepada Dekan' ? condition : '';
+  
+  const docPayload = {
+    type: subType,
+    speakerSubtype: speakerSubtype,
+    speakerStatus: speakerStatus
+  };
+  
+  const routingRequest = {
+    activityType: activityType,
+    speakerSubtype: speakerSubtype,
+    speakerStatus: speakerStatus,
+    documents: [docPayload],
+    partnerEmail: detail.request.partnerEmail,
+    partnerName: detail.request.partnerName,
+    faculties: detail.request.faculties,
+    manualTo: [],
+    manualCc: []
+  };
+  
+  const routing = computeEmailRouting_(routingRequest, detail.employees, subType);
+  
+  return serializeValue_({
+    to: routing.to.join(', '),
+    cc: routing.cc.join(', '),
+    bcc: routing.bcc.join(', ')
   });
 }

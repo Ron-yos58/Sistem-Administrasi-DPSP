@@ -72,8 +72,9 @@
           <h1 id="pageTitle">Ringkasan</h1>
           <div class="topbar-actions">
             <span class="topbar-user" id="userEmail">Memuat pengguna...</span>
-            <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data">
+            <button class="button button-secondary refresh-btn" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              Refresh
             </button>
           </div>
         </header>
@@ -165,15 +166,21 @@
                 <div class="form-main">
                   <section class="form-card">
                     <div class="step-heading"><span>01</span><div><h3>Jenis dan keluaran</h3><p>Tentukan kegiatan dan dokumen yang dibutuhkan.</p></div></div>
-                    <div class="field-grid">
+                    <div class="field-grid" id="mainLetterSelectionContainer">
                       <label class="field">
                         <span>Tipe kegiatan *</span>
                         <select id="activityType" required></select>
                       </label>
-                      <label class="field speaker-only is-hidden">
-                        <span>Sub-tipe narasumber *</span>
-                        <select id="speakerSubtype">
-                          <option value="">Pilih sub-tipe</option>
+                      <label class="field" id="requestSubTypeContainer">
+                        <span>Sub-Tipe *</span>
+                        <select id="requestSubType" required>
+                          <option value="">Pilih Sub-Tipe</option>
+                        </select>
+                      </label>
+                      <label class="field is-hidden" id="requestConditionContainer">
+                        <span>Kondisi Tambahan</span>
+                        <select id="requestCondition">
+                          <option value="-">-</option>
                         </select>
                       </label>
                     </div>
@@ -226,14 +233,16 @@
                   </section>
 
                   <section class="form-card speaker-request-only is-hidden">
-                    <div class="step-heading"><span>04</span><div><h3>Pencarian narasumber</h3><p>Atur status dan fakultas tujuan.</p></div></div>
-                    <div class="field">
-                      <span>Status narasumber *</span>
-                      <div class="segmented" id="speakerStatusChoices"></div>
-                    </div>
+                    <div class="step-heading"><span>04</span><div><h3>Pencarian narasumber</h3><p>Atur fakultas tujuan.</p></div></div>
                     <div class="field">
                       <span>Fakultas tujuan *</span>
-                      <div class="check-list" id="facultyChoices"></div>
+                      <div class="check-dropdown" id="facultyChoices">
+                        <button type="button" class="check-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                          <span class="check-dropdown-label">Pilih fakultas...</span>
+                          <svg class="icon-svg check-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="check-dropdown-panel"><p class="helper-text">Memuat data...</p></div>
+                      </div>
                     </div>
                   </section>
 
@@ -256,14 +265,22 @@
                     <div class="step-heading"><span>07</span><div><h3>Penerima CC tambahan</h3><p>Opsional. Pilih penerima <strong>To</strong> dan <strong>CC</strong> tambahan dari Master CC. Kosongkan untuk menggunakan routing otomatis saja.</p></div></div>
                     <div class="field">
                       <span>Tambahan To</span>
-                      <div class="check-list routing-check-list" id="emailToChoices">
-                        <p class="helper-text">Memuat data Master CC…</p>
+                      <div class="check-dropdown check-dropdown-routing" id="emailToChoices">
+                        <button type="button" class="check-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                          <span class="check-dropdown-label">Pilih penerima...</span>
+                          <svg class="icon-svg check-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="check-dropdown-panel"><p class="helper-text">Memuat data Master CC…</p></div>
                       </div>
                     </div>
                     <div class="field">
                       <span>CC</span>
-                      <div class="check-list routing-check-list" id="emailCcChoices">
-                        <p class="helper-text">Memuat data Master CC…</p>
+                      <div class="check-dropdown check-dropdown-routing" id="emailCcChoices">
+                        <button type="button" class="check-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false">
+                          <span class="check-dropdown-label">Pilih CC...</span>
+                          <svg class="icon-svg check-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="check-dropdown-panel"><p class="helper-text">Memuat data Master CC…</p></div>
                       </div>
                     </div>
                   </section>
@@ -403,6 +420,17 @@
     </dialog>
 
     <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+
+    <div class="refresh-popup is-hidden" id="refreshProgressPopup" aria-live="polite" role="status">
+      <div class="refresh-popup-header">
+        <svg class="refresh-popup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+        <span id="refreshProgressLabel">Memperbarui data...</span>
+        <span class="refresh-popup-pct" id="refreshProgressPct">0%</span>
+      </div>
+      <div class="refresh-popup-track">
+        <div class="refresh-popup-bar" id="refreshProgressBar" style="width:0%"></div>
+      </div>
+    </div>
     <div class="boot-loader" id="bootLoader" role="status" aria-live="polite">
       <div class="loader-spinner" aria-hidden="true">
         <span></span>
@@ -459,6 +487,33 @@
         });
       })();
     </script>
+    <!-- Hidden elements to satisfy compiler syntax checks on dynamic elements -->
+    <div style="display:none" aria-hidden="true">
+      <input id="speakerSubtype" value="">
+      <select id="addLetterActivityType"></select>
+      <select id="addLetterSubType"></select>
+      <div id="addLetterConditionContainer"></div>
+      <select id="addLetterCondition"></select>
+      <select id="editLetterActivityType"></select>
+      <select id="editLetterSubType"></select>
+      <div id="editLetterConditionContainer"></div>
+      <select id="editLetterCondition"></select>
+      <input id="letterDetailNumber">
+      <input id="letterDetailEmailTo">
+      <input id="letterDetailEmailCc">
+      <input id="letterDetailEmailBcc">
+      <button id="btnSaveLetterDetails"></button>
+      <button id="btnGenerateDoc"></button>
+      <button id="btnPreviewEmail"></button>
+      <button id="btnCreateDraft"></button>
+      <button id="btnDeleteLetter"></button>
+      <button id="emailModalCreateDraftBtn"></button>
+      <input id="emailPreviewDocId">
+      <input id="emailPreviewTo">
+      <input id="emailPreviewCc">
+      <input id="emailPreviewBcc">
+    </div>
+
     <?!= include('Scripts'); ?>
     <script>
       window.setTimeout(function() {

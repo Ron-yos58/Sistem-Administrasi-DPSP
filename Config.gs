@@ -29,8 +29,6 @@ const APP_CONFIG = Object.freeze({
     'Surat izin pimpinan - Campus Visit',
     'Surat Permohonan Narasumber kepada Dekan'
   ],
-  SPEAKER_SUBTYPES: ['Workshop', 'Promosi'],
-  SPEAKER_STATUSES: ['Dicarikan', 'Tidak Dicarikan'],
   FACULTIES: [
     'Fakultas Ekonomi',
     'Fakultas Filsafat',
@@ -82,6 +80,63 @@ const APP_CONFIG = Object.freeze({
     SPEAKER_REQUEST_KNOWN: [71, 72, 73, 74]
   }
 });
+
+const OFFICIAL_LETTER_MAPPING = Object.freeze([
+  {
+    activityType: 'Edu Fair',
+    subType: 'Surat Tugas',
+    condition: '-',
+    templateKey: 'EDU_FAIR_TASK'
+  },
+  {
+    activityType: 'Campus Visit',
+    subType: 'Surat Balasan Campus Visit',
+    condition: '-',
+    templateKey: 'CAMPUS_VISIT_REPLY'
+  },
+  {
+    activityType: 'Campus Visit',
+    subType: 'Surat izin pimpinan - Campus Visit',
+    condition: '-',
+    templateKey: 'CAMPUS_VISIT_PERMISSION'
+  },
+  {
+    activityType: 'Campus Visit',
+    subType: 'Surat Rekomendasi Campus Visit - SU',
+    condition: '-',
+    templateKey: 'CAMPUS_VISIT_RECOMMENDATION'
+  },
+  {
+    activityType: 'Campus Visit',
+    subType: 'Surat Tugas',
+    condition: '-',
+    templateKey: 'CAMPUS_VISIT_TASK'
+  },
+  {
+    activityType: 'Penugasan Narasumber',
+    subType: 'Surat Permohonan Narasumber kepada Dekan',
+    condition: 'Tidak Dicarikan',
+    templateKey: 'SPEAKER_REQUEST_KNOWN'
+  },
+  {
+    activityType: 'Penugasan Narasumber',
+    subType: 'Surat Permohonan Narasumber kepada Dekan',
+    condition: 'Dicarikan',
+    templateKey: 'SPEAKER_REQUEST_SEARCH'
+  },
+  {
+    activityType: 'Penugasan Narasumber',
+    subType: 'Surat Tugas',
+    condition: 'Workshop',
+    templateKey: 'SPEAKER_WORKSHOP_TASK'
+  },
+  {
+    activityType: 'Penugasan Narasumber',
+    subType: 'Surat Tugas',
+    condition: 'Promosi',
+    templateKey: 'SPEAKER_PROMOTION_TASK'
+  }
+]);
 
 const AUTOCRAT_HEADERS = Object.freeze([
   'Merged Doc ID - Penugasan Edu Fair',

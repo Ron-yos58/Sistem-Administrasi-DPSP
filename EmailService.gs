@@ -100,7 +100,7 @@ function buildEmailPreviewForDocument_(document, customRecipients) {
     throw new Error('Jumlah penerima melebihi batas aman 50 alamat.');
   }
 
-  const template = getEmailTemplate_(document.type, request.speakerStatus);
+  const template = getEmailTemplate_(document.type, document.speakerStatus);
   const placeholders = buildEmailPlaceholders_(detail, document, routing);
   const subject = replaceTemplateTokens_(template.subject, placeholders, false);
   const isHtmlTemplate = isExplicitHtmlTemplate_(template.body);
@@ -287,8 +287,8 @@ function buildEmailPlaceholders_(detail, document, routing) {
   const plain = {
     kepadaYth: routing.toRoles.join('\n'),
     jenisSurat: document.type,
-    subTipe: request.speakerSubtype,
-    statusNarasumber: request.speakerStatus,
+    subTipe: document.speakerSubtype || '',
+    statusNarasumber: document.speakerStatus || '',
     namaKegiatan: request.activityName,
     namaMitra: request.partnerName,
     narasumber: employeeJoin.narasumber,
@@ -428,15 +428,6 @@ function parseAndValidateEmailString_(str) {
 
 function saveFinalRecipientsToMaster_(requestId, toList, ccList, documentId) {
   try {
-    const sheet = getSheet_('MASTER');
-    const rowNumber = findRowById_(sheet, requestId, 1);
-    if (rowNumber) {
-      const row = sheet.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
-      setMaster_(row, 'Email To', toList.join('\n'));
-      setMaster_(row, 'Email CC', ccList.join('\n'));
-      sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
-    }
-
     if (documentId) {
       const docSheet = getSheet_('DOCUMENTS');
       const docRowNumber = findRowById_(docSheet, documentId, 1);

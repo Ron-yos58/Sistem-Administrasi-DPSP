@@ -794,4 +794,42 @@ test('requests page keeps archived items visible by default', () => {
   }
 });
 
+test('email routing CC list is strictly manual', () => {
+  const previousGetReferences = context.getReferenceDataInternal_;
+  context.getReferenceDataInternal_ = () => ({
+    cc: [
+      { role: 'Dekan Fakultas Ekonomi', unit: 'Fakultas Ekonomi', email: 'dekan@example.com' },
+      { role: 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', unit: 'Rektorat', email: 'wr@example.com' }
+    ]
+  });
+
+  const previousGetTemplateConfigs = context.getTemplateConfigsInternal_;
+  context.getTemplateConfigsInternal_ = () => [
+    { key: 'EDU_FAIR_TASK', active: true, defaultTo: 'admin@example.com', defaultCc: 'wr@example.com', defaultBcc: '' }
+  ];
+
+  try {
+    const request = {
+      activityType: 'Edu Fair',
+      documents: [{ type: 'Surat Tugas' }],
+      manualTo: [],
+      manualCc: []
+    };
+    const employees = [];
+    const routing = context.computeEmailRouting_(request, employees);
+    
+    equal(routing.to.includes('admin@example.com'), true);
+    equal(routing.cc.includes('wr@example.com'), false);
+    equal(routing.cc.length, 0);
+
+    const requestWithManual = Object.assign({}, request, { manualCc: ['wr@example.com'] });
+    const routingWithManual = context.computeEmailRouting_(requestWithManual, employees);
+    equal(routingWithManual.cc.includes('wr@example.com'), true);
+    equal(routingWithManual.cc.length, 1);
+  } finally {
+    context.getReferenceDataInternal_ = previousGetReferences;
+    context.getTemplateConfigsInternal_ = previousGetTemplateConfigs;
+  }
+});
+
 if (!process.exitCode) console.log('PASS pure behavior tests');
