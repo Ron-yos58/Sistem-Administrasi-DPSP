@@ -1,26 +1,39 @@
 function generateDocument(documentId, force) {
+  return generateDocumentByMode_(documentId, force, 'BOTH');
+}
+
+function generateGoogleDoc(documentId, force) {
+  return generateDocumentByMode_(documentId, force, 'DOC');
+}
+
+function generatePdf(documentId, force) {
+  return generateDocumentByMode_(documentId, force, 'PDF');
+}
+
+function generateDocumentByMode_(documentId, force, mode) {
   const user = assertAuthorized_();
   assertCanWrite_(user);
   const id = text_(documentId);
 
   return withScriptLock_(function() {
     try {
-      const result = generateDocumentInternal_(id, Boolean(force), user);
-      logAudit_('GENERATE_DOCUMENT', result.requestId, true, {
+      const result = generateDocumentInternal_(id, Boolean(force), user, mode);
+      logAudit_('GENERATE_' + mode, result.requestId, true, {
         documentId: id,
         reused: result.reused
       });
       return serializeValue_(result);
     } catch (error) {
       markDocumentError_(id, error.message);
-      logAudit_('GENERATE_DOCUMENT', id, false, { error: error.message });
+      logAudit_('GENERATE_' + mode, id, false, { error: error.message });
       throw error;
     }
   });
 }
 
 
-function generateDocumentInternal_(documentId, force, user) {
+function generateDocumentInternal_(documentId, force, user, mode) {
+  mode = mode || 'BOTH';
   const documentSheet = getSheet_('DOCUMENTS');
   const rowNumber = findRowById_(documentSheet, documentId, 1);
   if (!rowNumber) throw new Error('Dokumen tidak ditemukan: ' + documentId);
@@ -37,14 +50,13 @@ function generateDocumentInternal_(documentId, force, user) {
 
   validateDocumentGeneration_(detail.request, document, detail.employees);
 
-  if (
-    !force &&
-    document.status === 'GENERATED' &&
-    document.docId &&
-    document.pdfId &&
-    driveFileExists_(document.docId) &&
-    driveFileExists_(document.pdfId)
-  ) {
+  const hasDoc = document.docId && driveFileExists_(document.docId);
+  const hasPdf = document.pdfId && driveFileExists_(document.pdfId);
+  const reusable = mode === 'DOC' ? hasDoc : mode === 'PDF' ? hasPdf : hasDoc && hasPdf;
+  if (!force && reusable) {
+    // Pastikan file lama yang sudah pernah dibuat tetap bisa dibuka oleh user saat ini.
+    if (hasDoc) grantGeneratedFileAccessById_(document.docId, user, { editor: true });
+    if (hasPdf) grantGeneratedFileAccessById_(document.pdfId, user, { editor: false });
     return {
       ok: true,
       reused: true,
@@ -58,42 +70,70 @@ function generateDocumentInternal_(documentId, force, user) {
   const templateId = templateConfig.templateId;
   const folder = getOutputFolder_();
   const fileName = buildDocumentFileName_(detail.request, document);
-  const templateFile = DriveApp.getFileById(templateId);
-  const docFile = templateFile.makeCopy(fileName, folder);
-  const googleDoc = DocumentApp.openById(docFile.getId());
+  let docFile = null;
+  let createdDoc = false;
 
-  try {
-    replaceDocumentPlaceholders_(googleDoc, buildDocumentPlaceholders_(detail, document));
-    googleDoc.saveAndClose();
-  } catch (error) {
-    docFile.setTrashed(true);
-    throw new Error('Gagal mengisi template: ' + error.message);
+  if (mode === 'PDF' && hasDoc) {
+    docFile = DriveApp.getFileById(document.docId);
+  } else {
+    const templateFile = DriveApp.getFileById(templateId);
+    docFile = templateFile.makeCopy(fileName, folder);
+    const googleDoc = DocumentApp.openById(docFile.getId());
+    createdDoc = true;
+    try {
+      replaceDocumentPlaceholders_(googleDoc, buildDocumentPlaceholders_(detail, document));
+      googleDoc.saveAndClose();
+    } catch (error) {
+      docFile.setTrashed(true);
+      throw new Error('Gagal mengisi template: ' + error.message);
+    }
+
+    // Jika Web App dieksekusi sebagai owner/script, file dibuat atas nama owner.
+    // Beri akses ke user yang memproses agar link Edit Surat tidak menjadi 403.
+    grantGeneratedFileAccess_(docFile, user, { editor: true });
+
+    row[8] = docFile.getId();
+    row[9] = docFile.getUrl();
+    if (mode === 'DOC') {
+      row[10] = '';
+      row[11] = '';
+    }
+    recordGeneratedArtifact_(detail.request.id, document.templateKey, document.revision, 'DOC', docFile, {
+      documentId: document.id
+    });
   }
 
-  const pdfFile = folder.createFile(
-    DriveApp.getFileById(docFile.getId()).getBlob().getAs(MimeType.PDF)
-      .setName(fileName + '.pdf')
-  );
+  let pdfFile = null;
+  if (mode !== 'DOC') {
+    // Jika memakai Google Doc lama untuk regenerasi PDF, pastikan user tetap punya akses edit/view.
+    grantGeneratedFileAccess_(docFile, user, { editor: true });
+
+    pdfFile = folder.createFile(
+      DriveApp.getFileById(docFile.getId()).getBlob().getAs(MimeType.PDF)
+        .setName(fileName + '.pdf')
+    );
+
+    // Beri akses view/download ke PDF agar link Download PDF Surat tidak menjadi 403.
+    grantGeneratedFileAccess_(pdfFile, user, { editor: false });
+
+    row[10] = pdfFile.getId();
+    row[11] = pdfFile.getUrl();
+    recordGeneratedArtifact_(detail.request.id, document.templateKey, document.revision, 'PDF', pdfFile, {
+      documentId: document.id
+    });
+  }
+
   const now = new Date();
-  row[7] = 'GENERATED';
-  row[8] = docFile.getId();
-  row[9] = docFile.getUrl();
-  row[10] = pdfFile.getId();
-  row[11] = pdfFile.getUrl();
+  row[7] = mode === 'DOC' ? 'DRAFT' : 'GENERATED';
   row[16] = now;
   documentSheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
 
   updateMasterDocumentLinks_(detail.request.id, docFile, pdfFile);
-  recordGeneratedArtifact_(detail.request.id, document.templateKey, document.revision, 'DOC', docFile, {
-    documentId: document.id
-  });
-  recordGeneratedArtifact_(detail.request.id, document.templateKey, document.revision, 'PDF', pdfFile, {
-    documentId: document.id
-  });
 
   return {
     ok: true,
     reused: false,
+    createdDoc: createdDoc,
     requestId: document.requestId,
     document: documentRowToDto_(row)
   };
@@ -281,12 +321,73 @@ function driveFileExists_(fileId) {
   }
 }
 
+/**
+ * Mencegah error Google Drive 403 pada file hasil generate.
+ *
+ * Penyebab umum:
+ * - Web App deploy "Execute as: Me/owner".
+ * - File hasil makeCopy/createFile dibuat sebagai milik owner script.
+ * - User operator/admin membuka link file, tetapi belum diberi akses Drive.
+ *
+ * Strategi:
+ * 1. Tambahkan akses langsung ke email user yang menjalankan proses.
+ * 2. Tambahkan fallback anyone-with-link VIEW supaya link preview/download tetap terbuka
+ *    apabila kebijakan Drive organisasi mengizinkan.
+ *
+ * Catatan keamanan:
+ * - Google Doc diberi editor hanya untuk user pemroses.
+ * - Anyone-with-link default hanya VIEW, bukan EDIT.
+ */
+function grantGeneratedFileAccess_(file, user, options) {
+  if (!file) return;
+  options = options || {};
+  const email = text_(user && user.email);
+  const asEditor = Boolean(options.editor);
+  const anyoneCanEdit = Boolean(options.anyoneCanEdit);
+  const allowAnyoneWithLink = options.allowAnyoneWithLink !== false;
+
+  if (email && email.indexOf('@') !== -1) {
+    try {
+      if (asEditor) {
+        file.addEditor(email);
+      } else {
+        file.addViewer(email);
+      }
+    } catch (error) {
+      console.warn('Gagal memberi akses file ke ' + email + ': ' + error.message);
+    }
+  }
+
+  if (allowAnyoneWithLink) {
+    try {
+      file.setSharing(
+        DriveApp.Access.ANYONE_WITH_LINK,
+        asEditor && anyoneCanEdit ? DriveApp.Permission.EDIT : DriveApp.Permission.VIEW
+      );
+    } catch (error) {
+      // Beberapa domain Google Workspace melarang "Anyone with link".
+      // Jika ini gagal, akses langsung via addEditor/addViewer di atas tetap dipakai.
+      console.warn('Gagal mengatur akses anyone-with-link: ' + error.message);
+    }
+  }
+}
+
+function grantGeneratedFileAccessById_(fileId, user, options) {
+  const id = text_(fileId);
+  if (!id) return;
+  try {
+    grantGeneratedFileAccess_(DriveApp.getFileById(id), user, options || {});
+  } catch (error) {
+    console.warn('Gagal membuka file untuk pemberian akses: ' + error.message);
+  }
+}
+
 function updateMasterDocumentLinks_(requestId, docFile, pdfFile) {
   const sheet = getSheet_('MASTER');
   const rowNumber = findRowById_(sheet, requestId, 1);
   if (!rowNumber) return;
-  sheet.getRange(rowNumber, masterColumn_('Edit Surat')).setValue(docFile.getUrl());
-  sheet.getRange(rowNumber, masterColumn_('Download PDF Surat')).setValue(pdfFile.getUrl());
+  if (docFile) sheet.getRange(rowNumber, masterColumn_('Edit Surat')).setValue(docFile.getUrl());
+  if (pdfFile) sheet.getRange(rowNumber, masterColumn_('Download PDF Surat')).setValue(pdfFile.getUrl());
 }
 
 function recordGeneratedArtifact_(requestId, artifactKey, revision, type, file, metadata) {
@@ -489,6 +590,9 @@ function addDocument(requestId, activityType, subType, condition) {
     
     const detail = getRequestDetailInternal_(text_(requestId));
     const request = detail.request;
+    if (request.status === 'ARCHIVED') {
+      throw new Error('Permohonan selesai bersifat hanya-baca.');
+    }
     
     const speakerSubtype = subType === 'Surat Tugas' ? condition : '';
     const speakerStatus = subType === 'Surat Permohonan Narasumber kepada Dekan' ? condition : '';
@@ -508,7 +612,7 @@ function addDocument(requestId, activityType, subType, condition) {
       partnerName: request.partnerName,
       faculties: request.faculties,
       manualTo: [],
-      manualCc: []
+      manualCc: request.manualCc || []
     };
     const routing = computeEmailRouting_(routingRequest, detail.employees, subType);
 
@@ -527,7 +631,7 @@ function addDocument(requestId, activityType, subType, condition) {
     row[11] = '';
     row[12] = '';
     row[13] = 'PENDING';
-    row[14] = 1;
+    row[14] = Number(request.revision || 0);
     row[15] = now;
     row[16] = now;
     row[17] = routing.to.join(', ');
@@ -554,6 +658,10 @@ function saveDocumentDetails(documentId, number, emailTo, emailCc, emailBcc, sta
     if (!rowNumber) throw new Error('Dokumen tidak ditemukan.');
     
     const row = sheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
+    const detail = getRequestDetailInternal_(text_(row[1]));
+    if (detail.request.status === 'ARCHIVED') {
+      throw new Error('Permohonan selesai bersifat hanya-baca.');
+    }
     
     let comboChanged = false;
     
@@ -626,6 +734,10 @@ function deleteDocument(documentId) {
     if (!rowNumber) throw new Error('Dokumen tidak ditemukan.');
     const row = sheet.getRange(rowNumber, 1, 1, DOCUMENT_HEADERS.length).getValues()[0];
     const requestId = row[1];
+    const detail = getRequestDetailInternal_(text_(requestId));
+    if (detail.request.status === 'ARCHIVED') {
+      throw new Error('Permohonan selesai bersifat hanya-baca.');
+    }
     
     sheet.deleteRow(rowNumber);
     

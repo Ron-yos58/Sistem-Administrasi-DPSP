@@ -96,7 +96,9 @@ function ensureSheet_(ss, key, headers, report) {
   if (sheet.getMaxColumns() < targetHeaders.length) {
     sheet.insertColumnsAfter(sheet.getMaxColumns(), targetHeaders.length - sheet.getMaxColumns());
   }
-  sheet.getRange(1, 1, 1, targetHeaders.length).setValues([targetHeaders]);
+  const headerRange = sheet.getRange(1, 1, 1, targetHeaders.length);
+  headerRange.clearDataValidations();
+  headerRange.setValues([targetHeaders]);
   sheet.setFrozenRows(1);
 }
 

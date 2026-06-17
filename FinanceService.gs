@@ -70,7 +70,11 @@ function syncTravelDataInternal_(requestId) {
     const untouched = existingRows.filter(function(row) { return text_(row[0]) !== requestId; });
     finalRows = untouched.concat(targetRows);
   } else {
-    finalRows = targetRows;
+    const activeRequestIds = masterRows.map(function(item) { return item.id; });
+    const untouched = existingRows.filter(function(row) {
+      return activeRequestIds.indexOf(text_(row[0])) === -1;
+    });
+    finalRows = untouched.concat(targetRows);
   }
   rewriteDataRows_(travelSheet, finalRows, TRAVEL_HEADERS.length);
   return { ok: true, synced: targetRows.length };

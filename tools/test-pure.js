@@ -27,13 +27,22 @@ const context = {
       const day = String(date.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     }
-  }
+  },
+  window: {
+    CSS: {},
+    setTimeout: () => {},
+    clearTimeout: () => {}
+  },
+  document: {}
 };
 vm.createContext(context);
 
-for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'Migration.gs', 'DocumentService.gs']) {
+for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'Migration.gs', 'DocumentService.gs', 'FinanceService.gs']) {
   vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
 }
+const scriptsHtml = fs.readFileSync(path.join(root, 'Scripts.html'), 'utf8');
+const jsCode = scriptsHtml.replace(/<script>/, '').replace(/<\/script>/, '');
+vm.runInContext(jsCode, context, { filename: 'Scripts.html' });
 
 function test(name, callback) {
   try {
@@ -349,6 +358,18 @@ test('legacy date range parsing', () => {
     JSON.parse(JSON.stringify(context.parseLegacyDateRange_('31 Mei - 2 Juni 2026'))),
     { start: '2026-05-31', end: '2026-06-02' }
   );
+  equal(
+    JSON.parse(JSON.stringify(context.parseLegacyDateRange_('25 Juni 2026 - 27 Juni 2026'))),
+    { start: '2026-06-25', end: '2026-06-27' }
+  );
+  equal(
+    JSON.parse(JSON.stringify(context.parseLegacyDateRange_('25 Juni 2026 s/d 27 Juni 2026'))),
+    { start: '2026-06-25', end: '2026-06-27' }
+  );
+  equal(
+    JSON.parse(JSON.stringify(context.parseLegacyDateRange_('25 sampai 27 Juni 2026'))),
+    { start: '2026-06-25', end: '2026-06-27' }
+  );
 });
 
 test('legacy Master compacts without Autocrat columns', () => {
@@ -601,9 +622,27 @@ test('ready employee faculty must use configured faculty list', () => {
       letterDate: '2026-06-01'
     });
   } catch (error) {
-    failed = /Fakultas orang ke-1 tidak valid/.test(error.message);
+    failed = /Unit\/Fakultas orang ke-1 tidak dikenali/.test(error.message);
   }
   if (!failed) throw new Error('unknown faculty was accepted');
+});
+
+test('employee faculty aliases normalize before validation', () => {
+  const normalized = context.normalizeRequestPayload_({
+    status: 'DRAFT',
+    activityType: 'Edu Fair',
+    documents: [],
+    employees: [{
+      name: 'Budi',
+      identifier: '123',
+      email: 'budi@example.com',
+      role: 'Dosen',
+      unit: 'FE'
+    }],
+    schedules: [],
+    faculties: []
+  });
+  equal(normalized.employees[0].unit, 'Fakultas Ekonomi');
 });
 
 test('readDataRows reads rows even when first column is blank', () => {
@@ -794,7 +833,7 @@ test('requests page keeps archived items visible by default', () => {
   }
 });
 
-test('email routing CC list is strictly manual', () => {
+test('email routing applies template defaults and user selections', () => {
   const previousGetReferences = context.getReferenceDataInternal_;
   context.getReferenceDataInternal_ = () => ({
     cc: [
@@ -819,8 +858,8 @@ test('email routing CC list is strictly manual', () => {
     const routing = context.computeEmailRouting_(request, employees);
     
     equal(routing.to.includes('admin@example.com'), true);
-    equal(routing.cc.includes('wr@example.com'), false);
-    equal(routing.cc.length, 0);
+    equal(routing.cc.includes('wr@example.com'), true);
+    equal(routing.cc.length, 1);
 
     const requestWithManual = Object.assign({}, request, { manualCc: ['wr@example.com'] });
     const routingWithManual = context.computeEmailRouting_(requestWithManual, employees);
@@ -830,6 +869,189 @@ test('email routing CC list is strictly manual', () => {
     context.getReferenceDataInternal_ = previousGetReferences;
     context.getTemplateConfigsInternal_ = previousGetTemplateConfigs;
   }
+});
+
+test('task and speaker-request routing follow employee data', () => {
+  const previousGetReferences = context.getReferenceDataInternal_;
+  const previousGetTemplateConfigs = context.getTemplateConfigsInternal_;
+  context.getReferenceDataInternal_ = () => ({
+    cc: [
+      { role: 'Dekan Fakultas Ekonomi', unit: 'Fakultas Ekonomi', email: 'dekan.fe@example.com' },
+      { role: 'Sekretaris Universitas', unit: 'Rektorat', email: 'su@example.com' }
+    ]
+  });
+  context.getTemplateConfigsInternal_ = () => [];
+
+  try {
+    const employees = [{
+      name: 'Narasumber FE',
+      unit: 'Fakultas Ekonomi',
+      email: 'narasumber@example.com'
+    }];
+
+    const taskRouting = context.computeEmailRouting_({
+      activityType: 'Edu Fair',
+      documents: [{ type: 'Surat Tugas' }],
+      manualTo: ['su@example.com'],
+      manualCc: []
+    }, employees, 'Surat Tugas');
+    equal(taskRouting.to.join(','), 'narasumber@example.com');
+
+    const requestRouting = context.computeEmailRouting_({
+      activityType: 'Penugasan Narasumber',
+      documents: [{
+        type: 'Surat Permohonan Narasumber kepada Dekan',
+        speakerStatus: 'Tidak Dicarikan'
+      }],
+      faculties: ['Fakultas Hukum'],
+      manualTo: ['su@example.com'],
+      manualCc: ['su@example.com']
+    }, employees, 'Surat Permohonan Narasumber kepada Dekan');
+    equal(requestRouting.to.join(','), 'dekan.fe@example.com');
+    equal(requestRouting.cc.join(','), 'su@example.com');
+  } finally {
+    context.getReferenceDataInternal_ = previousGetReferences;
+    context.getTemplateConfigsInternal_ = previousGetTemplateConfigs;
+  }
+});
+
+test('email preview keeps recipient names separate from addresses', () => {
+  const source = fs.readFileSync(path.join(root, 'EmailService.gs'), 'utf8');
+  equal(source.includes('const automaticRouting = computeEmailRouting_'), true);
+  equal(source.includes('toRoles: to'), false);
+  equal(source.includes('ccRoles: cc'), false);
+});
+
+test('syncTravelDataInternal preserves archived travel rows during full sync', () => {
+  const masterRows = [
+    ['REQ-1', 'Edu Fair', 'Surat Tugas', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Tidak', 'Ya', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'DRAFT', '', '', '', '', 'token-1', '2026-06-01', '2026-06-01', 1],
+    ['REQ-2', 'Edu Fair', 'Surat Tugas', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Tidak', 'Ya', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'ARCHIVED', '', '', '', '', 'token-2', '2026-06-01', '2026-06-01', 1]
+  ];
+  const employeeRows = [
+    ['REQ-1', 'Andi', '123', 'Staf', 'Fakultas Ekonomi', 'andi@example.com', '', '', 'REQ-1|andi'],
+    ['REQ-2', 'Budi', '456', 'Staf', 'Fakultas Ekonomi', 'budi@example.com', '', '', 'REQ-2|budi']
+  ];
+  const travelRows = [
+    ['REQ-1', 'Andi', '123', '', '', '', '2026-06-01', 'Aula', 100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'REQ-1|andi'],
+    ['REQ-2', 'Budi', '456', '', '', '', '2026-06-01', 'Aula', 200000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'REQ-2|budi']
+  ];
+
+  let writtenRows = null;
+  const previousGetSheet = context.getSheet_;
+  const previousReadDataRows = context.readDataRows_;
+  const previousRewriteDataRows = context.rewriteDataRows_;
+  const previousGetDocuments = context.getDocumentsByRequest_;
+
+  context.getSheet_ = key => ({ name: key, getLastRow: () => 10 });
+  context.getDocumentsByRequest_ = () => [];
+  context.readDataRows_ = (sheet, width) => {
+    if (sheet.name === 'MASTER') return masterRows;
+    if (sheet.name === 'EMPLOYEES') return employeeRows;
+    if (sheet.name === 'TRAVEL') return travelRows;
+    return [];
+  };
+  context.rewriteDataRows_ = (sheet, rows, width) => {
+    if (sheet.name === 'TRAVEL') writtenRows = rows;
+  };
+
+  try {
+    context.syncTravelDataInternal_('');
+    equal(writtenRows.length, 2);
+    const andiRow = writtenRows.find(r => r[0] === 'REQ-1');
+    const budiRow = writtenRows.find(r => r[0] === 'REQ-2');
+    equal(andiRow[8], 100000);
+    equal(budiRow[8], 200000);
+  } finally {
+    context.getSheet_ = previousGetSheet;
+    context.readDataRows_ = previousReadDataRows;
+    context.rewriteDataRows_ = previousRewriteDataRows;
+    context.getDocumentsByRequest_ = previousGetDocuments;
+  }
+});
+
+test('legacy migration handles unnormalized activity and document types', () => {
+  const d1 = context.normalizeDocumentDescriptor_({
+    activityType: 'penugasan narasumber ',
+    type: 'surat tugas',
+    speakerSubtype: '',
+    speakerStatus: ''
+  });
+  equal(d1.activityType, 'Penugasan Narasumber');
+  equal(d1.type, 'Surat Tugas');
+
+  const d2 = context.normalizeDocumentDescriptor_({
+    activityType: 'narasumber',
+    type: 'surat permohonan narasumber kepada dekan',
+    speakerSubtype: '',
+    speakerStatus: ''
+  });
+  equal(d2.activityType, 'Penugasan Narasumber');
+  equal(d2.type, 'Surat Permohonan Narasumber kepada Dekan');
+  equal(d2.speakerStatus, 'Tidak Dicarikan');
+});
+
+test('legacy migration infers subtype correctly even with casing variations', () => {
+  const row = new Array(84).fill('');
+  row[1] = 'penugasan narasumber ';
+  row[2] = 'surat tugas';
+  row[3] = '';
+  row[42] = '';
+  row[46] = 'DOC-PROMO-123';
+
+  const descriptor = context.normalizeDocumentDescriptor_({
+    activityType: row[1],
+    type: row[2],
+    speakerSubtype: row[3],
+    speakerStatus: row[4]
+  });
+  if (descriptor.activityType === 'Penugasan Narasumber' && descriptor.type === 'Surat Tugas' && !descriptor.speakerSubtype) {
+    const workshopDocId = context.text_(row[42]);
+    const promotionDocId = context.text_(row[46]);
+    if (promotionDocId && !workshopDocId) {
+      descriptor.speakerSubtype = 'Promosi';
+    } else {
+      descriptor.speakerSubtype = 'Workshop';
+    }
+  }
+
+  equal(descriptor.activityType, 'Penugasan Narasumber');
+  equal(descriptor.type, 'Surat Tugas');
+  equal(descriptor.speakerSubtype, 'Promosi');
+});
+
+test('legacy migration parses non-contiguous range with dan into multiple list items', () => {
+  const result = context.parseLegacyDateRange_('25 dan 30 Agustus 2025');
+  equal(result.start, '2025-08-25');
+  equal(result.end, '2025-08-30');
+  equal(result.list.length, 2);
+  equal(result.list[0].start, '2025-08-25');
+  equal(result.list[0].end, '2025-08-25');
+  equal(result.list[1].start, '2025-08-30');
+});
+
+test('client-side sorting logic', () => {
+  const requests = [
+    { id: 'REQ-1', activityName: 'A', partnerName: 'X', startDate: '2026-06-10', status: 'DRAFT' },
+    { id: 'REQ-2', activityName: 'B', partnerName: 'Y', startDate: '2026-06-11', status: 'READY' }
+  ];
+
+  const sortDateDesc = context.App.sortRequests(requests, 'date-desc');
+  equal(sortDateDesc[0].id, 'REQ-2');
+
+  const sortDateAsc = context.App.sortRequests(requests, 'date-asc');
+  equal(sortDateAsc[0].id, 'REQ-1');
+
+  const sortIdAsc = context.App.sortRequests(requests, 'id-asc');
+  equal(sortIdAsc[0].id, 'REQ-1');
+
+  const sortActivityAsc = context.App.sortRequests(requests, 'activity-asc');
+  equal(sortActivityAsc[0].activityName, 'A');
+
+  const sortPartnerAsc = context.App.sortRequests(requests, 'partner-asc');
+  equal(sortPartnerAsc[0].partnerName, 'X');
+
+  const sortStatusAsc = context.App.sortRequests(requests, 'status-asc');
+  equal(sortStatusAsc[0].status, 'DRAFT');
 });
 
 if (!process.exitCode) console.log('PASS pure behavior tests');

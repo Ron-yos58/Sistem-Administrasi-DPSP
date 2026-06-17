@@ -61,8 +61,10 @@ function assertAdmin_(user) {
 
 function withScriptLock_(callback) {
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) {
-    throw new Error('Sistem sedang memproses perubahan lain. Coba kembali beberapa detik.');
+  try {
+    lock.waitLock(120000);
+  } catch (error) {
+    throw new Error('Proses sebelumnya belum selesai. Tunggu sebentar lalu coba kembali.');
   }
   try {
     const result = callback();
@@ -99,6 +101,40 @@ function uniqueTextList_(values) {
     seen[value] = true;
     return true;
   });
+}
+
+function canonicalOrganizationUnit_(value) {
+  const raw = text_(value, 200).trim();
+  if (!raw) return '';
+
+  function key_(item) {
+    return String(item || '')
+      .toLowerCase()
+      .replace(/&/g, ' dan ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  const aliases = {
+    fe: 'Fakultas Ekonomi',
+    ff: 'Fakultas Filsafat',
+    fh: 'Fakultas Hukum',
+    fisip: 'Fakultas Ilmu Sosial dan Ilmu Politik',
+    fk: 'Fakultas Kedokteran',
+    fkip: 'Fakultas Keguruan dan Ilmu Pendidikan',
+    fs: 'Fakultas Sains',
+    ft: 'Fakultas Teknik',
+    ftr: 'Fakultas Teknologi Rekayasa',
+    fv: 'Fakultas Vokasi'
+  };
+  const rawKey = key_(raw);
+  if (aliases[rawKey]) return aliases[rawKey];
+
+  const canonical = (APP_CONFIG.FACULTIES || []).find(function(item) {
+    return key_(item) === rawKey;
+  });
+  return canonical || raw;
 }
 
 function formatDate_(value, pattern) {
@@ -495,4 +531,3 @@ function buildEmployeeJoinPlaceholders_(employees) {
   Object.keys(aliases).forEach(function(key) { values[key] = aliases[key]; });
   return values;
 }
-

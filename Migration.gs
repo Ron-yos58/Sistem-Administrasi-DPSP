@@ -31,12 +31,21 @@ function previewLegacyMigration() {
     if (row[17] && !parseLegacyDateRange_(row[17])) {
       dateWarnings.push({ row: index + 2, value: String(row[17]) });
     }
-    const descriptor = {
-      activityType: text_(row[1]),
-      type: text_(row[2]),
-      speakerSubtype: text_(row[3]),
-      speakerStatus: text_(row[4])
-    };
+    const descriptor = normalizeDocumentDescriptor_({
+      activityType: row[1],
+      type: row[2],
+      speakerSubtype: row[3],
+      speakerStatus: row[4]
+    });
+    if (descriptor.activityType === 'Penugasan Narasumber' && descriptor.type === 'Surat Tugas' && !descriptor.speakerSubtype) {
+      const workshopDocId = text_(row[42]); // Merged Doc ID - Penugasan Narasumber (col 43, index 42)
+      const promotionDocId = text_(row[46]); // Merged Doc ID - Penugasan Narasumber (Promosi) (col 47, index 46)
+      if (promotionDocId && !workshopDocId) {
+        descriptor.speakerSubtype = 'Promosi';
+      } else {
+        descriptor.speakerSubtype = 'Workshop';
+      }
+    }
     try {
       resolveTemplateKey_(descriptor);
     } catch (error) {
@@ -182,12 +191,21 @@ function migrateLegacyData(confirmText) {
       const documentNumbers = [];
 
       sourceGroup.forEach(function(source) {
-        const descriptor = {
-          activityType: text_(source[1]),
-          type: text_(source[2]),
-          speakerSubtype: text_(source[3]),
-          speakerStatus: text_(source[4])
-        };
+        const descriptor = normalizeDocumentDescriptor_({
+          activityType: source[1],
+          type: source[2],
+          speakerSubtype: source[3],
+          speakerStatus: source[4]
+        });
+        if (descriptor.activityType === 'Penugasan Narasumber' && descriptor.type === 'Surat Tugas' && !descriptor.speakerSubtype) {
+          const workshopDocId = text_(source[42]); // Merged Doc ID - Penugasan Narasumber (col 43, index 42)
+          const promotionDocId = text_(source[46]); // Merged Doc ID - Penugasan Narasumber (Promosi) (col 47, index 46)
+          if (promotionDocId && !workshopDocId) {
+            descriptor.speakerSubtype = 'Promosi';
+          } else {
+            descriptor.speakerSubtype = 'Workshop';
+          }
+        }
         const templateKey = resolveTemplateKey_(descriptor);
         const columns = APP_CONFIG.LEGACY_DOCUMENT_COLUMNS[templateKey];
         const docId = 'DOC-' + Utilities.getUuid().slice(0, 12).toUpperCase();
@@ -214,7 +232,10 @@ function migrateLegacyData(confirmText) {
           legacyMasterValue_(source, 'Email Status') ? 'DRAFTED' : '',
           1,
           now,
-          now
+          now,
+          '',
+          '',
+          ''
         ]);
 
       });
@@ -222,16 +243,19 @@ function migrateLegacyData(confirmText) {
       const range = parseLegacyDateRange_(sourceGroup[0][17]);
       if (range) {
         const timeRange = parseTimeRange_(sourceGroup[0][18]);
-        scheduleOutput.push([
-          'SCH-' + Utilities.getUuid().slice(0, 12).toUpperCase(),
-          id,
-          parseIsoDate_(range.start),
-          parseIsoDate_(range.end || range.start),
-          timeRange.startTime,
-          timeRange.endTime,
-          text_(sourceGroup[0][19]),
-          1
-        ]);
+        const list = range.list || [{ start: range.start, end: range.end }];
+        list.forEach(function(item, itemIndex) {
+          scheduleOutput.push([
+            'SCH-' + Utilities.getUuid().slice(0, 12).toUpperCase(),
+            id,
+            parseIsoDate_(item.start),
+            parseIsoDate_(item.end || item.start),
+            timeRange.startTime,
+            timeRange.endTime,
+            text_(sourceGroup[0][19]),
+            itemIndex + 1
+          ]);
+        });
       }
       const employees = employeesByRequest[id] || [];
       const requestForRouting = {
@@ -244,6 +268,18 @@ function migrateLegacyData(confirmText) {
       };
 
       // Keep Master value validation-safe (single enum); full document list is stored in DOCUMENTS sheet.
+      const inferredSubtype = uniqueTextList_(
+        documentOutput.filter(function(docRow) { return docRow[1] === id; }).map(function(docRow) { return docRow[3]; })
+      )[0] || '';
+      const normFirst = normalizeDocumentDescriptor_({
+        activityType: sourceGroup[0][1],
+        type: sourceGroup[0][2],
+        speakerSubtype: sourceGroup[0][3],
+        speakerStatus: sourceGroup[0][4]
+      });
+      setMaster_(row, 'Tipe Kegiatan', normFirst.activityType);
+      setMaster_(row, 'Status Narasumber', normFirst.speakerStatus);
+      setMaster_(row, 'Sub-Tipe Kegiatan', inferredSubtype);
       setMaster_(row, 'Jenis Surat', uniqueTextList_(documentTypes)[0] || '');
       setMaster_(row, 'ID Permohonan', id);
       setMaster_(row, 'Nomor Surat', documentNumbers.join('\n'));
@@ -587,22 +623,44 @@ function parseLegacyDateRange_(value) {
     }
   }
 
-  let match = input.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/i);
+  let match = input.match(/^(\d{1,2})\s+(?:dan|&)\s+(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/i);
   if (match) {
-    const date = iso(Number(match[1]), match[2], Number(match[3]));
-    return date ? { start: date, end: date } : null;
+    const start = iso(Number(match[1]), match[3], Number(match[4]));
+    const end = iso(Number(match[2]), match[3], Number(match[4]));
+    if (start && end) {
+      return {
+        start: start,
+        end: end,
+        list: [
+          { start: start, end: start },
+          { start: end, end: end }
+        ]
+      };
+    }
   }
-  match = input.match(/^(\d{1,2})\s*-\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/i);
+
+  match = input.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\s*(?:-|s\/d|s\.d\.?|sd|sampai)\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/i);
+  if (match) {
+    const start = iso(Number(match[1]), match[2], Number(match[3]));
+    const end = iso(Number(match[4]), match[5], Number(match[6]));
+    return start && end ? { start: start, end: end } : null;
+  }
+  match = input.match(/^(\d{1,2})\s+([A-Za-z]+)\s*(?:-|s\/d|s\.d\.?|sd|sampai)\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/i);
+  if (match) {
+    const start = iso(Number(match[1]), match[2], Number(match[5]));
+    const end = iso(Number(match[3]), match[4], Number(match[5]));
+    return start && end ? { start: start, end: end } : null;
+  }
+  match = input.match(/^(\d{1,2})\s*(?:-|s\/d|s\.d\.?|sd|sampai)\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/i);
   if (match) {
     const start = iso(Number(match[1]), match[3], Number(match[4]));
     const end = iso(Number(match[2]), match[3], Number(match[4]));
     return start && end ? { start: start, end: end } : null;
   }
-  match = input.match(/^(\d{1,2})\s+([A-Za-z]+)\s*-\s*(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/i);
+  match = input.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/i);
   if (match) {
-    const start = iso(Number(match[1]), match[2], Number(match[5]));
-    const end = iso(Number(match[3]), match[4], Number(match[5]));
-    return start && end ? { start: start, end: end } : null;
+    const date = iso(Number(match[1]), match[2], Number(match[3]));
+    return date ? { start: date, end: date } : null;
   }
   match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (match) return { start: input, end: input };

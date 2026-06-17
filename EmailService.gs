@@ -62,10 +62,21 @@ function buildEmailPreviewInternal_(requestId, suppressErrors) {
 function buildEmailPreviewForDocument_(document, customRecipients) {
   const detail = getRequestDetailInternal_(document.requestId);
   const request = detail.request;
+  const automaticRouting = computeEmailRouting_({
+    activityType: request.activityType,
+    documents: [document],
+    partnerEmail: request.partnerEmail,
+    partnerName: request.partnerName,
+    faculties: request.faculties,
+    speakerSubtype: document.speakerSubtype,
+    speakerStatus: document.speakerStatus,
+    manualTo: [],
+    manualCc: request.manualCc || []
+  }, detail.employees, document.type);
   let routing;
 
   if (customRecipients && (customRecipients.to || customRecipients.cc || customRecipients.bcc)) {
-    const to = parseAndValidateEmailString_(customRecipients.to || '');
+    const to = automaticRouting.to;
     const cc = parseAndValidateEmailString_(customRecipients.cc || '');
     const bcc = parseAndValidateEmailString_(customRecipients.bcc || '');
 
@@ -75,22 +86,12 @@ function buildEmailPreviewForDocument_(document, customRecipients) {
       to: to,
       cc: cc,
       bcc: bcc,
-      toRoles: customRecipients.toRoles ? customRecipients.toRoles.split(/[,;\n\s]+/).filter(Boolean) : to,
-      ccRoles: customRecipients.ccRoles ? customRecipients.ccRoles.split(/[,;\n\s]+/).filter(Boolean) : cc,
-      notes: []
+      toRoles: automaticRouting.toRoles,
+      ccRoles: rolesForEmails_(cc, automaticRouting),
+      notes: automaticRouting.notes
     };
   } else {
-    const to = parseAndValidateEmailString_(document.emailTo || '');
-    const cc = parseAndValidateEmailString_(document.emailCc || '');
-    const bcc = parseAndValidateEmailString_(document.emailBcc || '');
-    routing = {
-      to: to,
-      cc: cc,
-      bcc: bcc,
-      toRoles: to,
-      ccRoles: cc,
-      notes: []
-    };
+    routing = automaticRouting;
   }
 
   if (!routing.to.length) {
@@ -122,6 +123,27 @@ function buildEmailPreviewForDocument_(document, customRecipients) {
     hasAttachment: Boolean(document.pdfId && driveFileExists_(document.pdfId)),
     attachmentUrl: document.pdfUrl || ''
   };
+}
+
+function rolesForEmails_(emails, routing) {
+  const references = getReferenceDataInternal_().cc || [];
+  return uniqueTextList_((emails || []).map(function(email) {
+    const normalized = String(email || '').trim().toLowerCase();
+    const reference = references.find(function(item) {
+      return String(item.email || '').trim().toLowerCase() === normalized;
+    });
+    if (reference) return reference.role || reference.unit || normalized;
+
+    const toIndex = (routing.to || []).indexOf(normalized);
+    if (toIndex !== -1 && routing.toRoles && routing.toRoles[toIndex]) {
+      return routing.toRoles[toIndex];
+    }
+    const ccIndex = (routing.cc || []).indexOf(normalized);
+    if (ccIndex !== -1 && routing.ccRoles && routing.ccRoles[ccIndex]) {
+      return routing.ccRoles[ccIndex];
+    }
+    return normalized;
+  }));
 }
 
 function normalizeEmailHtml_(html) {
@@ -236,7 +258,6 @@ function createEmailDraftInternal_(documentId, force, user, customRecipientsJson
   const markerHtml = '<span style="display:none;color:transparent;font-size:0">' +
     escapeHtml_(marker) + '</span>';
   const htmlBody = preview.htmlBody + markerHtml;
-  const attachment = DriveApp.getFileById(document.pdfId).getBlob();
   const draft = GmailApp.createDraft(
     preview.to.join(','),
     preview.subject,
@@ -245,7 +266,6 @@ function createEmailDraftInternal_(documentId, force, user, customRecipientsJson
       htmlBody: htmlBody,
       cc: preview.cc.join(','),
       bcc: (preview.bcc || []).join(','),
-      attachments: [attachment],
       markImportant: true
     }
   );

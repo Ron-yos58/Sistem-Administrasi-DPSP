@@ -62,6 +62,8 @@ function exportGeneratedSheetInternal_(sheetName, format, options, user) {
       driveFileExists_(file.fileId);
   });
   if (existing) {
+    // File lama mungkin dibuat sebelum akses Drive dibuka; pastikan tidak 403 saat diunduh.
+    grantGeneratedFileAccessById_(existing.fileId, user, { editor: false });
     return {
       ok: true,
       reused: true,
@@ -77,6 +79,8 @@ function exportGeneratedSheetInternal_(sheetName, format, options, user) {
     : exportSheetXlsxBlob_(sheet);
   const fileName = sheetName + '.' + (format === 'PDF' ? 'pdf' : 'xlsx');
   const file = getOutputFolder_().createFile(blob.setName(fileName));
+  // Make the file accessible via direct download link and prevent Google Drive 403.
+  grantGeneratedFileAccess_(file, user, { editor: false });
   const artifactKey = 'FINANCE_' + metadata.kind;
   supersedeGeneratedArtifacts_(requestId, artifactKey, [format]);
   recordGeneratedArtifactData_(
@@ -109,36 +113,29 @@ function exportGeneratedSheetInternal_(sheetName, format, options, user) {
 }
 
 function exportSheetPdfBlob_(ss, sheet, options) {
-  const orientation = text_(options.orientation).toUpperCase() || 'LANDSCAPE';
-  const paperSize = text_(options.paperSize).toUpperCase() || 'A4';
-  const params = {
-    format: 'pdf',
-    gid: sheet.getSheetId(),
-    size: paperSize,
-    portrait: orientation === 'PORTRAIT',
-    fitw: true,
-    sheetnames: false,
-    printtitle: false,
-    pagenumbers: false,
-    gridlines: false,
-    fzr: false,
-    top_margin: 0.5,
-    bottom_margin: 0.5,
-    left_margin: 0.5,
-    right_margin: 0.5
-  };
-  const query = Object.keys(params).map(function(key) {
-    return encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
-  }).join('&');
-  const url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?' + query;
-  const response = UrlFetchApp.fetch(url, {
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-    muteHttpExceptions: true
-  });
-  if (response.getResponseCode() !== 200) {
-    throw new Error('Ekspor PDF gagal. HTTP ' + response.getResponseCode());
+  // New implementation using Drive export to avoid 403 errors.
+  // Create a temporary copy of the sheet in a new spreadsheet.
+  const tempSpreadsheet = SpreadsheetApp.create('TEMP_EXPORT_' + Utilities.getUuid());
+  try {
+    const copied = sheet.copyTo(tempSpreadsheet).setName(sheet.getName());
+    // Remove default sheet if present.
+    const sheets = tempSpreadsheet.getSheets();
+    sheets.forEach(function(s) {
+      if (s.getSheetId() !== copied.getSheetId()) {
+        tempSpreadsheet.deleteSheet(s);
+      }
+    });
+    SpreadsheetApp.flush();
+    // Export the temporary spreadsheet as PDF using Drive API.
+    const file = DriveApp.getFileById(tempSpreadsheet.getId());
+    const pdfBlob = file.getAs('application/pdf');
+    // Optionally set PDF metadata (orientation, paper size) – not directly supported via Drive export.
+    // For now, rely on default settings; callers can adjust options when needed.
+    return pdfBlob;
+  } finally {
+    // Clean up the temporary spreadsheet.
+    DriveApp.getFileById(tempSpreadsheet.getId()).setTrashed(true);
   }
-  return response.getBlob();
 }
 
 function exportSheetXlsxBlob_(sourceSheet) {

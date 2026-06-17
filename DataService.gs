@@ -79,12 +79,13 @@
     const employees = getEmployeesByRequest_(id);
     const documents = getDocumentsByRequest_(id).map(function(doc) {
       const routingRequest = {
+        activityType: request.activityType,
         documents: [doc],
         partnerEmail: request.partnerEmail,
         partnerName: request.partnerName,
         faculties: request.faculties,
         speakerStatus: request.speakerStatus,
-        manualTo: Array.isArray(request.manualTo) ? request.manualTo : [],
+        manualTo: [],
         manualCc: Array.isArray(request.manualCc) ? request.manualCc : []
       };
       doc.routing = computeEmailRouting_(routingRequest, employees, doc.type);
@@ -188,6 +189,18 @@
           'Data sudah diubah pengguna lain. Muat ulang detail sebelum menyimpan.'
         );
       }
+      if (!isNew && !clean.documents.length) {
+        clean.documents = getDocumentsByRequest_(id).map(function(document) {
+          return {
+            id: document.id,
+            activityType: clean.activityType,
+            type: document.type,
+            speakerSubtype: document.speakerSubtype,
+            speakerStatus: document.speakerStatus,
+            number: document.number
+          };
+        });
+      }
       const previousClean = isNew ? null : normalizeRequestPayload_(Object.assign(
         {},
         masterRowToDto_(existing),
@@ -252,11 +265,12 @@
         if (generationChanged) markGeneratedFilesSuperseded_(id);
       }
 
-      const documents = isNew && clean.documents.length
-        ? replaceDocumentsForRequest_(id, clean.documents, revision, false)
+      const documents = clean.documents.length
+        ? replaceDocumentsForRequest_(id, clean.documents, revision, !generationChanged)
         : getDocumentsByRequest_(id);
       replaceSchedulesForRequest_(id, clean.schedules);
       replaceEmployeesForRequest_(id, clean.employees);
+      syncDocumentRecipientsForRequest_(id, clean, clean.employees);
       applyEmployeeAndRoutingColumns_(row, clean.employees, clean);
       sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
 
@@ -358,6 +372,32 @@
     return serializeValue_(getReferenceDataInternal_());
   }
 
+  function addReferenceCC(payload) {
+    const user = assertAuthorized_();
+    assertCanWrite_(user);
+
+    const unit = text_(payload.unit).trim();
+    const role = text_(payload.role).trim();
+    const email = text_(payload.email).trim().toLowerCase();
+
+    if (!unit || !role || !email) {
+      throw new Error('Semua field wajib diisi.');
+    }
+    const emails = emailList_(email);
+    if (!emails.length) {
+      throw new Error('Format email tidak valid.');
+    }
+
+    return withScriptLock_(function() {
+      const sheet = getSheet_('CC');
+      appendDataRow_(sheet, [unit, role, emails[0]]);
+      clearAppCache_();
+      logAudit_('ADD_REFERENCE_CC', '', true, { unit: unit, role: role, email: emails[0] });
+      return serializeValue_(getReferenceDataInternal_());
+    });
+  }
+
+
   function getReferenceDataInternal_() {
     const cached = getJsonCache_('references');
     if (cached) return cached;
@@ -411,7 +451,7 @@
         name: text_(row[1], 250),
         identifier: text_(row[2], 100),
         role: text_(row[3], 200),
-        unit: text_(row[4], 200),
+        unit: canonicalOrganizationUnit_(row[4]),
         email: text_(row[5], 250),
         rank: text_(row[6], 200),
         category: text_(row[7], 200)
@@ -449,10 +489,17 @@
     const now = new Date();
     const next30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+    const pendingFollowUp = requests.filter(function(req) {
+      if (req.status !== 'READY') return false;
+      const progress = req.documentProgress;
+      return !progress || (progress.status !== 'DRAFTED' && progress.status !== 'COMPLETE');
+    }).length;
+
     return {
       total: requests.length,
       drafts: requests.filter(function(item) { return item.status === 'DRAFT'; }).length,
       ready: requests.filter(function(item) { return item.status === 'READY'; }).length,
+      pendingFollowUp: pendingFollowUp,
       documentsPending: documents.filter(function(item) {
         return item.status === 'PENDING';
       }).length,
@@ -585,7 +632,7 @@
           name: row[1],
           identifier: row[2],
           role: row[3],
-          unit: row[4],
+          unit: canonicalOrganizationUnit_(row[4]),
           email: row[5],
           rank: row[6],
           category: row[7],
@@ -705,6 +752,42 @@
     rewriteDataRows_(sheet, untouched.concat(additions), EMPLOYEE_HEADERS.length);
   }
 
+  function syncDocumentRecipientsForRequest_(requestId, request, employees) {
+    const sheet = getSheet_('DOCUMENTS');
+    const rows = readDataRows_(sheet, DOCUMENT_HEADERS.length);
+    let changed = false;
+
+    rows.forEach(function(row) {
+      if (text_(row[1]) !== requestId) return;
+      const stored = documentRowToDto_(row);
+      const routing = computeEmailRouting_({
+        activityType: request.activityType,
+        documents: [stored],
+        partnerEmail: request.partnerEmail,
+        partnerName: request.partnerName,
+        faculties: request.faculties,
+        speakerSubtype: stored.speakerSubtype,
+        speakerStatus: stored.speakerStatus,
+        manualTo: request.manualTo || [],
+        manualCc: request.manualCc || []
+      }, employees, stored.type);
+
+      const nextTo = routing.to.join(', ');
+      const nextCc = routing.cc.join(', ');
+      const nextBcc = routing.bcc.join(', ');
+      if (text_(row[17]) !== nextTo || text_(row[18]) !== nextCc || text_(row[19]) !== nextBcc) {
+        row[12] = '';
+        row[13] = 'PENDING';
+      }
+      row[17] = nextTo;
+      row[18] = nextCc;
+      row[19] = nextBcc;
+      changed = true;
+    });
+
+    if (changed) rewriteDataRows_(sheet, rows, DOCUMENT_HEADERS.length);
+  }
+
   function replaceSchedulesForRequest_(requestId, schedules) {
     const sheet = getSheet_('SCHEDULES');
     const untouched = readDataRows_(sheet, SCHEDULE_HEADERS.length)
@@ -784,16 +867,30 @@
 
   function normalizeRequestPayload_(payload) {
     const activityType = text_(payload.activityType);
-    const speakerSubtype = text_(payload.speakerSubtype);
-    const speakerStatus = text_(payload.speakerStatus);
+    let speakerSubtype = text_(payload.speakerSubtype);
+    let speakerStatus = text_(payload.speakerStatus);
+    if (activityType !== 'Penugasan Narasumber') {
+      speakerSubtype = '';
+      speakerStatus = '';
+    }
     const documents = (payload.documents || []).map(function(document) {
       return {
         id: text_(document.id),
         activityType: activityType,
         type: text_(document.type),
-        speakerSubtype: speakerSubtype,
-        speakerStatus: speakerStatus,
-        number: text_(document.number, 150)
+        speakerSubtype: activityType === 'Penugasan Narasumber'
+          ? text_(document.speakerSubtype || speakerSubtype)
+          : '',
+        speakerStatus: activityType === 'Penugasan Narasumber'
+          ? text_(document.speakerStatus || speakerStatus)
+          : '',
+        number: text_(document.number, 150),
+        emailTo: emailList_(document.emailTo).join(', '),
+        emailCc: emailList_(document.emailCc).join(', '),
+        emailBcc: emailList_(document.emailBcc).join(', '),
+        recipientsProvided: Object.prototype.hasOwnProperty.call(document, 'emailTo') ||
+          Object.prototype.hasOwnProperty.call(document, 'emailCc') ||
+          Object.prototype.hasOwnProperty.call(document, 'emailBcc')
       };
     });
     const employees = (payload.employees || []).map(function(employee) {
@@ -801,7 +898,7 @@
         name: text_(employee.name, 200),
         identifier: text_(employee.identifier, 100),
         role: text_(employee.role, 200),
-        unit: text_(employee.unit, 200),
+        unit: canonicalOrganizationUnit_(employee.unit),
         email: emailList_(employee.email).join(', '),
         rank: text_(employee.rank, 200),
         category: text_(employee.category, 200),
@@ -956,9 +1053,7 @@
     });
     const needsPeople = documents.some(function(document) {
       return document.type === 'Surat Tugas';
-    }) || (
-      hasRequestLetter && hasRequestLetter.speakerStatus === 'Tidak Dicarikan'
-    );
+    }) || Boolean(hasRequestLetter);
     if (isReady && needsPeople && !employees.length) {
       errors.push('Minimal satu pegawai/narasumber wajib diisi.');
     }
@@ -980,16 +1075,12 @@
             'Data orang ke-' + (index + 1) + ' belum lengkap: ' + missing.join(', ') + '.'
           );
         }
-        if (employee.unit && APP_CONFIG.FACULTIES.indexOf(employee.unit) === -1) {
-          errors.push('Fakultas orang ke-' + (index + 1) + ' tidak valid.');
+        if (employee.unit && APP_CONFIG.FACULTIES.indexOf(canonicalOrganizationUnit_(employee.unit)) === -1) {
+          errors.push(
+            'Unit/Fakultas orang ke-' + (index + 1) + ' tidak dikenali: ' + employee.unit + '.'
+          );
         }
       });
-    }
-
-    if (isReady && payload.activityType === 'Penugasan Narasumber') {
-      if (hasRequestLetter) {
-        if (!(payload.faculties || []).length) errors.push('Fakultas tujuan wajib dipilih.');
-      }
     }
 
     if (errors.length) throw new Error(errors.join('\n'));
@@ -1049,8 +1140,18 @@
     const configs = getTemplateConfigsInternal_();
 
     function addByRole(targetEmails, targetRoles, role, unit) {
+      function lookupKey(value) {
+        return String(value || '').toLowerCase()
+          .replace(/&/g, ' dan ')
+          .replace(/[^a-z0-9]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+      const canonicalUnit = canonicalOrganizationUnit_(unit);
       const match = references.find(function(item) {
-        return item.role === role && (!unit || item.unit === unit);
+        return lookupKey(item.role) === lookupKey(role) &&
+          (!canonicalUnit ||
+            lookupKey(canonicalOrganizationUnit_(item.unit)) === lookupKey(canonicalUnit));
       });
       if (match) {
         targetEmails.push(match.email);
@@ -1060,11 +1161,27 @@
       }
     }
 
-    function addEmployees() {
+    function addEmployees(targetEmails, targetRoles) {
+      targetEmails = targetEmails || to;
+      targetRoles = targetRoles || toRoles;
       employees.forEach(function(employee) {
-        emailList_(employee.email).forEach(function(email) { to.push(email); });
-        if (employee.name) toRoles.push(employee.name);
+        emailList_(employee.email).forEach(function(email) { targetEmails.push(email); });
+        if (employee.name) targetRoles.push(employee.name);
       });
+    }
+
+    function addDeansForFaculties(faculties) {
+      uniqueTextList_(faculties || []).forEach(function(faculty) {
+        addByRole(to, toRoles, 'Dekan ' + faculty, faculty);
+      });
+    }
+
+    function employeeFaculties() {
+      return uniqueTextList_((employees || []).map(function(employee) {
+        return canonicalOrganizationUnit_(employee.unit);
+      }).filter(function(unit) {
+        return APP_CONFIG.FACULTIES.indexOf(unit) !== -1 && unit.indexOf('Fakultas ') === 0;
+      }));
     }
 
     function addManualEmail(targetEmails, targetRoles, email) {
@@ -1083,7 +1200,30 @@
 
     function resolveConfiguredRecipients(configuredText, targetEmails, targetRoles) {
       if (!configuredText) return;
-      const parts = configuredText.split(/[,;\n]+/).map(function(p) { return p.trim(); }).filter(Boolean);
+      let remaining = String(configuredText);
+      const normalized = remaining.trim().toLowerCase();
+      if (normalized.indexOf('email petugas/narasumber') !== -1) {
+        addEmployees(targetEmails, targetRoles);
+        remaining = remaining.replace(/email petugas\/narasumber/ig, '');
+      }
+      if (normalized.indexOf('email mitra') !== -1) {
+        emailList_(request.partnerEmail).forEach(function(email) { targetEmails.push(email); });
+        if (request.partnerName) targetRoles.push(request.partnerName);
+        remaining = remaining.replace(/email mitra/ig, '');
+      }
+
+      references.slice().sort(function(a, b) {
+        return String(b.role || '').length - String(a.role || '').length;
+      }).forEach(function(reference) {
+        const role = String(reference.role || '').trim();
+        if (!role || remaining.toLowerCase().indexOf(role.toLowerCase()) === -1) return;
+        addByRole(targetEmails, targetRoles, role, reference.unit);
+        remaining = remaining.replace(new RegExp(escapeRegex_(role), 'ig'), '');
+      });
+
+      const parts = remaining.split(/[;\n]+/).map(function(p) {
+        return p.replace(/^[,\s]+|[,\s]+$/g, '').trim();
+      }).filter(Boolean);
       parts.forEach(function(part) {
         if (part.indexOf('@') !== -1) {
           targetEmails.push(part.toLowerCase());
@@ -1113,13 +1253,17 @@
         });
       } catch (e) {}
 
-      const cfg = configs.find(function(c) {
-        return (templateKey && c.key === templateKey && c.active) || (c.type === type && c.active);
+      const cfg = (templateKey
+        ? configs.find(function(c) { return c.key === templateKey && c.active; })
+        : null) || configs.find(function(c) {
+        return c.type === type && c.active;
       });
 
       if (cfg) {
-        resolveConfiguredRecipients(cfg.defaultTo, to, toRoles);
-        // resolveConfiguredRecipients(cfg.defaultCc, cc, ccRoles);
+        if (type !== 'Surat Permohonan Narasumber kepada Dekan') {
+          resolveConfiguredRecipients(cfg.defaultTo, to, toRoles);
+        }
+        resolveConfiguredRecipients(cfg.defaultCc, cc, ccRoles);
         resolveConfiguredRecipients(cfg.defaultBcc, bcc, []);
       } else {
         // Fallback rules
@@ -1171,20 +1315,11 @@
       }
 
       if (type === 'Surat Permohonan Narasumber kepada Dekan') {
-        request.faculties.forEach(function(faculty) {
-          addByRole(to, toRoles, 'Dekan ' + faculty, faculty);
-          // addByRole(cc, ccRoles, 'Koordinator Administrasi ' + faculty, faculty);
-        });
-        const docObj = (request.documents || []).find(function(d) { return d.type === type; }) || {};
-        const docSpeakerStatus = docObj.speakerStatus || request.speakerStatus || '';
-        if (docSpeakerStatus === 'Tidak Dicarikan') addEmployees();
+        const sourceFaculties = employeeFaculties();
+        addDeansForFaculties(sourceFaculties.length ? sourceFaculties : request.faculties);
       } else if (type === 'Surat Tugas') {
         addEmployees();
       }
-    });
-
-    (request.manualTo || []).forEach(function(email) {
-      addManualEmail(to, toRoles, email);
     });
 
     (request.manualCc || []).forEach(function(email) {
