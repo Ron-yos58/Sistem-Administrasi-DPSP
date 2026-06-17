@@ -817,7 +817,7 @@ test('finance input is managed only in generated spreadsheets', () => {
   if (/preview-document|documentPreviewModal/.test(index + scripts)) {
     throw new Error('removed document preview is still exposed');
   }
-  const toolbar = scripts.match(/renderFinanceToolbar_:[\s\S]*?\n    handleDetailAction:/);
+  const toolbar = scripts.match(/renderFinanceToolbar_:[\s\S]*?\n\s+handleDetailAction:/);
   if (!toolbar || /export-finance|Buat \/ Update PDF|Buat \/ Update Excel/.test(toolbar[0])) {
     throw new Error('finance export actions are still exposed in request detail');
   }

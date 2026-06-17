@@ -6,7 +6,51 @@ function doGet() {
 }
 
 function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+  const cache = CacheService.getScriptCache();
+  const metaKey = 'file_meta_' + filename;
+  const metaStr = cache.get(metaKey);
+
+  if (metaStr) {
+    try {
+      const meta = JSON.parse(metaStr);
+      const keys = [];
+      for (let i = 0; i < meta.chunks; i++) {
+        keys.push('file_chunk_' + filename + '_' + i);
+      }
+      const results = cache.getAll(keys);
+      let content = '';
+      let ok = true;
+      for (let i = 0; i < meta.chunks; i++) {
+        const chunk = results[keys[i]];
+        if (!chunk) {
+          ok = false;
+          break;
+        }
+        content += chunk;
+      }
+      if (ok) return content;
+    } catch (e) {
+      // fallback
+    }
+  }
+
+  const content = HtmlService.createHtmlOutputFromFile(filename).getContent();
+  try {
+    const chunkSize = 90000;
+    const chunks = [];
+    for (let offset = 0; offset < content.length; offset += chunkSize) {
+      chunks.push(content.substring(offset, offset + chunkSize));
+    }
+    const cacheData = {};
+    chunks.forEach(function(chunk, idx) {
+      cacheData['file_chunk_' + filename + '_' + idx] = chunk;
+    });
+    cacheData[metaKey] = JSON.stringify({ chunks: chunks.length });
+    cache.putAll(cacheData, 21600);
+  } catch (e) {
+    // ignore
+  }
+  return content;
 }
 
 function getSystemStatus() {

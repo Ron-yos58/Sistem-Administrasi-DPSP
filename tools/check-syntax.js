@@ -115,10 +115,11 @@ for (const method of serverMethods) {
   }
 }
 
+const keywords = new Set(['if', 'for', 'while', 'switch', 'catch', 'function']);
 const appMethodNames = Array.from(
   scriptsHtml.matchAll(/^\s{4}([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/gm),
   match => match[1]
-);
+).filter(name => !keywords.has(name));
 const duplicateAppMethods = appMethodNames.filter((name, index) => appMethodNames.indexOf(name) !== index);
 for (const name of new Set(duplicateAppMethods)) {
   failed = true;

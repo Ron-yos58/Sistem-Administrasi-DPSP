@@ -469,7 +469,25 @@ function logAudit_(action, entityId, success, details) {
 }
 
 function clearAppCache_() {
-  CacheService.getScriptCache().removeAll(['bootstrap', 'references', 'signers', 'employeeCatalog', 'template_configs']);
+  const cache = CacheService.getScriptCache();
+  cache.removeAll(['bootstrap', 'bootstrap_requests', 'bootstrap_summary', 'references', 'signers', 'employeeCatalog', 'template_configs']);
+
+  try {
+    const idsKey = 'cached_request_ids';
+    const idsVal = cache.get(idsKey);
+    if (idsVal) {
+      const ids = JSON.parse(idsVal);
+      const keysToRemove = [];
+      ids.forEach(function(id) {
+        keysToRemove.push('req_detail_int_' + id);
+        keysToRemove.push('req_detail_pub_' + id);
+      });
+      cache.removeAll(keysToRemove);
+      cache.remove(idsKey);
+    }
+  } catch (e) {
+    // ignore
+  }
 }
 
 

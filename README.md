@@ -60,3 +60,33 @@ Status dan log pelacakan disimpan pada sheet-sheet berikut di Google Spreadsheet
 * [Index.html](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Index.html): Struktur markup HTML dari antarmuka dasbor.
 * [Scripts.html](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Scripts.html): Logika JavaScript interaktif di sisi klien (frontend), penanganan state dasbor, tombol aksi, dan pemanggilan fungsi Apps Script (*Google Server Callback*).
 * [Styles.html](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Styles.html): Gaya tampilan CSS modern dasbor, termasuk pendefinisian warna badge untuk masing-masing status.
+
+---
+
+## ⚖️ Do's & Don'ts Alur Kerja (Workflow)
+
+Untuk memastikan sistem berjalan dengan baik dan menghindari kerusakan data atau kegagalan otomatisasi, ikuti panduan berikut:
+
+### 1. Permohonan Draft (`DRAFT`)
+* **DO:**
+  * Isi data awal kegiatan, mitra, jadwal, dan petugas sedetail mungkin.
+  * Ubah data permohonan secara bebas selagi status masih `DRAFT`.
+* **DON'T:**
+  * Mencoba membuat/generate Google Docs, PDF, draft email, atau laporan keuangan honor/perjadin (fitur-fitur ini dikunci di backend dan tidak dapat dieksekusi).
+
+### 2. Permohonan Siap Diproses (`READY`)
+* **DO:**
+  * Lakukan *Generate Google Docs* untuk membuat draf surat.
+  * Masukkan nomor surat resmi yang valid setelah draf ditinjau.
+  * Generate PDF surat dan draf email (Gmail Draft).
+  * Lengkapi data keuangan (honorarium dan perjadin) langsung pada Google Sheet terpisah yang ter-generate otomatis.
+* **DON'T:**
+  * Melakukan perubahan data mayor pada form dasbor jika dokumen sudah final, kecuali Anda siap jika status pengerjaan di-reset kembali ke `PENDING` (*fingerprint reset* akan mendeteksi perubahan data dan menuntut regenerasi ulang dokumen agar file tetap sinkron).
+
+### 3. Permohonan Selesai (`ARCHIVED`)
+* **DO:**
+  * Gunakan tautan yang tersedia di dasbor untuk mengunduh PDF, melihat dokumen, atau membuka draf email yang sudah siap di Gmail.
+  * Jadikan data permohonan ini sebagai arsip acuan historis.
+* **DON'T:**
+  * Mencoba mengedit data permohonan, jadwal, mitra, atau petugas (seluruh data dikunci secara total).
+  * Mencoba melakukan generate ulang dokumen, PDF, draft email, atau sheet keuangan (sistem memblokir seluruh fungsi pembuatan dokumen setelah masuk status `ARCHIVED` untuk mencegah modifikasi atau penimpaan file final).

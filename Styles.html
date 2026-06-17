@@ -694,6 +694,17 @@
     padding: 28px;
   }
 
+  .panel h2,
+  .form-card h2,
+  .review-card h2 {
+    margin: 0 0 16px;
+    font-family: "Manrope", sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    color: var(--ink);
+  }
+
   .panel-head {
     display: flex;
     align-items: center;
@@ -708,11 +719,15 @@
 
   .request-row {
     display: grid;
-    grid-template-columns: minmax(0, 1.5fr) minmax(120px, .8fr) minmax(150px, auto) auto;
+    grid-template-columns: minmax(0, 1.5fr) minmax(120px, .8fr) minmax(150px, 1.2fr) 80px;
     align-items: center;
     gap: 20px;
     padding: 20px 0;
     border-top: 1px solid var(--line);
+  }
+
+  .request-row .button {
+    justify-self: end;
   }
 
   .request-row:first-child {
@@ -1151,7 +1166,7 @@
     font-weight: 800;
   }
 
-  .step-heading h3 {
+  .step-heading h2 {
     margin-bottom: 4px;
     font-size: 18px;
   }
@@ -2736,7 +2751,7 @@
     }
 
     .request-row {
-      grid-template-columns: 1fr auto;
+      grid-template-columns: 1fr 80px;
       padding: 16px 0;
       gap: 12px;
     }

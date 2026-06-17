@@ -922,11 +922,32 @@
             this.updateEmployeeRequirements_();
             this.updateReview();
         },
-        setEmployeeCatalog_: function (catalog) {
+        setEmployeeCatalog_: function (catalogPayload) {
             var _this = this;
+            var catalog = [];
+            if (catalogPayload && Array.isArray(catalogPayload.items)) {
+                var units = catalogPayload.units || [];
+                var roles = catalogPayload.roles || [];
+                var ranks = catalogPayload.ranks || [];
+                var categories = catalogPayload.categories || [];
+                catalog = catalogPayload.items.map(function(item) {
+                    return {
+                        name: item[0] || '',
+                        identifier: item[1] || '',
+                        role: roles[item[2]] || '',
+                        unit: units[item[3]] || '',
+                        email: item[4] || '',
+                        rank: ranks[item[5]] || '',
+                        category: categories[item[6]] || ''
+                    };
+                });
+            } else if (Array.isArray(catalogPayload)) {
+                catalog = catalogPayload;
+            }
+
             var cards = Array.from(document.querySelectorAll('.employee-card'));
             var currentEmployees = cards.map(function (card) { return _this.employeeFromCard_(card); });
-            this.state.employeeCatalog = Array.isArray(catalog) ? catalog : [];
+            this.state.employeeCatalog = catalog;
             if (!cards.length)
                 return;
             document.getElementById('employeeList').innerHTML = '';
@@ -2496,11 +2517,11 @@
             });
         },
         renderAdminObject: function (title, result) {
-            document.getElementById('adminResult').innerHTML = "\n        <div class=\"admin-output\">\n          <h3>".concat(this.escape(title), "</h3>\n          <pre>").concat(this.escape(JSON.stringify(result, null, 2)), "</pre>\n        </div>\n      ");
+            document.getElementById('adminResult').innerHTML = "\n        <div class=\"admin-output\">\n          <h2>".concat(this.escape(title), "</h2>\n          <pre>").concat(this.escape(JSON.stringify(result, null, 2)), "</pre>\n        </div>\n      ");
         },
         renderGeneratedSheetCleanup: function (items) {
             var _this = this;
-            document.getElementById('adminResult').innerHTML = "\n        <div class=\"admin-output\">\n          <h3>Sheet generate</h3>\n          ".concat(items.length ? items.map(function (item) { return "\n            <label class=\"cleanup-item\">\n              <input type=\"checkbox\" data-generated-sheet value=\"".concat(_this.escape(item.name), "\">\n              <span>").concat(_this.escape(item.name), "</span>\n            </label>\n          "); }).join('') : '<p class="helper-text">Tidak ada sheet generate yang bisa dibersihkan.</p>', "\n        </div>\n      ");
+            document.getElementById('adminResult').innerHTML = "\n        <div class=\"admin-output\">\n          <h2>Sheet generate</h2>\n          ".concat(items.length ? items.map(function (item) { return "\n            <label class=\"cleanup-item\">\n              <input type=\"checkbox\" data-generated-sheet value=\"".concat(_this.escape(item.name), "\">\n              <span>").concat(_this.escape(item.name), "</span>\n            </label>\n          "); }).join('') : '<p class="helper-text">Tidak ada sheet generate yang bisa dibersihkan.</p>', "\n        </div>\n      ");
         },
         requestStatusBadge_: function (status) {
             var clean = String(status || 'DRAFT').toUpperCase();

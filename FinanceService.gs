@@ -914,15 +914,35 @@ function firstDocumentNumber_(requestId, type) {
 }
 
 function getRequestDetailInternal_(requestId) {
+  const cacheKey = 'req_detail_int_' + requestId;
+  const cached = getJsonCache_(cacheKey);
+  if (cached) {
+    return cached;
+  }
   const master = getSheet_('MASTER');
   const rowNumber = findRowById_(master, requestId, 1);
   if (!rowNumber) throw new Error('Permohonan tidak ditemukan: ' + requestId);
   const row = master.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
-  return {
+  const detail = {
     request: masterRowToDto_(row),
     documents: getDocumentsByRequest_(requestId),
     schedules: getSchedulesByRequest_(requestId, row),
     employees: getEmployeesByRequest_(requestId),
     travel: getTravelByRequestInternal_(requestId)
   };
+  putJsonCache_(cacheKey, detail);
+  try {
+    const cache = CacheService.getScriptCache();
+    const idsKey = 'cached_request_ids';
+    const idsVal = cache.get(idsKey);
+    let ids = idsVal ? JSON.parse(idsVal) : [];
+    if (ids.indexOf(requestId) === -1) {
+      ids.push(requestId);
+      if (ids.length > 50) ids.shift();
+      cache.put(idsKey, JSON.stringify(ids), 21600);
+    }
+  } catch (e) {
+    // ignore
+  }
+  return detail;
 }

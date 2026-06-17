@@ -1,6 +1,15 @@
   function getBootstrapData() {
     const user = assertAuthorized_();
-    const requests = listRequestsInternal_({ limit: 50 });
+    let requests = getJsonCache_('bootstrap_requests');
+    if (!requests) {
+      requests = listRequestsInternal_({ limit: 50 });
+      putJsonCache_('bootstrap_requests', requests);
+    }
+    let summary = getJsonCache_('bootstrap_summary');
+    if (!summary) {
+      summary = buildDashboardSummary_();
+      putJsonCache_('bootstrap_summary', summary);
+    }
     return serializeValue_({
       app: {
         name: APP_CONFIG.APP_NAME,
@@ -15,7 +24,7 @@
         signers: getSignatureConfigsInternal_(),
         employeeCatalog: getEmployeeCatalogInternal_()
       },
-      summary: buildDashboardSummary_(),
+      summary: summary,
       requests: requests.items,
       references: getReferenceDataInternal_()
     });
@@ -70,6 +79,12 @@
   function getRequestDetail(requestId) {
     assertAuthorized_();
     const id = text_(requestId);
+    const cacheKey = 'req_detail_pub_' + id;
+    const cached = getJsonCache_(cacheKey);
+    if (cached) {
+      return serializeValue_(cached);
+    }
+
     const master = getSheet_('MASTER');
     const rowNumber = findRowById_(master, id, 1);
     if (!rowNumber) throw new Error('Permohonan tidak ditemukan: ' + id);
@@ -95,7 +110,7 @@
       return doc;
     });
     const financeArtifacts = getFinanceArtifactUrls_(id);
-    return serializeValue_({
+    const result = {
       request: Object.assign(
         enrichRequestWithDocuments_(request, null, documents),
         financeArtifacts
@@ -107,7 +122,24 @@
       financeArtifacts: financeArtifacts,
       financeReadiness: getFinanceReadiness_(id),
       travel: getTravelByRequestInternal_(id)
-    });
+    };
+
+    putJsonCache_(cacheKey, result);
+    try {
+      const cache = CacheService.getScriptCache();
+      const idsKey = 'cached_request_ids';
+      const idsVal = cache.get(idsKey);
+      let ids = idsVal ? JSON.parse(idsVal) : [];
+      if (ids.indexOf(id) === -1) {
+        ids.push(id);
+        if (ids.length > 50) ids.shift();
+        cache.put(idsKey, JSON.stringify(ids), 21600);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return serializeValue_(result);
   }
 
   function buildDocumentsByRequestMap_() {
@@ -446,28 +478,61 @@
 
     const rows = readDataRows_(getSheet_('EMPLOYEES'), EMPLOYEE_HEADERS.length);
     const seen = {};
-    const catalog = rows.map(function(row) {
-      return {
-        name: text_(row[1], 250),
-        identifier: text_(row[2], 100),
-        role: text_(row[3], 200),
-        unit: canonicalOrganizationUnit_(row[4]),
-        email: text_(row[5], 250),
-        rank: text_(row[6], 200),
-        category: text_(row[7], 200)
-      };
-    }).filter(function(item) {
-      if (!item.name && !item.identifier && !item.email) return false;
-      const key = [item.identifier, item.email.toLowerCase(), item.name.toLowerCase(), item.unit.toLowerCase()]
+    const units = [];
+    const roles = [];
+    const ranks = [];
+    const categories = [];
+
+    function getIndex(arr, val) {
+      const clean = text_(val);
+      const idx = arr.indexOf(clean);
+      if (idx !== -1) return idx;
+      arr.push(clean);
+      return arr.length - 1;
+    }
+
+    const items = [];
+    rows.forEach(function(row) {
+      const name = text_(row[1], 250);
+      const identifier = text_(row[2], 100);
+      const email = text_(row[5], 250);
+      if (!name && !identifier && !email) return;
+
+      const unit = canonicalOrganizationUnit_(row[4]);
+      const role = text_(row[3], 200);
+      const rank = text_(row[6], 200);
+      const category = text_(row[7], 200);
+
+      const key = [identifier, email.toLowerCase(), name.toLowerCase(), unit.toLowerCase()]
         .filter(Boolean)
         .join('|');
-      if (!key || seen[key]) return false;
+      if (seen[key]) return;
       seen[key] = true;
-      return true;
-    }).sort(function(a, b) {
-      return a.name.localeCompare(b.name) || a.identifier.localeCompare(b.identifier);
+
+      items.push([
+        name,
+        identifier,
+        getIndex(roles, role),
+        getIndex(units, unit),
+        email,
+        getIndex(ranks, rank),
+        getIndex(categories, category)
+      ]);
     });
-    return putJsonCache_('employeeCatalog', catalog);
+
+    items.sort(function(a, b) {
+      return a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]);
+    });
+
+    const payload = {
+      units: units,
+      roles: roles,
+      ranks: ranks,
+      categories: categories,
+      items: items
+    };
+
+    return putJsonCache_('employeeCatalog', payload);
   }
 
   function buildDashboardSummary_() {
