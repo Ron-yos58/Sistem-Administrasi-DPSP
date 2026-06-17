@@ -61,32 +61,92 @@ Status dan log pelacakan disimpan pada sheet-sheet berikut di Google Spreadsheet
 * [Scripts.html](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Scripts.html): Logika JavaScript interaktif di sisi klien (frontend), penanganan state dasbor, tombol aksi, dan pemanggilan fungsi Apps Script (*Google Server Callback*).
 * [Styles.html](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Styles.html): Gaya tampilan CSS modern dasbor, termasuk pendefinisian warna badge untuk masing-masing status.
 
+
 ---
 
-## ⚖️ Do's & Don'ts Alur Kerja (Workflow)
+## 🗺️ Alur Kerja Permohonan & Dokumen
 
-Untuk memastikan sistem berjalan dengan baik dan menghindari kerusakan data atau kegagalan otomatisasi, ikuti panduan berikut:
+Siklus hidup permohonan surat melewati tiga status utama: **Draft**, **Siap Diproses**, dan **Selesai**. Berikut adalah visualisasi alur kerja dan transisinya:
+
+### 📊 Diagram Alur (Flowchart)
+
+```mermaid
+flowchart TD
+    A([Mulai Permohonan Baru]) --> B[Status: DRAFT]
+    B -->|Simpan Draft| B
+    B -->|Aksi Kunci Dikunci| X[Generate GDocs/PDF/Email/Finance Terkunci]
+    B -->|Klik 'Simpan & Tandai Siap'| C{Validasi Input}
+    
+    C -->|Gagal| B
+    C -->|Lulus| D[Status: READY]
+    
+    D -->|1. Generate Google Docs| E[Review Draf Surat]
+    E -->|2. Isi Nomor Surat| F[Generate PDF & Gmail Draft]
+    D -->|3. Kelola Keuangan| G[Isi Sheet Terpisah Honor/Perjadin]
+    
+    %% Fingerprint Reset Loop
+    D -->|Edit Kolom Mayor di Form| H{Deteksi Perubahan\n-Fingerprint Reset-}
+    H -->|Ada Perubahan| I[Status Dokumen Reset ke PENDING]
+    I -->|Regenerasi Ulang| D
+    
+    F -->|Semua Draft Email Selesai| J[Klik 'Tandai Selesai']
+    J --> K[Status: ARCHIVED / Selesai]
+    
+    K -->|Kunci Total| L[Hanya-Baca / Read-Only]
+    K -->|Modifikasi Dicegah| Y[Edit Data / Regenerasi Dilarang]
+    
+    style B fill:#fff9db,stroke:#fcc419,stroke-width:2px
+    style D fill:#f0f7f5,stroke:#015850,stroke-width:2px
+    style K fill:#f2f4f7,stroke:#6b7c78,stroke-width:2px
+    style H fill:#fef3f2,stroke:#b42318,stroke-width:2px
+```
+
+---
+
+## 📄 Pemetaan Jenis Surat & Template
+
+Tipe kegiatan yang dipilih pada form menentukan jenis dokumen keluaran beserta template yang digunakan berdasarkan tabel pemetaan berikut:
+
+| Tipe Kegiatan | Sub-Tipe Kegiatan | Kondisi Tambahan | Jenis Dokumen Keluaran | Kunci Template (`Template Key`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Edu Fair** | Surat Tugas | - | Surat Tugas | `EDU_FAIR_TASK` |
+| **Campus Visit** | Surat Balasan Campus Visit | - | Surat Balasan Campus Visit | `CAMPUS_VISIT_REPLY` |
+| **Campus Visit** | Surat izin pimpinan - Campus Visit | - | Surat izin pimpinan - Campus Visit | `CAMPUS_VISIT_PERMISSION` |
+| **Campus Visit** | Surat Rekomendasi Campus Visit - SU | - | Surat Rekomendasi Campus Visit - SU | `CAMPUS_VISIT_RECOMMENDATION` |
+| **Campus Visit** | Surat Tugas | - | Surat Tugas | `CAMPUS_VISIT_TASK` |
+| **Penugasan Narasumber** | Surat Permohonan Narasumber kepada Dekan | Tidak Dicarikan | Surat Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber) | `SPEAKER_KNOWN` |
+| **Penugasan Narasumber** | Surat Permohonan Narasumber kepada Dekan | Dicarikan | Surat Permohonan Narasumber kepada Dekan (Belum ada Narasumber) | `SPEAKER_SEARCH` |
+| **Penugasan Narasumber** | Surat Tugas | Workshop | Surat Tugas (Workshop) | `SPEAKER_WORKSHOP_TASK` |
+| **Penugasan Narasumber** | Surat Tugas | Promosi | Surat Tugas (Promosi) | `SPEAKER_PROMOTION_TASK` |
+
+---
+
+## ⚖️ Aturan Detail Do's & Don'ts Alur Kerja (Workflow)
+
+Untuk memastikan sistem berjalan dengan baik, sinkronisasi data terjaga, dan menghindari kegagalan otomatisasi, ikuti panduan berikut:
 
 ### 1. Permohonan Draft (`DRAFT`)
-* **DO:**
-  * Isi data awal kegiatan, mitra, jadwal, dan petugas sedetail mungkin.
-  * Ubah data permohonan secara bebas selagi status masih `DRAFT`.
-* **DON'T:**
-  * Mencoba membuat/generate Google Docs, PDF, draft email, atau laporan keuangan honor/perjadin (fitur-fitur ini dikunci di backend dan tidak dapat dieksekusi).
+* **DO (Lakukan):**
+  * Isi data kegiatan, mitra, jadwal, dan petugas sedetail mungkin.
+  * Lakukan perubahan data sesering mungkin selagi status masih `DRAFT` tanpa risiko me-reset status dokumen.
+  * Tambahkan dan hapus data pegawai/narasumber atau jadwal sesi sesuai kebutuhan.
+* **DON'T (Hindari):**
+  * **Jangan** mencoba melakukan *Generate Google Docs*, membuat PDF, draf email, atau laporan keuangan honor/perjadin. Fitur-fitur ini dikunci di backend dan akan menghasilkan pesan error jika dicoba dipaksa dari luar sistem.
 
 ### 2. Permohonan Siap Diproses (`READY`)
-* **DO:**
-  * Lakukan *Generate Google Docs* untuk membuat draf surat.
-  * Masukkan nomor surat resmi yang valid setelah draf ditinjau.
-  * Generate PDF surat dan draf email (Gmail Draft).
-  * Lengkapi data keuangan (honorarium dan perjadin) langsung pada Google Sheet terpisah yang ter-generate otomatis.
-* **DON'T:**
-  * Melakukan perubahan data mayor pada form dasbor jika dokumen sudah final, kecuali Anda siap jika status pengerjaan di-reset kembali ke `PENDING` (*fingerprint reset* akan mendeteksi perubahan data dan menuntut regenerasi ulang dokumen agar file tetap sinkron).
+* **DO (Lakukan):**
+  * Lakukan *Generate Google Docs* untuk membuat dokumen draf pertama di Google Drive.
+  * Tinjau isi draf dokumen tersebut, lalu isi kolom **Nomor Surat** resmi yang valid pada panel detail surat di dasbor.
+  * Lakukan *Generate PDF* dan *Buat Gmail Draft* setelah nomor surat diisi.
+  * Kelola nominal honorarium dan perjalanan dinas langsung pada Google Sheet terpisah yang dibuat otomatis oleh sistem untuk masing-masing permohonan.
+* **DON'T (Hindari):**
+  * **Jangan mengubah data mayor** (seperti tanggal kegiatan, daftar petugas/narasumber, atau unit asal) pada form dasbor jika dokumen sudah final dan dikirim, **KECUALI** Anda siap mengulang proses. Perubahan kolom tersebut memicu *Fingerprint Reset* yang akan mengembalikan status dokumen menjadi `PENDING` dan memaksa Anda men-generate ulang file agar isi surat tetap konsisten dengan sistem.
 
 ### 3. Permohonan Selesai (`ARCHIVED`)
-* **DO:**
-  * Gunakan tautan yang tersedia di dasbor untuk mengunduh PDF, melihat dokumen, atau membuka draf email yang sudah siap di Gmail.
-  * Jadikan data permohonan ini sebagai arsip acuan historis.
-* **DON'T:**
-  * Mencoba mengedit data permohonan, jadwal, mitra, atau petugas (seluruh data dikunci secara total).
-  * Mencoba melakukan generate ulang dokumen, PDF, draft email, atau sheet keuangan (sistem memblokir seluruh fungsi pembuatan dokumen setelah masuk status `ARCHIVED` untuk mencegah modifikasi atau penimpaan file final).
+* **DO (Lakukan):**
+  * Gunakan tautan dokumen/PDF di dasbor untuk mengunduh berkas atau mengirim email draft yang sudah siap di Gmail.
+  * Gunakan data permohonan ini sebagai catatan historis / arsip yang sah.
+* **DON'T (Hindari):**
+  * **Jangan mencoba mengedit** data permohonan, jadwal, mitra, maupun narasumber (seluruh form input dikunci total).
+  * **Jangan mencoba melakukan generate ulang** dokumen Docs, PDF, draft email, maupun lembar keuangan. Status `ARCHIVED` dirancang untuk mengunci status akhir dokumen agar tidak ada file final yang tertimpa secara tidak sengaja.
+
