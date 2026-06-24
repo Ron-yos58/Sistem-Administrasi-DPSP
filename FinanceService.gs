@@ -106,6 +106,7 @@ function saveTravelCosts(payload) {
     const requestId = text_(rows[index][0]);
     supersedeGeneratedArtifacts_(requestId, 'FINANCE_PERJADIN', ['SHEET', 'PDF', 'XLSX']);
     logAudit_('SAVE_TRAVEL_COSTS', requestId, true, { participantKey: participantKey });
+    clearFinanceReadinessCache_(requestId);
     return { ok: true, item: travelRowToDto_(rows[index]) };
   });
 }
@@ -212,6 +213,7 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
     dataAccess: 'SERVER_SIDE_SPREADSHEET_READ',
     openedForUser: 'GENERATED_SHEET_ONLY'
   });
+  clearFinanceReadinessCache_(requestId);
   return {
     ok: true,
     requestId: requestId,
@@ -224,10 +226,19 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
   };
 }
 
-function getFinanceReadiness_(requestId) {
-  const detail = getRequestDetailInternal_(requestId);
-  const honorOutput = getFinanceSpreadsheetOutput_(requestId, 'HONOR', true);
-  const travelOutput = getFinanceSpreadsheetOutput_(requestId, 'PERJADIN', true);
+function clearFinanceReadinessCache_(requestId) {
+  CacheService.getScriptCache().remove('fin_rdns_' + text_(requestId));
+}
+
+function getFinanceReadiness_(requestId, preloadedDetail, preloadedFiles) {
+  const cacheKey = 'fin_rdns_' + requestId;
+  const cached = getJsonCache_(cacheKey);
+  if (cached) return cached;
+
+  const detail = preloadedDetail || getRequestDetailInternal_(requestId);
+  const files = preloadedFiles || getGeneratedFilesByRequest_(requestId);
+  const honorOutput = getFinanceSpreadsheetOutput_(requestId, 'HONOR', true, files);
+  const travelOutput = getFinanceSpreadsheetOutput_(requestId, 'PERJADIN', true, files);
   const honorSheet = honorOutput ? honorOutput.sheet : null;
   const travelSheet = travelOutput ? travelOutput.sheet : null;
   const honor = {
@@ -276,19 +287,29 @@ function getFinanceReadiness_(requestId) {
         : 'Silakan lengkapi nominal Perjadin pada Google Sheet terlebih dahulu.';
     }
   }
-  return { honor: honor, perjadin: travel };
+  const result = { honor: honor, perjadin: travel };
+  putJsonCache_(cacheKey, result);
+  return result;
 }
 
 function isTravelSheetComplete_(sheet, participantCount) {
+  if (participantCount <= 0) return true;
   const componentCount = 11;
   const sectionHeight = 72;
+  const totalRows = (participantCount - 1) * sectionHeight + 16 + componentCount;
+  const allValues = sheet.getRange(1, 3, totalRows, 1).getValues();
   let titleRow = 1;
   for (let index = 0; index < participantCount; index++) {
-    const amounts = sheet.getRange(titleRow + 16, 3, componentCount, 1).getValues();
-    const hasAmount = amounts.some(function(row) {
-      const amount = Number(row[0] || 0);
-      return isFinite(amount) && amount > 0;
-    });
+    const startIdx = titleRow + 16 - 1;
+    let hasAmount = false;
+    for (let offset = 0; offset < componentCount; offset++) {
+      const val = allValues[startIdx + offset];
+      const amount = val ? Number(val[0] || 0) : 0;
+      if (isFinite(amount) && amount > 0) {
+        hasAmount = true;
+        break;
+      }
+    }
     if (!hasAmount) {
       return false;
     }
@@ -297,16 +318,16 @@ function isTravelSheetComplete_(sheet, participantCount) {
   return true;
 }
 
-function getFinanceSpreadsheetOutput_(requestId, reportKind, allowLegacy) {
+function getFinanceSpreadsheetOutput_(requestId, reportKind, allowLegacy, preloadedFiles) {
   const artifactKey = 'FINANCE_' + reportKind;
   const mainSpreadsheetId = getSpreadsheet_().getId();
-  const artifact = getGeneratedFilesByRequest_(requestId).filter(function(file) {
+  const files = preloadedFiles || getGeneratedFilesByRequest_(requestId);
+  const artifact = files.filter(function(file) {
     const isActive = text_(file.status).toUpperCase() === 'ACTIVE';
     const isSeparateSpreadsheet = text_(file.fileId) !== mainSpreadsheetId;
     return (allowLegacy ? isActive : isSeparateSpreadsheet) &&
       text_(file.type).toUpperCase() === 'SHEET' &&
-      file.artifactKey === artifactKey &&
-      driveFileExists_(file.fileId);
+      file.artifactKey === artifactKey;
   }).pop();
   if (artifact) {
     try {
@@ -368,6 +389,7 @@ function deleteGeneratedSheets(sheetNames) {
         'FINANCE_' + metadata.kind,
         ['SHEET']
       );
+      clearFinanceReadinessCache_(metadata.requestId);
       deleted.push(name);
     });
     logAudit_('DELETE_GENERATED_SHEETS', '', true, { deleted: deleted });
@@ -931,18 +953,6 @@ function getRequestDetailInternal_(requestId) {
     travel: getTravelByRequestInternal_(requestId)
   };
   putJsonCache_(cacheKey, detail);
-  try {
-    const cache = CacheService.getScriptCache();
-    const idsKey = 'cached_request_ids';
-    const idsVal = cache.get(idsKey);
-    let ids = idsVal ? JSON.parse(idsVal) : [];
-    if (ids.indexOf(requestId) === -1) {
-      ids.push(requestId);
-      if (ids.length > 50) ids.shift();
-      cache.put(idsKey, JSON.stringify(ids), 21600);
-    }
-  } catch (e) {
-    // ignore
-  }
+  trackCachedRequestId_(requestId);
   return detail;
 }

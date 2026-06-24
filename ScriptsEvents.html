@@ -1,0 +1,294 @@
+<script>
+var App = typeof App !== "undefined" ? App : {};
+
+App.bindEvents = function () {
+            var _this = this;
+            document.querySelectorAll('[data-view], [data-view-target]').forEach(function (button) {
+                button.addEventListener('click', function () { return _this.switchView(button.dataset.view || button.dataset.viewTarget); });
+            });
+            document.getElementById('menuToggle').addEventListener('click', function () { return _this.toggleSidebar(); });
+            document.getElementById('sidebarClose').addEventListener('click', function () { return _this.setSidebarOpen(false, true); });
+            document.getElementById('sidebarBackdrop').addEventListener('click', function () { return _this.setSidebarOpen(false, true); });
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    _this.setSidebarOpen(false, true);
+                    _this.closeDrawer();
+                }
+            });
+            document.addEventListener('click', function (event) {
+                var sidebar = document.getElementById('sidebar');
+                var toggle = document.getElementById('menuToggle');
+                if (sidebar.classList.contains('is-open')) {
+                    if (!sidebar.contains(event.target) && !toggle.contains(event.target)) {
+                        _this.setSidebarOpen(false);
+                    }
+                }
+                if (!event.target.closest('.action-dropdown')) {
+                    document.querySelectorAll('.action-menu').forEach(function (menu) {
+                        menu.style.display = 'none';
+                        menu.classList.add('is-hidden');
+                    });
+                }
+                // Check-dropdown toggle logic
+                var trigger = event.target.closest('.check-dropdown-trigger');
+                if (trigger) {
+                    var dropdown = trigger.closest('.check-dropdown');
+                    var panel = dropdown && dropdown.querySelector('.check-dropdown-panel');
+                    if (panel) {
+                        var willOpen = !panel.classList.contains('is-open');
+                        document.querySelectorAll('.check-dropdown-panel.is-open').forEach(function (p) {
+                            p.classList.remove('is-open');
+                            var btn = p.closest('.check-dropdown') && p.closest('.check-dropdown').querySelector('.check-dropdown-trigger');
+                            if (btn) { btn.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); }
+                        });
+                        if (willOpen) {
+                            panel.classList.add('is-open');
+                            trigger.classList.add('is-open');
+                            trigger.setAttribute('aria-expanded', 'true');
+                            var searchInput = panel.querySelector('.check-dropdown-search');
+                            if (searchInput) {
+                                searchInput.value = '';
+                                panel.querySelectorAll('.check-dropdown-items label').forEach(function (lbl) {
+                                    lbl.style.display = '';
+                                });
+                                setTimeout(function () { searchInput.focus(); }, 50);
+                            }
+                        }
+                    }
+                } else if (!event.target.closest('.check-dropdown-panel')) {
+                    document.querySelectorAll('.check-dropdown-panel.is-open').forEach(function (p) {
+                        p.classList.remove('is-open');
+                        var btn = p.closest('.check-dropdown') && p.closest('.check-dropdown').querySelector('.check-dropdown-trigger');
+                        if (btn) { btn.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); }
+                    });
+                }
+            });
+            document.addEventListener('input', function (event) {
+                var searchInput = event.target.closest('.check-dropdown-search');
+                if (searchInput) {
+                    var query = searchInput.value.toLowerCase().trim();
+                    var panel = searchInput.closest('.check-dropdown-panel');
+                    if (panel) {
+                        var itemsContainer = panel.querySelector('.check-dropdown-items');
+                        if (itemsContainer) {
+                            itemsContainer.querySelectorAll('label').forEach(function (lbl) {
+                                var text = lbl.textContent.toLowerCase();
+                                if (text.indexOf(query) !== -1) {
+                                    lbl.style.display = '';
+                                } else {
+                                    lbl.style.display = 'none';
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+            document.getElementById('refreshButton').addEventListener('click', function () { return _this.refreshAll(); });
+            document.getElementById('activityType').addEventListener('change', function () {
+                _this.onRequestActivityTypeChange();
+                _this.updateFormVisibility();
+            });
+            document.getElementById('requestSubType').addEventListener('change', function () {
+                _this.onRequestSubTypeChange();
+            });
+            document.getElementById('facultyChoices').addEventListener('change', function () {
+                _this.updateCheckDropdownLabel_('facultyChoices', 'Pilih fakultas...');
+                _this.updateReview();
+            });
+            document.getElementById('emailToChoices').addEventListener('change', function (event) {
+                return _this.handleEmailRecipientChange_(event, 'to');
+            });
+            document.getElementById('emailCcChoices').addEventListener('change', function (event) {
+                return _this.handleEmailRecipientChange_(event, 'cc');
+            });
+            document.getElementById('requestForm').addEventListener('input', function (event) {
+                if (event.target.closest('.employee-card'))
+                    _this.updateEmployeeRequirements_();
+                _this.updateReview();
+            });
+            document.getElementById('requestForm').addEventListener('submit', function (event) { return _this.saveRequest(event); });
+            document.getElementById('addSchedule').addEventListener('click', function () { return _this.addSchedule(); });
+            document.getElementById('scheduleList').addEventListener('click', function (event) {
+                var button = event.target.closest('.remove-schedule');
+                if (!button)
+                    return;
+                var cards = document.querySelectorAll('.schedule-card');
+                if (cards.length <= 1) {
+                    _this.toast('Minimal satu sesi jadwal harus tersedia.', true);
+                    return;
+                }
+                button.closest('.schedule-card').remove();
+                _this.renumberSchedules_();
+                _this.updateReview();
+            });
+            document.getElementById('addEmployee').addEventListener('click', function () { return _this.addEmployee(); });
+            document.getElementById('employeeList').addEventListener('click', function (event) {
+                var button = event.target.closest('.remove-employee');
+                if (button) {
+                    button.closest('.employee-card').remove();
+                    _this.updateReview();
+                    return;
+                }
+                var itemEl = event.target.closest('.dropdown-item-selectable');
+                if (itemEl) {
+                    var dropdown = itemEl.closest('.employee-catalog-dropdown');
+                    var hiddenInput = dropdown.querySelector('input[data-employee-picker]');
+                    var triggerLabel = dropdown.querySelector('.check-dropdown-label');
+                    var val = itemEl.dataset.value;
+                    hiddenInput.value = val;
+                    triggerLabel.textContent = itemEl.textContent;
+                    if (val !== '') {
+                        triggerLabel.classList.add('has-value');
+                    } else {
+                        triggerLabel.classList.remove('has-value');
+                    }
+                    _this.applyEmployeeCatalogToCard_(dropdown.closest('.employee-card'), val);
+                    var panel = dropdown.querySelector('.check-dropdown-panel');
+                    if (panel) {
+                        panel.classList.remove('is-open');
+                    }
+                    var triggerBtn = dropdown.querySelector('.check-dropdown-trigger');
+                    if (triggerBtn) {
+                        triggerBtn.classList.remove('is-open');
+                        triggerBtn.setAttribute('aria-expanded', 'false');
+                    }
+                    _this.updateEmployeeRequirements_();
+                    _this.updateReview();
+                }
+            });
+            document.getElementById('resetForm').addEventListener('click', function () { return _this.resetForm(); });
+            document.getElementById('requestSearch').addEventListener('input', function () { return _this.scheduleRequestFilter(); });
+            document.getElementById('requestSearch').addEventListener('search', function () { return _this.scheduleRequestFilter(0); });
+            document.getElementById('requestTypeFilter').addEventListener('change', function () { return _this.scheduleRequestFilter(0); });
+            document.getElementById('requestStatusFilter').addEventListener('change', function () { return _this.scheduleRequestFilter(0); });
+            document.getElementById('requestSort').addEventListener('change', function () {
+                _this.state.sortBy = this.value;
+                _this.state.currentPage = 1;
+                _this.renderRequestsPage();
+            });
+            document.getElementById('requestPageSize').addEventListener('change', function () {
+                _this.state.pageSize = Number(this.value);
+                _this.state.currentPage = 1;
+                _this.renderRequestsPage();
+            });
+            document.getElementById('requestPrevPage').addEventListener('click', function () {
+                if (_this.state.currentPage > 1) {
+                    _this.state.currentPage--;
+                    _this.renderRequestsPage();
+                }
+            });
+            document.getElementById('requestNextPage').addEventListener('click', function () {
+                var totalPages = Math.ceil(_this.state.requests.length / _this.state.pageSize) || 1;
+                if (_this.state.currentPage < totalPages) {
+                    _this.state.currentPage++;
+                    _this.renderRequestsPage();
+                }
+            });
+            document.getElementById('referenceCCForm').addEventListener('submit', function (event) {
+                event.preventDefault();
+                _this.addReferenceCC();
+            });
+            document.getElementById('requestTableBody').addEventListener('click', function (event) {
+                var button = event.target.closest('[data-request-id]');
+                if (button)
+                    _this.openRequestDetail(button.dataset.requestId);
+            });
+            document.getElementById('recentRequests').addEventListener('click', function (event) {
+                var button = event.target.closest('[data-request-id]');
+                if (button)
+                    _this.openRequestDetail(button.dataset.requestId);
+            });
+            document.getElementById('closeDrawer').addEventListener('click', function () { return _this.closeDrawer(); });
+            document.getElementById('closeLetterDrawer').addEventListener('click', function () { return _this.closeLetterDrawer(); });
+            document.getElementById('drawerBackdrop').addEventListener('click', function () {
+                _this.closeDrawer();
+                _this.closeLetterDrawer();
+            });
+            document.getElementById('drawerBody').addEventListener('click', function (event) { return _this.handleDetailAction(event); });
+            document.getElementById('drawerBody').addEventListener('change', function (event) {
+                var select = event.target.closest('[data-detail-document-select]');
+                if (select)
+                    _this.updateDetailEmailRouting_(select.value);
+            });
+            document.querySelectorAll('[data-admin-action]').forEach(function (button) {
+                button.addEventListener('click', function (event) { return _this.handleAdminAction(event.currentTarget); });
+            });
+            document.getElementById('signerName').addEventListener('change', function () { return _this.applySignerConfigFromForm_('name'); });
+            document.getElementById('signerId').addEventListener('change', function () { return _this.applySignerConfigFromForm_('nik'); });
+            document.querySelectorAll('[data-close-dialog]').forEach(function (button) {
+                button.addEventListener('click', function () { return document.getElementById(button.dataset.closeDialog).close(); });
+            });
+        }
+
+App.collectCheckedValues_ = function (selector) {
+            return Array.from(document.querySelectorAll(selector + ':checked')).map(function (input) {
+                return input.value;
+            });
+        }
+
+App.handleEmailRecipientChange_ = function (event, target) {
+            var input = event.target.closest('input[type="checkbox"]');
+            if (!input)
+                return;
+            var otherName = target === 'to' ? 'manualCc' : 'manualTo';
+            var otherId = target === 'to' ? 'emailCcChoices' : 'emailToChoices';
+            var selfId = target === 'to' ? 'emailToChoices' : 'emailCcChoices';
+            if (input.checked) {
+                var other = document.querySelector('input[name="' + otherName + '"][value="' + CSS.escape(input.value) + '"]');
+                if (other) {
+                    other.checked = false;
+                    this.updateCheckDropdownLabel_(otherId, target === 'to' ? 'Pilih CC...' : 'Pilih penerima...');
+                }
+            }
+            this.updateCheckDropdownLabel_(selfId, target === 'to' ? 'Pilih penerima...' : 'Pilih CC...');
+            this.updateReview();
+        }
+
+App.toggleActionMenu = function (event, docId) {
+            event.stopPropagation();
+            document.querySelectorAll('.action-menu').forEach(function (menu) {
+                if (menu.id !== 'menu-' + docId) {
+                    menu.style.display = 'none';
+                    menu.classList.add('is-hidden');
+                }
+            });
+
+            var menu = document.getElementById('menu-' + docId);
+            if (menu) {
+                var isOpen = !menu.classList.contains('is-hidden');
+                if (isOpen) {
+                    menu.style.display = 'none';
+                    menu.classList.add('is-hidden');
+                } else {
+                    menu.style.display = 'flex';
+                    menu.classList.remove('is-hidden');
+                }
+            }
+        }
+
+App.collectSelectedValues_ = function (id) {
+            var el = document.getElementById(id);
+            if (!el) return [];
+            // Support both <select multiple> and check-dropdown
+            if (el.tagName === 'SELECT') {
+                return Array.from(el.selectedOptions).map(function (opt) { return opt.value; });
+            }
+            return Array.from(el.querySelectorAll('input[type="checkbox"]:checked')).map(function (inp) { return inp.value; });
+        }
+
+App.updateCheckDropdownLabel_ = function (containerId, placeholder) {
+            var container = document.getElementById(containerId);
+            if (!container) return;
+            var checked = Array.from(container.querySelectorAll('input[type="checkbox"]:checked'));
+            var labelEl = container.querySelector('.check-dropdown-label');
+            if (!labelEl) return;
+            if (!checked.length) {
+                labelEl.textContent = placeholder || 'Pilih...';
+                labelEl.classList.remove('has-value');
+            } else {
+                labelEl.textContent = checked.length + ' item dipilih';
+                labelEl.classList.add('has-value');
+            }
+        }
+
+</script>

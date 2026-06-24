@@ -92,6 +92,8 @@
     const row = master.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
     const request = masterRowToDto_(row);
     const employees = getEmployeesByRequest_(id);
+    const travel = getTravelByRequestInternal_(id);
+    const generatedFiles = getGeneratedFilesByRequest_(id);
     const documents = getDocumentsByRequest_(id).map(function(doc) {
       const routingRequest = {
         activityType: request.activityType,
@@ -109,7 +111,7 @@
       doc.letterType = templateConfig ? templateConfig.name : doc.type;
       return doc;
     });
-    const financeArtifacts = getFinanceArtifactUrls_(id);
+    const financeArtifacts = getFinanceArtifactUrls_(id, generatedFiles);
     const result = {
       request: Object.assign(
         enrichRequestWithDocuments_(request, null, documents),
@@ -118,26 +120,14 @@
       documents: documents,
       schedules: getSchedulesByRequest_(id, row),
       employees: employees,
-      generatedFiles: getGeneratedFilesByRequest_(id),
+      generatedFiles: generatedFiles,
       financeArtifacts: financeArtifacts,
-      financeReadiness: getFinanceReadiness_(id),
-      travel: getTravelByRequestInternal_(id)
+      financeReadiness: getFinanceReadiness_(id, { request: request, employees: employees, travel: travel }, generatedFiles),
+      travel: travel
     };
 
     putJsonCache_(cacheKey, result);
-    try {
-      const cache = CacheService.getScriptCache();
-      const idsKey = 'cached_request_ids';
-      const idsVal = cache.get(idsKey);
-      let ids = idsVal ? JSON.parse(idsVal) : [];
-      if (ids.indexOf(id) === -1) {
-        ids.push(id);
-        if (ids.length > 50) ids.shift();
-        cache.put(idsKey, JSON.stringify(ids), 21600);
-      }
-    } catch (e) {
-      // ignore
-    }
+    trackCachedRequestId_(id);
 
     return serializeValue_(result);
   }

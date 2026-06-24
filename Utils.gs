@@ -82,25 +82,15 @@ function text_(value, maxLength) {
 
 function emailList_(value) {
   const source = Array.isArray(value) ? value : String(value || '').split(/[\n,;]+/);
-  const seen = {};
-  return source.map(function(item) {
-    return String(item || '').trim().toLowerCase();
-  }).filter(function(item) {
-    if (!item || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item) || seen[item]) return false;
-    seen[item] = true;
-    return true;
-  });
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return [...new Set(
+    source.map(function(item) { return String(item || '').trim().toLowerCase(); })
+          .filter(function(item) { return item && re.test(item); })
+  )];
 }
 
 function uniqueTextList_(values) {
-  const seen = {};
-  return values.map(function(value) {
-    return text_(value);
-  }).filter(function(value) {
-    if (!value || seen[value]) return false;
-    seen[value] = true;
-    return true;
-  });
+  return [...new Set((values || []).map(function(v) { return text_(v); }).filter(Boolean))];
 }
 
 function canonicalOrganizationUnit_(value) {
@@ -468,22 +458,40 @@ function logAudit_(action, entityId, success, details) {
   }
 }
 
+const APP_CACHE_KEYS = [
+  'bootstrap', 'bootstrap_requests', 'bootstrap_summary',
+  'references', 'signers', 'employeeCatalog', 'template_configs'
+];
+
 function clearAppCache_() {
   const cache = CacheService.getScriptCache();
-  cache.removeAll(['bootstrap', 'bootstrap_requests', 'bootstrap_summary', 'references', 'signers', 'employeeCatalog', 'template_configs']);
+  cache.removeAll(APP_CACHE_KEYS);
 
   try {
     const idsKey = 'cached_request_ids';
     const idsVal = cache.get(idsKey);
     if (idsVal) {
       const ids = JSON.parse(idsVal);
-      const keysToRemove = [];
-      ids.forEach(function(id) {
-        keysToRemove.push('req_detail_int_' + id);
-        keysToRemove.push('req_detail_pub_' + id);
-      });
-      cache.removeAll(keysToRemove);
+      cache.removeAll(ids.flatMap(function(id) {
+        return ['req_detail_int_' + id, 'req_detail_pub_' + id, 'fin_rdns_' + id];
+      }));
       cache.remove(idsKey);
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
+function trackCachedRequestId_(requestId) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const idsKey = 'cached_request_ids';
+    const idsVal = cache.get(idsKey);
+    const ids = idsVal ? JSON.parse(idsVal) : [];
+    if (ids.indexOf(requestId) === -1) {
+      ids.push(requestId);
+      if (ids.length > 50) ids.shift();
+      cache.put(idsKey, JSON.stringify(ids), 21600);
     }
   } catch (e) {
     // ignore

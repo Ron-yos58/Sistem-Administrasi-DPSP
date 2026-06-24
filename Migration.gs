@@ -1,3 +1,16 @@
+// Column indices (1-based) for each template's Autocrat merge artifacts in the legacy Master sheet.
+const LEGACY_DOCUMENT_COLUMNS = {
+  EDU_FAIR_TASK: [39, 40, 41, 42],
+  SPEAKER_WORKSHOP_TASK: [43, 44, 45, 46],
+  SPEAKER_PROMOTION_TASK: [47, 48, 49, 50],
+  CAMPUS_VISIT_TASK: [51, 52, 53, 54],
+  CAMPUS_VISIT_PERMISSION: [55, 56, 57, 58],
+  CAMPUS_VISIT_RECOMMENDATION: [59, 60, 61, 62],
+  CAMPUS_VISIT_REPLY: [63, 64, 65, 66],
+  SPEAKER_REQUEST_SEARCH: [67, 68, 69, 70],
+  SPEAKER_REQUEST_KNOWN: [71, 72, 73, 74]
+};
+
 function previewLegacyMigration() {
   const user = assertAuthorized_();
   assertAdmin_(user);
@@ -207,7 +220,7 @@ function migrateLegacyData(confirmText) {
           }
         }
         const templateKey = resolveTemplateKey_(descriptor);
-        const columns = APP_CONFIG.LEGACY_DOCUMENT_COLUMNS[templateKey];
+        const columns = LEGACY_DOCUMENT_COLUMNS[templateKey];
         const docId = 'DOC-' + Utilities.getUuid().slice(0, 12).toUpperCase();
         const generatedDocId = columns ? text_(source[columns[0] - 1]) : '';
         const generatedDocUrl = columns ? text_(source[columns[1] - 1]) : '';

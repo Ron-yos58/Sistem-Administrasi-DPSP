@@ -192,7 +192,7 @@ function buildDocumentPlaceholders_(detail, document) {
     return '-';
   })();
 
-  const values = {
+  const values = Object.assign({
     idPermohonan: request.id,
     tipeKegiatan: request.activityType,
     jenisSurat: document.type,
@@ -219,29 +219,13 @@ function buildDocumentPlaceholders_(detail, document) {
     honor: request.honor,
     perjalananDinas: request.travel,
     nomorUrutPegawai: employeeJoin.textJoinNomor,
-    namaPegawai: employeeJoin.namaPegawai,
-    nipPegawai: employeeJoin.nipPegawai,
-    jabatanPegawai: employeeJoin.jabatanPegawai,
-    prodiPegawai: employeeJoin.prodiPegawai,
-    fakultasPegawai: employeeJoin.fakultasPegawai,
-    emailPegawai: employeeJoin.emailPegawai,
-    textJoinNomor: employeeJoin.textJoinNomor,
-    textJoinNama: employeeJoin.textJoinNama,
-    textJoinNikNpm: employeeJoin.textJoinNikNpm,
-    textJoinJabatan: employeeJoin.textJoinJabatan,
-    textJoinProdi: employeeJoin.textJoinProdi,
-    textJoinFakultas: employeeJoin.textJoinFakultas,
-    textJoinEmail: employeeJoin.textJoinEmail,
-    narasumber: employeeJoin.narasumber,
     kepadaYth: routing.toRoles.join('\n'),
     tembusan: routing.ccRoles.join('\n'),
-    
-    // Exact placeholders requested by user
     NomorSurat: document.number || '',
     TipeKegiatan: request.activityType || '',
     SubTipe: document.type || '',
     KondisiTambahan: kondisiTambahan
-  };
+  }, employeeJoin);
 
   const aliases = {
     'ID Permohonan': values.idPermohonan,
@@ -459,7 +443,7 @@ function getGeneratedFilesByRequest_(requestId) {
     });
 }
 
-function getFinanceArtifactUrls_(requestId) {
+function getFinanceArtifactUrls_(requestId, preloadedFiles) {
   const result = {
     honorSheetUrl: '',
     honorPdfUrl: '',
@@ -468,7 +452,8 @@ function getFinanceArtifactUrls_(requestId) {
     perjadinPdfUrl: '',
     perjadinExcelUrl: ''
   };
-  getGeneratedFilesByRequest_(requestId).forEach(function(file) {
+  const files = preloadedFiles || getGeneratedFilesByRequest_(requestId);
+  files.forEach(function(file) {
     if (text_(file.status).toUpperCase() !== 'ACTIVE') return;
     const kind = file.artifactKey === 'FINANCE_HONOR'
       ? 'honor'
@@ -477,13 +462,8 @@ function getFinanceArtifactUrls_(requestId) {
         : '';
     if (!kind) return;
     if (file.type === 'SHEET') result[kind + 'SheetUrl'] = file.url;
-    const fileAvailable = typeof DriveApp === 'undefined' || driveFileExists_(file.fileId);
-    if (file.type === 'PDF' && fileAvailable) {
-      result[kind + 'PdfUrl'] = driveDownloadUrl_(file.fileId);
-    }
-    if (file.type === 'XLSX' && fileAvailable) {
-      result[kind + 'ExcelUrl'] = driveDownloadUrl_(file.fileId);
-    }
+    if (file.type === 'PDF') result[kind + 'PdfUrl'] = driveDownloadUrl_(file.fileId);
+    if (file.type === 'XLSX') result[kind + 'ExcelUrl'] = driveDownloadUrl_(file.fileId);
   });
   if (typeof SpreadsheetApp !== 'undefined') {
     [
@@ -594,9 +574,7 @@ function addDocument(requestId, activityType, subType, condition) {
       throw new Error('Permohonan selesai bersifat hanya-baca.');
     }
     
-    const speakerSubtype = subType === 'Surat Tugas' ? condition : '';
-    const speakerStatus = subType === 'Surat Permohonan Narasumber kepada Dekan' ? condition : '';
-    
+    const { speakerSubtype, speakerStatus } = extractSpeakerFields_(subType, condition);
     const docPayload = {
       type: subType,
       speakerSubtype: speakerSubtype,
@@ -675,9 +653,7 @@ function saveDocumentDetails(documentId, number, emailTo, emailCc, emailBcc, sta
       const currentSubtype = row[3];
       const currentStatus = row[4];
       
-      const newSpeakerSubtype = subType === 'Surat Tugas' ? condition : '';
-      const newSpeakerStatus = subType === 'Surat Permohonan Narasumber kepada Dekan' ? condition : '';
-      
+      const { speakerSubtype: newSpeakerSubtype, speakerStatus: newSpeakerStatus } = extractSpeakerFields_(subType, condition);
       if (currentType !== subType || currentSubtype !== newSpeakerSubtype || currentStatus !== newSpeakerStatus) {
         comboChanged = true;
         row[2] = subType;
@@ -760,9 +736,7 @@ function getDefaultRecipientsForLetter(requestId, activityType, subType, conditi
   const user = assertAuthorized_();
   const detail = getRequestDetailInternal_(text_(requestId));
   
-  const speakerSubtype = subType === 'Surat Tugas' ? condition : '';
-  const speakerStatus = subType === 'Surat Permohonan Narasumber kepada Dekan' ? condition : '';
-  
+  const { speakerSubtype, speakerStatus } = extractSpeakerFields_(subType, condition);
   const docPayload = {
     type: subType,
     speakerSubtype: speakerSubtype,
@@ -788,4 +762,11 @@ function getDefaultRecipientsForLetter(requestId, activityType, subType, conditi
     cc: routing.cc.join(', '),
     bcc: routing.bcc.join(', ')
   });
+}
+
+function extractSpeakerFields_(subType, condition) {
+  return {
+    speakerSubtype: subType === 'Surat Tugas' ? condition : '',
+    speakerStatus: subType === 'Surat Permohonan Narasumber kepada Dekan' ? condition : ''
+  };
 }

@@ -1,0 +1,245 @@
+<script>
+var App = typeof App !== "undefined" ? App : {};
+
+App.state = {
+            bootstrap: null,
+            requests: [],
+            signers: [],
+            faculties: [],
+            employeeCatalog: [],
+            emailRecipients: [],
+            currentDetail: null,
+            detailActionBusy: false,
+            requestFilterTimer: null,
+            activeView: 'dashboard',
+            currentPage: 1,
+            pageSize: 10,
+            sortBy: 'date-desc'
+};
+
+App.init = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var data, error_1;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            if (window.__dpspAppStarted)
+                                return [2 /*return*/];
+                            window.__dpspAppStarted = true;
+                            if (window.__dpspBootState)
+                                window.__dpspBootState.started = true;
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 4, 5, 6]);
+                            this.setBootProgress(4, 'Menyiapkan tampilan...');
+                            this.bindEvents();
+                            this.resetForm();
+                            this.setBootProgress(18, 'Memuat data utama...');
+                            return [4 /*yield*/, this.server('getBootstrapData')];
+                        case 2:
+                            data = _a.sent();
+                            this.setBootProgress(55, 'Merender dashboard...');
+                            this.state.bootstrap = data;
+                            this.state.requests = data.requests || [];
+                            this.hydrateUser(data);
+                            this.populateOptions(data.options);
+                            this.renderDashboard(data.summary, this.state.requests);
+                            this.renderRequestsPage();
+                            this.renderReferences(data.references);
+                            this.updateFormVisibility();
+                            this.setBootProgress(100, 'Siap digunakan');
+                            return [3 /*break*/, 6];
+                        case 3:
+                            _a.sent();
+                            this.setBootProgress(100, 'Siap digunakan');
+                            return [3 /*break*/, 6];
+                        case 4:
+                            error_1 = _a.sent();
+                            this.showGlobalError(error_1);
+                            if (window.__dpspShowBootFailure) {
+                                window.__dpspShowBootFailure('Aplikasi gagal dimuat: ' + (error_1.message || String(error_1)));
+                            }
+                            return [3 /*break*/, 6];
+                        case 5:
+                            if (window.__dpspBootWatchdog)
+                                window.clearTimeout(window.__dpspBootWatchdog);
+                            if (window.__dpspBootState)
+                                window.__dpspBootState.finished = true;
+                            setTimeout(function () {
+                                var loader = document.getElementById('bootLoader');
+                                if (loader)
+                                    loader.classList.add('is-done');
+                            }, 250);
+                            return [7 /*endfinally*/];
+                        case 6: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.server = function (method) {
+            var args = [];
+            for (var _i = 1; _i < arguments.length; _i++) {
+                args[_i - 1] = arguments[_i];
+            }
+            return new Promise(function (resolve, reject) {
+                var settled = false;
+                var timeout = window.setTimeout(function () {
+                    if (settled)
+                        return;
+                    settled = true;
+                    reject(new Error('Server tidak merespons saat menjalankan ' + method + '.'));
+                }, 60000);
+                var succeed = function (value) {
+                    if (settled)
+                        return;
+                    settled = true;
+                    window.clearTimeout(timeout);
+                    resolve(value);
+                };
+                var fail = function (error) {
+                    if (settled)
+                        return;
+                    settled = true;
+                    window.clearTimeout(timeout);
+                    reject(new Error(error && error.message ? error.message : String(error)));
+                };
+                var runner = google.script.run
+                    .withSuccessHandler(succeed)
+                    .withFailureHandler(fail);
+                if (typeof runner[method] !== 'function') {
+                    fail(new Error('Fungsi server tidak tersedia: ' + method));
+                    return;
+                }
+                runner[method].apply(runner, args);
+            });
+        }
+
+App.hydrateUser = function (data) {
+            var email = data.user.email || 'Pengguna';
+            var role = data.user.role || 'OPERATOR';
+            document.getElementById('userEmail').textContent = email;
+            document.getElementById('appVersion').textContent = 'v' + data.app.version;
+            document.body.classList.toggle('is-admin', role === 'ADMIN');
+        }
+
+App.switchView = function (view) {
+            var titles = {
+                dashboard: 'Ringkasan',
+                requests: 'Permohonan',
+                detail: 'Detail Permohonan',
+                form: document.getElementById('requestId').value ? 'Edit Permohonan' : 'Buat Permohonan',
+                references: 'Data Referensi',
+                admin: 'Maintenance Sistem'
+            };
+            if (!titles[view] || !document.getElementById('view-' + view))
+                return;
+            if (view === 'admin' && !document.body.classList.contains('is-admin')) {
+                this.toast('Menu Admin hanya tersedia untuk role Admin.', true);
+                view = 'dashboard';
+            }
+            this.state.activeView = view;
+            document.querySelectorAll('.view').forEach(function (item) { return item.classList.remove('is-active'); });
+            document.getElementById('view-' + view).classList.add('is-active');
+            document.querySelectorAll('[data-view]').forEach(function (item) { return item.classList.toggle('is-active', item.dataset.view === view); });
+            document.querySelectorAll('.nav-item').forEach(function (item) { return item.classList.toggle('is-active', item.dataset.view === view); });
+            document.getElementById('pageTitle').textContent = titles[view];
+            this.setSidebarOpen(false);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+App.toggleSidebar = function () {
+            this.setSidebarOpen(!document.getElementById('sidebar').classList.contains('is-open'));
+        }
+
+App.setSidebarOpen = function (open, restoreFocus) {
+            var isOpen = Boolean(open);
+            var sidebar = document.getElementById('sidebar');
+            var toggle = document.getElementById('menuToggle');
+            var focusWasInside = sidebar.contains(document.activeElement);
+            sidebar.classList.toggle('is-open', isOpen);
+            sidebar.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+            sidebar.inert = !isOpen;
+            document.getElementById('sidebarBackdrop').classList.toggle('is-visible', isOpen);
+            document.body.classList.toggle('sidebar-open', isOpen);
+            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            toggle.setAttribute('aria-label', isOpen ? 'Tutup menu' : 'Buka menu');
+            if (isOpen) {
+                document.getElementById('sidebarClose').focus();
+            }
+            else if (restoreFocus || focusWasInside) {
+                toggle.focus();
+            }
+        }
+
+App.refreshAll = function () {
+            return __awaiter(this, arguments, void 0, function (showToast) {
+                var _this2 = this;
+                var button, data, error_11;
+                if (showToast === void 0) { showToast = true; }
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            button = document.getElementById('refreshButton');
+                            this.setBusy(button, true, 'Memuat...');
+                            if (showToast) this.showRefreshProgress_(5);
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 6, 7, 8]);
+                            if (showToast) this.showRefreshProgress_(15);
+                            return [4 /*yield*/, this.server('refreshBootstrapData')];
+                        case 2:
+                            data = _a.sent();
+                            if (showToast) this.showRefreshProgress_(50);
+                            this.state.bootstrap = data;
+                            this.state.requests = data.requests || [];
+                            this.populateOptions(data.options || {});
+                            this.renderDashboard(data.summary, this.state.requests);
+                            if (showToast) this.showRefreshProgress_(70);
+                            if (!(this.state.activeView === 'requests')) return [3 /*break*/, 4];
+                            return [4 /*yield*/, this.loadRequests()];
+                        case 3:
+                            _a.sent();
+                            return [3 /*break*/, 5];
+                        case 4:
+                            this.renderRequests(this.state.requests);
+                            _a.label = 5;
+                        case 5:
+                            if (showToast) this.showRefreshProgress_(90);
+                            this.renderReferences(data.references);
+                            if (showToast) this.showRefreshProgress_(100, true, false);
+                            return [3 /*break*/, 8];
+                        case 6:
+                            error_11 = _a.sent();
+                            if (showToast) this.showRefreshProgress_(100, true, true);
+                            this.toast(error_11.message, true);
+                            return [3 /*break*/, 8];
+                        case 7:
+                            this.setBusy(button, false);
+                            return [7 /*endfinally*/];
+                        case 8: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.setBusy = function (button, busy, label) {
+            if (!button)
+                return;
+            if (busy) {
+                button.dataset.originalHtml = button.innerHTML;
+                button.setAttribute('aria-busy', 'true');
+                if (!button.classList.contains('icon-button')) {
+                    button.textContent = label || 'Memproses...';
+                }
+                button.disabled = true;
+            }
+            else {
+                if (button.dataset.originalHtml)
+                    button.innerHTML = button.dataset.originalHtml;
+                button.removeAttribute('aria-busy');
+                button.disabled = false;
+            }
+        }
+
+</script>

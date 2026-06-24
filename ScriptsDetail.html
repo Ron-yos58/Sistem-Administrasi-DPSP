@@ -1,0 +1,989 @@
+<script>
+var App = typeof App !== "undefined" ? App : {};
+
+App.openRequestDetail = function (requestId) {
+            return __awaiter(this, void 0, void 0, function () {
+                var detail, error_4;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            document.getElementById('drawerTitle').textContent = requestId;
+                            document.getElementById('drawerBody').innerHTML = '<div class="skeleton" style="height:180px;border-radius:14px"></div>';
+                            this.switchView('detail');
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, this.server('getRequestDetail', requestId)];
+                        case 2:
+                            detail = _a.sent();
+                            this.state.currentDetail = detail;
+                            this.renderDetail(detail);
+                            return [3 /*break*/, 4];
+                        case 3:
+                            error_4 = _a.sent();
+                            document.getElementById('drawerBody').innerHTML = "<div class=\"notice notice-error\">".concat(this.escape(error_4.message), "</div>");
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.closeDrawer = function () {
+            this.switchView('requests');
+        }
+
+App.closeLetterDrawer = function () {
+            document.getElementById('letterDrawer').classList.remove('is-open');
+            document.getElementById('letterDrawer').setAttribute('aria-hidden', 'true');
+            document.getElementById('drawerBackdrop').classList.add('is-hidden');
+        }
+
+App.getLetterProperties_ = function (doc) {
+            var mapping = (this.state.bootstrap.options.officialLetterMapping || []).find(function (m) {
+                return m.templateKey === doc.templateKey;
+            });
+            if (mapping) {
+                return {
+                    activityType: mapping.activityType,
+                    subType: mapping.subType,
+                    condition: mapping.condition
+                };
+            }
+            var condition = '-';
+            if (doc.type === 'Surat Tugas') {
+                condition = doc.speakerSubtype || '-';
+            } else if (doc.type === 'Surat Permohonan Narasumber kepada Dekan') {
+                condition = doc.speakerStatus || '-';
+            }
+            return {
+                activityType: this.state.currentDetail.request.activityType || '-',
+                subType: doc.type,
+                condition: condition
+            };
+        }
+
+App.onAddLetterActivityTypeChange = function () {
+            var activityType = document.getElementById('addLetterActivityType').value;
+            var subTypeSelect = document.getElementById('addLetterSubType');
+            var condContainer = document.getElementById('addLetterConditionContainer');
+            var condSelect = document.getElementById('addLetterCondition');
+
+            subTypeSelect.innerHTML = '<option value="">Pilih Sub-Tipe</option>';
+            condContainer.classList.add('is-hidden');
+            condSelect.innerHTML = '<option value="-">-</option>';
+
+            if (!activityType) return;
+
+            var mapping = this.state.bootstrap.options.officialLetterMapping || [];
+            var subTypes = [];
+            mapping.forEach(function (item) {
+                if (item.activityType === activityType && !subTypes.includes(item.subType)) {
+                    subTypes.push(item.subType);
+                }
+            });
+
+            subTypes.forEach(function (st) {
+                var opt = document.createElement('option');
+                opt.value = st;
+                opt.textContent = st;
+                subTypeSelect.appendChild(opt);
+            });
+        }
+
+App.onAddLetterSubTypeChange = function () {
+            var activityType = document.getElementById('addLetterActivityType').value;
+            var subType = document.getElementById('addLetterSubType').value;
+            var condContainer = document.getElementById('addLetterConditionContainer');
+            var condSelect = document.getElementById('addLetterCondition');
+
+            condSelect.innerHTML = '';
+            condContainer.classList.add('is-hidden');
+
+            if (!activityType || !subType) return;
+
+            var mapping = this.state.bootstrap.options.officialLetterMapping || [];
+            var conditions = [];
+            mapping.forEach(function (item) {
+                if (item.activityType === activityType && item.subType === subType) {
+                    conditions.push(item.condition);
+                }
+            });
+
+            if (conditions.length === 1 && conditions[0] === '-') {
+                condSelect.innerHTML = '<option value="-">-</option>';
+                return;
+            }
+
+            condContainer.classList.remove('is-hidden');
+            conditions.forEach(function (c) {
+                var opt = document.createElement('option');
+                opt.value = c;
+                opt.textContent = c;
+                condSelect.appendChild(opt);
+            });
+        }
+
+App.onEditLetterActivityTypeChange = function () {
+            var activityType = document.getElementById('editLetterActivityType').value;
+            var subTypeSelect = document.getElementById('editLetterSubType');
+            var condContainer = document.getElementById('editLetterConditionContainer');
+            var condSelect = document.getElementById('editLetterCondition');
+
+            subTypeSelect.innerHTML = '<option value="">Pilih Sub-Tipe</option>';
+            condContainer.classList.add('is-hidden');
+            condSelect.innerHTML = '<option value="-">-</option>';
+
+            document.getElementById('letterDetailNumber').value = '';
+            document.getElementById('letterDetailEmailTo').value = '';
+            document.getElementById('letterDetailEmailCc').value = '';
+            document.getElementById('letterDetailEmailBcc').value = '';
+
+            if (!activityType) return;
+
+            var mapping = this.state.bootstrap.options.officialLetterMapping || [];
+            var subTypes = [];
+            mapping.forEach(function (item) {
+                if (item.activityType === activityType && !subTypes.includes(item.subType)) {
+                    subTypes.push(item.subType);
+                }
+            });
+
+            subTypes.forEach(function (st) {
+                var opt = document.createElement('option');
+                opt.value = st;
+                opt.textContent = st;
+                subTypeSelect.appendChild(opt);
+            });
+        }
+
+App.onEditLetterSubTypeChange = function () {
+            var activityType = document.getElementById('editLetterActivityType').value;
+            var subType = document.getElementById('editLetterSubType').value;
+            var condContainer = document.getElementById('editLetterConditionContainer');
+            var condSelect = document.getElementById('editLetterCondition');
+
+            condSelect.innerHTML = '';
+            condContainer.classList.add('is-hidden');
+
+            document.getElementById('letterDetailNumber').value = '';
+            document.getElementById('letterDetailEmailTo').value = '';
+            document.getElementById('letterDetailEmailCc').value = '';
+            document.getElementById('letterDetailEmailBcc').value = '';
+
+            if (!activityType || !subType) return;
+
+            var mapping = this.state.bootstrap.options.officialLetterMapping || [];
+            var conditions = [];
+            mapping.forEach(function (item) {
+                if (item.activityType === activityType && item.subType === subType) {
+                    conditions.push(item.condition);
+                }
+            });
+
+            if (conditions.length === 1 && conditions[0] === '-') {
+                condSelect.innerHTML = '<option value="-">-</option>';
+                this.fetchDefaultRecipientsForEdit_();
+                return;
+            }
+
+            condContainer.classList.remove('is-hidden');
+            var placeholderOpt = document.createElement('option');
+            placeholderOpt.value = '';
+            placeholderOpt.textContent = 'Pilih Kondisi Tambahan';
+            condSelect.appendChild(placeholderOpt);
+
+            conditions.forEach(function (c) {
+                var opt = document.createElement('option');
+                opt.value = c;
+                opt.textContent = c;
+                condSelect.appendChild(opt);
+            });
+        }
+
+App.onEditLetterConditionChange = function () {
+            document.getElementById('letterDetailNumber').value = '';
+            document.getElementById('letterDetailEmailTo').value = '';
+            document.getElementById('letterDetailEmailCc').value = '';
+            document.getElementById('letterDetailEmailBcc').value = '';
+
+            var condition = document.getElementById('editLetterCondition').value;
+            if (!condition) return;
+
+            this.fetchDefaultRecipientsForEdit_();
+        }
+
+App.fetchDefaultRecipientsForEdit_ = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var requestId, activityType, subType, condition, result, error_recip;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            requestId = this.state.currentDetail.request.id;
+                            activityType = document.getElementById('editLetterActivityType').value;
+                            subType = document.getElementById('editLetterSubType').value;
+                            condition = document.getElementById('editLetterCondition').value || '-';
+                            if (!activityType || !subType || !condition) return [2 /*return*/];
+
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, this.server('getDefaultRecipientsForLetter', requestId, activityType, subType, condition)];
+                        case 2:
+                            result = _a.sent();
+                            document.getElementById('letterDetailEmailTo').value = result.to || '';
+                            document.getElementById('letterDetailEmailCc').value = result.cc || '';
+                            document.getElementById('letterDetailEmailBcc').value = result.bcc || '';
+                            return [3 /*break*/, 4];
+                        case 3:
+                            error_recip = _a.sent();
+                            this.toast('Gagal memuat default penerima: ' + error_recip.message, true);
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.renderDetail = function (detail) {
+            var _this = this;
+            var request = detail.request;
+            var detailDocuments = this.asArray(detail.documents);
+            var progress = request.documentProgress || this.summarizeDocumentProgress_(detailDocuments, request.status);
+            document.getElementById('drawerTitle').textContent = request.id;
+
+            var cardsHtml = detailDocuments.map(function (doc, idx) {
+                var props = _this.getLetterProperties_(doc);
+                var hasNumber = Boolean(doc.number && doc.number.trim());
+                var numStatusBadge = hasNumber
+                    ? '<span class="status status-ready">Nomor: Sudah Diisi</span>'
+                    : '<span class="status status-draft">Nomor: Belum Diisi</span>';
+
+                var gdocStatusBadge = '';
+                if (doc.status === 'ERROR') {
+                    gdocStatusBadge = '<span class="status status-error" title="Gagal membuat dokumen">Doc: Error</span>';
+                } else if (doc.docId) {
+                    gdocStatusBadge = '<span class="status status-ready">Doc: Sudah Dibuat</span>';
+                } else {
+                    gdocStatusBadge = '<span class="status status-draft">Doc: Belum Dibuat</span>';
+                }
+
+                var pdfStatusBadge = doc.pdfId
+                    ? '<span class="status status-ready">PDF: Sudah Dibuat</span>'
+                    : '<span class="status status-draft">PDF: Belum Dibuat</span>';
+
+                var emailStatusBadge = doc.emailStatus === 'DRAFTED'
+                    ? '<span class="status status-ready">Email: Draft Dibuat</span>'
+                    : '<span class="status status-draft">Email: Belum Dibuat</span>';
+
+                var toDisplay = doc.emailTo ? _this.escape(doc.emailTo).split(',').map(function (e) { return '<span class="recipient-chip">' + e.trim() + '</span>'; }).join('') : '<span class="muted-text">-</span>';
+                var ccDisplay = doc.emailCc ? _this.escape(doc.emailCc).split(',').map(function (e) { return '<span class="recipient-chip">' + e.trim() + '</span>'; }).join('') : '<span class="muted-text">-</span>';
+
+                var condText = props.condition && props.condition !== '-' ? ' · Kondisi: ' + props.condition : '';
+
+                return '<div class="document-item" data-doc-id="' + _this.escape(doc.id) + '">'
+                    + '<div class="document-item-head" style="align-items: center;">'
+                    + '<div>'
+                    + '<strong>' + _this.escape(props.subType) + '</strong>'
+                    + '<small>' + _this.escape(props.activityType) + condText + '</small>'
+                    + '</div>'
+                    + '<div class="action-dropdown">'
+                    + '<button class="button button-secondary button-small dropdown-trigger" onclick="App.toggleActionMenu(event, \'' + _this.escape(doc.id) + '\')">Aksi ▾</button>'
+                    + '<div class="action-menu is-hidden" id="menu-' + _this.escape(doc.id) + '" style="right: 0;">'
+                    + '<button class="action-menu-item" onclick="App.openEmailPreview(\'' + _this.escape(doc.id) + '\')">Preview Draft</button>'
+                    + (request.status === 'READY' ? '<button class="action-menu-item" onclick="App.actionCreateDraft_(\'' + _this.escape(doc.id) + '\')">Buat Gmail Draft</button>' : '')
+                    + (request.status === 'READY' ? '<button class="action-menu-item" onclick="App.actionGenerateGoogleDoc_(\'' + _this.escape(doc.id) + '\')">Generate Google Docs</button>' : '')
+                    + (request.status === 'READY' ? '<button class="action-menu-item" onclick="App.actionGeneratePdf_(\'' + _this.escape(doc.id) + '\')">Generate PDF</button>' : '')
+                    + (doc.docUrl ? '<a class="action-menu-item" href="' + _this.escape(_this.safeExternalUrl_(doc.docUrl)) + '" target="_blank">Buka Google Docs</a>' : '<span class="action-menu-item is-disabled">Buka Google Docs</span>')
+                    + (doc.pdfId ? '<a class="action-menu-item" href="' + _this.escape(_this.pdfOpenUrl_(doc)) + '" target="_blank" rel="noopener noreferrer">Buka PDF</a>' : '<span class="action-menu-item is-disabled">Buka PDF</span>')
+                    + '</div>'
+                    + '</div>'
+                    + '</div>'
+                    + '<div class="document-item-body">'
+                    + '<div>'
+                    + '<span class="eyebrow" style="margin-bottom: 4px; display: block;">Nomor Surat</span>'
+                    + (hasNumber ? '<span class="number-value" style="font-family: monospace; font-size: 12px; font-weight: 600; color: var(--green-900);">' + _this.escape(doc.number) + '</span>' : '<span class="muted-text">—</span>')
+                    + '</div>'
+                    + '<div>'
+                    + '<span class="eyebrow" style="margin-bottom: 6px; display: block;">Status Integrasi</span>'
+                    + '<div style="display: flex; flex-wrap: wrap; gap: 6px;">'
+                    + numStatusBadge
+                    + gdocStatusBadge
+                    + pdfStatusBadge
+                    + emailStatusBadge
+                    + '</div>'
+                    + '</div>'
+                    + '<div style="grid-column: 1 / -1;">'
+                    + '<span class="eyebrow" style="margin-bottom: 4px; display: block;">Email To & CC</span>'
+                    + '<div style="display: grid; grid-template-columns: auto 1fr; gap: 8px; font-size: 12px; margin-top: 4px;">'
+                    + '<span style="color: var(--muted); font-weight: 700;">To:</span>'
+                    + '<div style="display: flex; flex-wrap: wrap; gap: 4px;">' + toDisplay + '</div>'
+                    + '<span style="color: var(--muted); font-weight: 700;">CC:</span>'
+                    + '<div style="display: flex; flex-wrap: wrap; gap: 4px;">' + ccDisplay + '</div>'
+                    + '</div>'
+                    + '</div>'
+                    + '</div>'
+                    + '</div>';
+            }).join('');
+
+            var listHtml = '<div class="document-list">'
+                + (cardsHtml || '<div class="empty-state" style="min-height: 120px;"><strong>Belum ada surat</strong><span>Klik "+ Tambah Surat" di bawah untuk memulai.</span></div>')
+                + '</div>';
+
+            var addLetterFormHtml = '';
+            if (request.status === 'READY') {
+                var actTypes = ['Edu Fair', 'Campus Visit', 'Penugasan Narasumber'];
+                var actOptions = actTypes.map(function (t) {
+                    var selected = t === request.activityType ? 'selected' : '';
+                    return '<option value="' + _this.escape(t) + '" ' + selected + '>' + _this.escape(t) + '</option>';
+                }).join('');
+
+                addLetterFormHtml = '<div class="add-letter-bar" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">'
+                    + '<div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:140px;">'
+                    + '<span style="font-size:11px; font-weight:700; color:var(--muted);">Tipe Kegiatan</span>'
+                    + '<select id="addLetterActivityType" class="add-letter-select" onchange="App.onAddLetterActivityTypeChange()">'
+                    + '<option value="">Pilih Tipe Kegiatan</option>'
+                    + actOptions
+                    + '</select>'
+                    + '</div>'
+
+                    + '<div style="display:flex; flex-direction:column; gap:4px; flex:1.2; min-width:180px;">'
+                    + '<span style="font-size:11px; font-weight:700; color:var(--muted);">Sub-Tipe</span>'
+                    + '<select id="addLetterSubType" class="add-letter-select" onchange="App.onAddLetterSubTypeChange()">'
+                    + '<option value="">Pilih Sub-Tipe</option>'
+                    + '</select>'
+                    + '</div>'
+
+                    + '<div id="addLetterConditionContainer" class="is-hidden" style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:140px;">'
+                    + '<span style="font-size:11px; font-weight:700; color:var(--muted);">Kondisi Tambahan</span>'
+                    + '<select id="addLetterCondition" class="add-letter-select">'
+                    + '<option value="-">-</option>'
+                    + '</select>'
+                    + '</div>'
+
+                    + '<button class="button button-primary button-small" onclick="App.submitAddLetter()" style="align-self:flex-end; min-height:38px;">'
+                    + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+                    + ' Tambah Surat</button>'
+                    + '</div>';
+            }
+
+            var employees = detail.employees.map(function (item) { return '<li>' + _this.escape(item.name) + (item.identifier ? ' · ' + _this.escape(item.identifier) : '') + (item.email ? ' · ' + _this.escape(item.email) : '') + '</li>'; }).join('');
+            var schedules = this.asArray(detail.schedules).map(function (item) {
+                return '<li>' + _this.escape(_this.scheduleLabel_(item)) + '</li>';
+            }).join('');
+
+            document.getElementById('drawerBody').innerHTML = '<div class="detail-hero">'
+                + '<p class="eyebrow">' + this.escape(request.activityType) + '</p>'
+                + '<h3>' + this.escape(request.activityName) + '</h3>'
+                + '<p>' + this.escape(request.partnerName) + '</p>'
+                + '<div class="status-stack detail-status">' + this.requestWorkflowBadges_(request) + '</div>'
+                + '</div>'
+                + '<div class="workflow-notice workflow-' + this.escape(String(request.status || 'DRAFT').toLowerCase()) + '">'
+                + this.escape(this.requestStatusMessage_(request.status, progress))
+                + '</div>'
+                + this.renderPrimaryActions_(request, progress)
+                + this.renderFinanceToolbar_(request, detail.financeArtifacts || {})
+                + '<section class="detail-section">'
+                + '<div class="detail-section-head"><h3>Ringkasan Kegiatan</h3></div>'
+                + '<div class="detail-grid">'
+                + '<div><span>Tipe Kegiatan</span><strong>' + this.escape(request.activityType || '-') + '</strong></div>'
+                + '<div><span>Mitra / Instansi</span><strong>' + this.escape(request.partnerName || '-') + '</strong></div>'
+                + '<div><span>Honor</span><strong>' + this.escape(request.honor || '-') + '</strong></div>'
+                + '<div><span>Perjadin</span><strong>' + this.escape(request.travel || '-') + '</strong></div>'
+                + '<div class="detail-wide"><span>Jadwal Kegiatan</span><ol class="compact-schedule-list">' + (schedules || '<li>Belum ada jadwal.</li>') + '</ol></div>'
+                + '</div>'
+                + '</section>'
+                + '<section class="detail-section letter-section">'
+                + '<div class="detail-section-head"><h3>Daftar Surat untuk Kegiatan Ini</h3><span class="letter-count-badge">' + detailDocuments.length + ' surat</span></div>'
+                + listHtml
+                + addLetterFormHtml
+                + '</section>'
+                + '<section class="detail-section"><h3>Petugas / Narasumber</h3><ol>' + (employees || '<li>Belum ada data.</li>') + '</ol></section>';
+
+            if (request.status === 'READY') {
+                setTimeout(function () {
+                    _this.onAddLetterActivityTypeChange();
+                }, 50);
+            }
+        }
+
+App.submitAddLetter = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var activityTypeSelect, activityType, subTypeSelect, subType, conditionSelect, condition, requestId, result, error_add;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            activityTypeSelect = document.getElementById('addLetterActivityType');
+                            subTypeSelect = document.getElementById('addLetterSubType');
+                            conditionSelect = document.getElementById('addLetterCondition');
+                            if (!activityTypeSelect || !subTypeSelect) return [2 /*return*/];
+
+                            activityType = activityTypeSelect.value;
+                            subType = subTypeSelect.value;
+                            condition = conditionSelect ? conditionSelect.value : '-';
+                            if (!condition) condition = '-';
+
+                            if (!activityType || !subType) {
+                                this.toast('Tipe Kegiatan dan Sub-Tipe wajib diisi.', true);
+                                return [2 /*return*/];
+                            }
+
+                            requestId = this.state.currentDetail.request.id;
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, this.server('addDocument', requestId, activityType, subType, condition)];
+                        case 2:
+                            result = _a.sent();
+                            this.state.currentDetail = result;
+                            this.renderDetail(result);
+                            this.toast('Surat ' + subType + ' berhasil ditambahkan.');
+                            return [3 /*break*/, 4];
+                        case 3:
+                            error_add = _a.sent();
+                            this.toast(error_add.message, true);
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.openLetterDetail = function (documentId, focusField) {
+            var _this = this;
+            var detail = this.state.currentDetail;
+            var doc = this.asArray(detail.documents).find(function (d) { return d.id === documentId; });
+            if (!doc) return;
+
+            document.getElementById('letterDrawerTitle').textContent = doc.type;
+            document.getElementById('letterDrawer').classList.add('is-open');
+            document.getElementById('letterDrawer').setAttribute('aria-hidden', 'false');
+
+            var props = this.getLetterProperties_(doc);
+            var actTypes = ['Edu Fair', 'Campus Visit', 'Penugasan Narasumber'];
+            var actOptions = actTypes.map(function (t) {
+                var selected = t === props.activityType ? 'selected' : '';
+                return '<option value="' + _this.escape(t) + '" ' + selected + '>' + _this.escape(t) + '</option>';
+            }).join('');
+
+            var mapping = this.state.bootstrap.options.officialLetterMapping || [];
+            var subTypes = [];
+            mapping.forEach(function (item) {
+                if (item.activityType === props.activityType && !subTypes.includes(item.subType)) {
+                    subTypes.push(item.subType);
+                }
+            });
+            var subTypeOptions = subTypes.map(function (st) {
+                var selected = st === props.subType ? 'selected' : '';
+                return '<option value="' + _this.escape(st) + '" ' + selected + '>' + _this.escape(st) + '</option>';
+            }).join('');
+
+            var conditions = [];
+            mapping.forEach(function (item) {
+                if (item.activityType === props.activityType && item.subType === props.subType) {
+                    conditions.push(item.condition);
+                }
+            });
+
+            var isCondHidden = conditions.length === 1 && conditions[0] === '-';
+            var condOptions = conditions.map(function (c) {
+                var selected = c === props.condition ? 'selected' : '';
+                return '<option value="' + _this.escape(c) + '" ' + selected + '>' + _this.escape(c) + '</option>';
+            }).join('');
+
+            var numStatus = doc.number ? 'Sudah Diisi' : 'Belum Diisi';
+            var docLetterType = doc.letterType || doc.type;
+            var docLetterCode = doc.letterCode || 'I';
+            var genDate = (doc.status === 'GENERATED' && doc.updatedAt) ? this.formatIndonesianDate_(doc.updatedAt) : '-';
+
+            document.getElementById('letterDrawerBody').innerHTML = "\n      <div style=\"display:flex; flex-direction:column; gap:16px\">\n        <div class=\"detail-hero\" style=\"background:var(--green-900); padding:20px\">\n          <p class=\"eyebrow\">ID Dokumen: " + this.escape(doc.id) + "</p>\n          <h3>" + this.escape(doc.type) + "</h3>\n          <div class=\"status-stack\" style=\"margin-top:10px\">" + this.documentStatusBadge_(doc, detail.request.status) + "</div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Informasi & Status Dokumen</h3>\n          <div class=\"detail-grid\" style=\"margin-top:12px\">\n            <div><span>Status Nomor</span><strong>" + this.escape(numStatus) + "</strong></div>\n            <div><span>Kode Suffix</span><strong>" + this.escape(docLetterCode) + "</strong></div>\n            <div class=\"detail-wide\"><span>Jenis Surat</span><strong>" + this.escape(docLetterType) + "</strong></div>\n            <div class=\"detail-wide\"><span>Terakhir Generate</span><strong>" + this.escape(genDate) + "</strong></div>\n          </div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Jenis & Konfigurasi Surat</h3>\n          <div style=\"display:grid; gap:12px; margin-top:12px\">\n            <label class=\"field\">\n              <span>Tipe Kegiatan *</span>\n              <select id=\"editLetterActivityType\" onchange=\"App.onEditLetterActivityTypeChange()\">\n                " + actOptions + "\n              </select>\n            </label>\n            <label class=\"field\">\n              <span>Sub-Tipe *</span>\n              <select id=\"editLetterSubType\" onchange=\"App.onEditLetterSubTypeChange()\">\n                " + subTypeOptions + "\n              </select>\n            </label>\n            <label class=\"field " + (isCondHidden ? 'is-hidden' : '') + "\" id=\"editLetterConditionContainer\">\n              <span>Kondisi Tambahan</span>\n              <select id=\"editLetterCondition\" onchange=\"App.onEditLetterConditionChange()\">\n                " + condOptions + "\n              </select>\n            </label>\n          </div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Nomor Surat & Routing Penerima</h3>\n          <div style=\"display:grid; gap:12px; margin-top:12px\">\n            <label class=\"field\">\n              <span>Nomor Surat (Lengkap) *</span>\n              <input type=\"text\" id=\"letterDetailNumber\" value=\"" + this.escape(doc.number || '') + "\" placeholder=\"Isi nomor lengkap beserta suffix\">\n            </label>\n            <label class=\"field\">\n              <span>Email To *</span>\n              <input type=\"text\" id=\"letterDetailEmailTo\" value=\"" + this.escape(doc.emailTo || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <label class=\"field\">\n              <span>Email CC</span>\n              <input type=\"text\" id=\"letterDetailEmailCc\" value=\"" + this.escape(doc.emailCc || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <label class=\"field\">\n              <span>Email BCC</span>\n              <input type=\"text\" id=\"letterDetailEmailBcc\" value=\"" + this.escape(doc.emailBcc || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <div style=\"display:flex; justify-content:flex-end; gap:8px; margin-top:8px\">\n              <button class=\"button button-primary\" id=\"btnSaveLetterDetails\">Simpan Perubahan</button>\n            </div>\n          </div>\n        </div>\n\n        <div class=\"detail-section action-section\">\n          <h3>Aksi Dokumen & Email</h3>\n          <div style=\"display:flex; flex-wrap:wrap; gap:8px; margin-top:12px\">\n            <button class=\"button button-primary\" id=\"btnGenerateDoc\">Buat / Update Doc & PDF</button>\n            <button class=\"button button-secondary\" id=\"btnPreviewEmail\">Preview Email</button>\n            <button class=\"button button-secondary\" id=\"btnCreateDraft\">Buat Gmail Draft</button>\n          </div>\n          <div class=\"document-links\" style=\"margin-top:12px\">\n            " + (doc.docUrl ? "<a class=\"button button-secondary button-small\" href=\"" + this.escape(this.safeExternalUrl_(doc.docUrl)) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka Google Doc</a>" : '') + "\n            " + (doc.pdfId ? "<a class=\"button button-secondary button-small\" href=\"" + this.escape(this.pdfOpenUrl_(doc)) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka PDF</a>" : '') + "\n          </div>\n        </div>\n\n        <div style=\"margin-top:24px; padding-top:16px; border-top:1px solid var(--line); display:flex; justify-content:space-between\">\n          <button class=\"button button-danger\" id=\"btnDeleteLetter\">Hapus Surat</button>\n          <button class=\"button button-secondary\" onclick=\"App.closeLetterDrawer()\">Tutup</button>\n        </div>\n      </div>\n    ";
+
+            document.getElementById('btnSaveLetterDetails').addEventListener('click', function () { return _this.actionSaveLetterDetails_(documentId); });
+            document.getElementById('btnGenerateDoc').addEventListener('click', function () { return _this.actionGenerateDoc_(documentId); });
+            document.getElementById('btnPreviewEmail').addEventListener('click', function () { return _this.openEmailPreview(documentId); });
+            document.getElementById('btnCreateDraft').addEventListener('click', function () { return _this.actionCreateDraft_(documentId); });
+            document.getElementById('btnDeleteLetter').addEventListener('click', function () { return _this.actionDeleteLetter_(documentId); });
+
+            if (focusField === 'number') {
+                setTimeout(function () {
+                    var el = document.getElementById('letterDetailNumber');
+                    if (el) { el.focus(); el.select(); }
+                }, 100);
+            } else if (focusField === 'combo') {
+                setTimeout(function () {
+                    var el = document.getElementById('editLetterActivityType');
+                    if (el) el.focus();
+                }, 100);
+            }
+        }
+
+App.actionSaveLetterDetails_ = function (documentId) {
+            return __awaiter(this, void 0, void 0, function () {
+                var btn, number, emailTo, emailCc, emailBcc, activityType, subType, condition, result, error_save;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            btn = document.getElementById('btnSaveLetterDetails');
+                            number = document.getElementById('letterDetailNumber').value.trim();
+                            emailTo = document.getElementById('letterDetailEmailTo').value.trim();
+                            emailCc = document.getElementById('letterDetailEmailCc').value.trim();
+                            emailBcc = document.getElementById('letterDetailEmailBcc').value.trim();
+
+                            activityType = document.getElementById('editLetterActivityType').value;
+                            subType = document.getElementById('editLetterSubType').value;
+                            condition = document.getElementById('editLetterCondition').value || '-';
+
+                            if (!emailTo) {
+                                this.toast('Email To wajib diisi.', true);
+                                return [2 /*return*/];
+                            }
+                            if (!activityType || !subType) {
+                                this.toast('Tipe Kegiatan dan Sub-Tipe wajib dipilih.', true);
+                                return [2 /*return*/];
+                            }
+                            this.setBusy(btn, true, 'Menyimpan...');
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 4, 5, 6]);
+                            return [4 /*yield*/, this.server('saveDocumentDetails', documentId, number, emailTo, emailCc, emailBcc, '', activityType, subType, condition)];
+                        case 2:
+                            result = _a.sent();
+                            this.state.currentDetail = result;
+                            this.renderDetail(result);
+                            // Refresh drawer details
+                            return [4 /*yield*/, this.openLetterDetail(documentId)];
+                        case 3:
+                            _a.sent();
+                            this.toast('Perubahan nomor dan penerima email disimpan.');
+                            return [3 /*break*/, 6];
+                        case 4:
+                            error_save = _a.sent();
+                            this.toast(error_save.message, true);
+                            return [3 /*break*/, 6];
+                        case 5:
+                            this.setBusy(btn, false);
+                            return [7 /*endfinally*/];
+                        case 6: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.actionGenerateDoc_ = function (documentId) {
+            return __awaiter(this, void 0, void 0, function () {
+                var btn, result, error_gen;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            btn = document.getElementById('btnGenerateDoc');
+                            this.setBusy(btn, true, 'Membuat...');
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 4, 5, 6]);
+                            return [4 /*yield*/, this.server('generateDocument', documentId, false)];
+                        case 2:
+                            _a.sent();
+                            return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id)];
+                        case 3:
+                            _a.sent();
+                            if (document.getElementById('letterDrawer').classList.contains('is-open')) {
+                                this.openLetterDetail(documentId);
+                            }
+                            this.toast('Dokumen dan PDF berhasil dibuat.');
+                            return [3 /*break*/, 6];
+                        case 4:
+                            error_gen = _a.sent();
+                            this.toast(error_gen.message, true);
+                            return [3 /*break*/, 6];
+                        case 5:
+                            this.setBusy(btn, false);
+                            return [7 /*endfinally*/];
+                        case 6: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.actionGenerateGoogleDoc_ = function (documentId) {
+            return __awaiter(this, void 0, void 0, function () {
+                var result, error_gen;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            _a.trys.push([0, 3, , 4]);
+                            return [4 /*yield*/, this.server('generateGoogleDoc', documentId, true)];
+                        case 1:
+                            result = _a.sent();
+                            return [4 /*yield*/, this.openRequestDetail(result.requestId)];
+                        case 2:
+                            _a.sent();
+                            this.toast('Google Docs berhasil dibuat.');
+                            return [3 /*break*/, 4];
+                        case 3:
+                            error_gen = _a.sent();
+                            this.toast(error_gen.message, true);
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.actionGeneratePdf_ = function (documentId) {
+            return __awaiter(this, void 0, void 0, function () {
+                var result, error_pdf;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            _a.trys.push([0, 3, , 4]);
+                            return [4 /*yield*/, this.server('generatePdf', documentId, true)];
+                        case 1:
+                            result = _a.sent();
+                            return [4 /*yield*/, this.openRequestDetail(result.requestId)];
+                        case 2:
+                            _a.sent();
+                            this.toast('PDF berhasil dibuat.');
+                            return [3 /*break*/, 4];
+                        case 3:
+                            error_pdf = _a.sent();
+                            this.toast(error_pdf.message, true);
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.actionCreateDraft_ = function (documentId) {
+            return __awaiter(this, void 0, void 0, function () {
+                var btn, result, error_draft;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            btn = document.getElementById('btnCreateDraft');
+                            this.setBusy(btn, true, 'Membuat draft...');
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 4, 5, 6]);
+                            return [4 /*yield*/, this.server('createEmailDraft', documentId, false)];
+                        case 2:
+                            _a.sent();
+                            return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id)];
+                        case 3:
+                            _a.sent();
+                            if (document.getElementById('letterDrawer').classList.contains('is-open')) {
+                                this.openLetterDetail(documentId);
+                            }
+                            this.toast('Draft Gmail berhasil dibuat.');
+                            return [3 /*break*/, 6];
+                        case 4:
+                            error_draft = _a.sent();
+                            this.toast(error_draft.message, true);
+                            return [3 /*break*/, 6];
+                        case 5:
+                            this.setBusy(btn, false);
+                            return [7 /*endfinally*/];
+                        case 6: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.actionDeleteLetter_ = function (documentId) {
+            return __awaiter(this, void 0, void 0, function () {
+                var btn, requestId, result, error_del;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            if (!confirm('Apakah Anda yakin ingin menghapus surat ini? File Drive yang terkait juga akan dihapus.'))
+                                return [2 /*return*/];
+                            btn = document.getElementById('btnDeleteLetter');
+                            requestId = this.state.currentDetail.request.id;
+                            this.setBusy(btn, true, 'Menghapus...');
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, 4, 5]);
+                            return [4 /*yield*/, this.server('deleteDocument', documentId)];
+                        case 2:
+                            result = _a.sent();
+                            this.state.currentDetail = result;
+                            this.renderDetail(result);
+                            this.closeLetterDrawer();
+                            this.toast('Surat berhasil dihapus.');
+                            return [3 /*break*/, 5];
+                        case 3:
+                            error_del = _a.sent();
+                            this.toast(error_del.message, true);
+                            return [3 /*break*/, 5];
+                        case 4:
+                            this.setBusy(btn, false);
+                            return [7 /*endfinally*/];
+                        case 5: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.renderPrimaryActions_ = function (request, progress) {
+            if (request.status === 'ARCHIVED')
+                return '';
+            var actions = [];
+            if (request.status === 'DRAFT') {
+                actions.push('<button class="button button-primary" data-action="process-request">Proses Permohonan</button>');
+            }
+            actions.push('<button class="button button-edit" data-action="edit-request">Ubah permohonan</button>');
+            if (request.status === 'READY' && progress.status === 'DRAFTED') {
+                actions.push('<button class="button button-finish" data-action="archive-request">Tandai Selesai</button>');
+            }
+            return "<div class=\"action-panel\">".concat(actions.join(''), "</div>");
+        }
+
+App.renderDocumentToolbar_ = function (documents, request) {
+            var _this = this;
+            if (!documents.length || request.status !== 'READY')
+                return '';
+            var options = documents.map(function (doc) { return "\n        <option value=\"".concat(_this.escape(doc.id), "\">").concat(_this.escape(doc.type)).concat(doc.number ? ' | ' + _this.escape(doc.number) : '', "</option>\n      "); }).join('');
+            return "\n        <section class=\"detail-section action-section\">\n          <h3>Aksi dokumen dan email</h3>\n          <div class=\"toolbar-row\">\n            <select data-detail-document-select aria-label=\"Pilih dokumen\">".concat(options, "</select>\n            <button class=\"button button-primary\" data-action=\"generate-doc\">Buat / Update Doc & PDF</button>\n            <button class=\"button button-secondary\" data-action=\"preview-email\">Preview Draft Email</button>\n            <button class=\"button button-secondary\" data-action=\"draft-email\">Buat / Update Gmail Draft</button>\n          </div>\n          <p class=\"finance-output-note\">Gmail Draft hanya dapat dibuat setelah PDF tersedia.</p>\n        </section>\n      ");
+        }
+
+App.renderFinanceToolbar_ = function (request, storedArtifacts) {
+            var _this = this;
+            var artifacts = Object.assign({}, storedArtifacts || {}, request || {});
+            var readiness = this.state.currentDetail && this.state.currentDetail.financeReadiness
+                ? this.state.currentDetail.financeReadiness
+                : {};
+            var kinds = [
+                {
+                    key: 'HONOR',
+                    label: 'Honor',
+                    enabled: request.honor === 'Ya',
+                    readiness: readiness.honor || {},
+                    sheetUrl: artifacts.honorSheetUrl
+                },
+                {
+                    key: 'PERJADIN',
+                    label: 'Perjadin',
+                    enabled: request.travel === 'Ya',
+                    readiness: readiness.perjadin || {},
+                    sheetUrl: artifacts.perjadinSheetUrl
+                }
+            ].filter(function (item) { return item.enabled || item.sheetUrl; });
+            if (!kinds.length)
+                return '';
+            var canGenerate = request.status === 'READY';
+            var rows = kinds.map(function (item) {
+                var actions = [];
+                if (item.sheetUrl) {
+                    actions.push("<a class=\"button button-secondary button-small\" href=\"".concat(_this.escape(_this.normalizeDriveUrl_(item.sheetUrl) || _this.safeExternalUrl_(item.sheetUrl)), "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka Spreadsheet ").concat(item.label, "</a>"));
+                }
+                else if (canGenerate) {
+                    actions.push("<button class=\"button button-primary button-small\" data-action=\"generate-finance\" data-kind=\"".concat(item.key, "\">Buat Spreadsheet ").concat(item.label, "</button>"));
+                }
+                return "\n          <div class=\"finance-output\">\n            <h4>".concat(item.label, "</h4>\n            <div>\n              <div class=\"finance-output-actions\">").concat(actions.join(''), "</div>\n              <p class=\"finance-output-note\">").concat(_this.escape(item.readiness.message || 'Belum ada hasil yang tersimpan.'), "</p>\n            </div>\n          </div>\n        ");
+            }).join('');
+            return "\n        <section class=\"detail-section action-section\">\n          <h3>Hasil Honor & Perjadin</h3>\n          <div class=\"finance-output-list\">".concat(rows, "</div>\n        </section>\n      ");
+        }
+
+App.handleDetailAction = function (event) {
+            return __awaiter(this, void 0, void 0, function () {
+                var button, request, action, documentId, documentId, result, kind, outputWindow, result, kind, outputWindow, result, error_5;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            button = event.target.closest('[data-action]');
+                            if (!button || !this.state.currentDetail)
+                                return [2 /*return*/];
+                            if (this.state.detailActionBusy) {
+                                this.toast('Aksi sebelumnya masih diproses.', true);
+                                return [2 /*return*/];
+                            }
+                            this.state.detailActionBusy = true;
+                            request = this.state.currentDetail.request;
+                            action = button.dataset.action;
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 19, 20, 21]);
+                            if (action === 'edit-request') {
+                                this.fillForm(this.state.currentDetail);
+                                this.closeDrawer();
+                                this.switchView('form');
+                                return [2 /*return*/];
+                            }
+                            if (!(action === 'archive-request')) return [3 /*break*/, 4];
+                            if (!confirm('Tandai permohonan ' + request.id + ' sebagai selesai? ' +
+                                'Permohonan akan menjadi hanya-baca dan dipindahkan dari daftar aktif.'))
+                                return [2 /*return*/];
+                            this.setBusy(button, true, 'Menyelesaikan...');
+                            return [4 /*yield*/, this.server('archiveRequest', request.id, request.revision)];
+                        case 2:
+                            _a.sent();
+                            this.toast('Permohonan ditandai selesai.');
+                            this.closeDrawer();
+                            return [4 /*yield*/, this.refreshAll(false)];
+                        case 3:
+                            _a.sent();
+                            return [2 /*return*/];
+                        case 4:
+                            if (!(action === 'generate-doc')) return [3 /*break*/, 6];
+                            documentId = button.dataset.documentId || this.selectedDetailDocumentId_();
+                            this.setBusy(button, true, 'Membuat...');
+                            return [4 /*yield*/, this.server('generateDocument', documentId, false)];
+                        case 5:
+                            _a.sent();
+                            this.toast('Dokumen dan PDF siap.');
+                            _a.label = 6;
+                        case 6:
+                            if (!(action === 'preview-email')) return [3 /*break*/, 8];
+                            return [4 /*yield*/, this.openEmailPreview(button.dataset.documentId || this.selectedDetailDocumentId_())];
+                        case 7:
+                            _a.sent();
+                            return [2 /*return*/];
+                        case 8:
+                            if (!(action === 'draft-email')) return [3 /*break*/, 10];
+                            documentId = button.dataset.documentId || this.selectedDetailDocumentId_();
+                            var doc = this.asArray(this.state.currentDetail.documents).find(function (d) { return d.id === documentId; });
+                            var routing = doc ? doc.routing : null;
+                            if (!routing || !routing.to || !routing.to.length) {
+                                this.toast('Penerima To belum tersedia atau kosong. Gmail Draft tidak dapat dibuat.', true);
+                                return [2 /*return*/];
+                            }
+                            this.setBusy(button, true, 'Membuat draft...');
+                            return [4 /*yield*/, this.server('createEmailDraft', documentId, false)];
+                        case 9:
+                            _a.sent();
+                            this.toast('Draft Gmail siap.');
+                            _a.label = 10;
+                        case 10:
+                            if (!(action === 'process-request')) return [3 /*break*/, 13];
+                            this.setBusy(button, true, 'Memproses...');
+                            return [4 /*yield*/, this.server('processRequest', request.id, request.revision)];
+                        case 11:
+                            result = _a.sent();
+                            return [4 /*yield*/, this.openRequestDetail(request.id)];
+                        case 12:
+                            _a.sent();
+                            this.toast(result.reused
+                                ? 'Permohonan sudah berstatus Siap Diproses.'
+                                : 'Permohonan siap diproses. Pilih aksi yang diperlukan.');
+                            return [2 /*return*/];
+                        case 13:
+                            if (!(action === 'generate-finance')) return [3 /*break*/, 15];
+                            kind = button.dataset.kind;
+                            if (!kind)
+                                throw new Error('Jenis laporan tidak tersedia.');
+                            outputWindow = window.open('', '_blank');
+                            this.setBusy(button, true, 'Membuat sheet...');
+                            return [4 /*yield*/, this.server('generateFinanceSheet', request.id, kind)];
+                        case 14:
+                            result = _a.sent();
+                            if (outputWindow)
+                                outputWindow.location = this.normalizeDriveUrl_(result.url) || result.url;
+                            else
+                                window.open(this.normalizeDriveUrl_(result.url) || result.url, '_blank');
+                            this.toast('Sheet ' + kind.toLowerCase() + ' siap.');
+                            _a.label = 15;
+                        case 15:
+                            if (!(action === 'export-finance')) return [3 /*break*/, 17];
+                            kind = button.dataset.kind;
+                            if (!kind)
+                                throw new Error('Jenis laporan tidak tersedia.');
+                            outputWindow = window.open('', '_blank');
+                            this.setBusy(button, true, 'Mengekspor...');
+                            return [4 /*yield*/, this.server('generateAndExportFinance', request.id, kind, button.dataset.format)];
+                        case 16:
+                            result = _a.sent();
+                            if (outputWindow)
+                                outputWindow.location = this.normalizeDriveUrl_(result.url) || result.url;
+                            else
+                                window.open(this.normalizeDriveUrl_(result.url) || result.url, '_blank');
+                            this.toast(result.format + ' siap.');
+                            _a.label = 17;
+                        case 17: return [4 /*yield*/, this.openRequestDetail(request.id)];
+                        case 18:
+                            _a.sent();
+                            return [3 /*break*/, 21];
+                        case 19:
+                            error_5 = _a.sent();
+                            this.toast(error_5.message, true);
+                            return [3 /*break*/, 21];
+                        case 20:
+                            this.setBusy(button, false);
+                            this.state.detailActionBusy = false;
+                            return [7 /*endfinally*/];
+                        case 21: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.selectedDetailDocumentId_ = function () {
+            var documentSelect = document.querySelector('[data-detail-document-select]');
+            var documentId = documentSelect ? documentSelect.value : '';
+            if (!documentId)
+                throw new Error('Pilih dokumen terlebih dahulu.');
+            return documentId;
+        }
+
+App.openEmailPreview = function (documentId) {
+            var _this = this;
+            return __awaiter(this, void 0, void 0, function () {
+                var modal, preview, error_6, createDraftBtn;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            modal = document.getElementById('emailModal');
+                            document.getElementById('emailModalTitle').textContent = 'Memuat...';
+                            document.getElementById('emailModalBody').innerHTML = '<div class="skeleton" style="height:180px;border-radius:14px"></div>';
+                            modal.showModal();
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, this.server('previewEmail', documentId)];
+                        case 2:
+                            preview = _a.sent();
+                            document.getElementById('emailModalTitle').textContent = 'Draft ' + preview.type;
+                            document.getElementById('emailModalBody').innerHTML = "\n          <div class=\"email-envelope\">\n            <input type=\"hidden\" id=\"emailPreviewDocId\" value=\"".concat(_this.escape(preview.documentId), "\">\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewTo\"><strong>To:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewTo\" value=\"").concat(_this.escape(preview.to.join(', ')), "\" readonly>\n            </div>\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewCc\"><strong>CC:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewCc\" value=\"").concat(_this.escape(preview.cc.join(', ')), "\" readonly>\n            </div>\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewBcc\"><strong>BCC:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewBcc\" value=\"").concat(_this.escape((preview.bcc || []).join(', ')), "\" readonly>\n            </div>\n            <div style=\"margin-top:8px\"><span>Subjek</span><br><strong>").concat(_this.escape(preview.subject), "</strong></div>\n            <div style=\"margin-top:8px\"><span>Lampiran</span><br>").concat(preview.hasAttachment ? 'PDF siap' : 'PDF belum dibuat', "</div>\n          </div>\n          ").concat(preview.notes.length ? "<div class=\"notice notice-error\">".concat(_this.escape(preview.notes.join('\n')), "</div>") : '', "\n          <div style=\"margin: 12px 0; display: flex; gap: 8px;\">\n            <button class=\"button button-primary\" id=\"emailModalCreateDraftBtn\">Buat / Update Gmail Draft</button>\n          </div>\n          <iframe class=\"email-preview-frame\" sandbox=\"\" referrerpolicy=\"no-referrer\" srcdoc=\"").concat(_this.escape(_this.emailPreviewDocument(preview.htmlBody)), "\"></iframe>\n        ");
+                            createDraftBtn = document.getElementById('emailModalCreateDraftBtn');
+                            if (createDraftBtn) {
+                                createDraftBtn.addEventListener('click', function () {
+                                    return __awaiter(_this, void 0, void 0, function () {
+                                        var docId, error_modal;
+                                        return __generator(this, function (_a) {
+                                            switch (_a.label) {
+                                                case 0:
+                                                    docId = document.getElementById('emailPreviewDocId').value;
+                                                    this.setBusy(createDraftBtn, true, 'Membuat draft...');
+                                                    _a.label = 1;
+                                                case 1:
+                                                    _a.trys.push([1, 3, 4, 5]);
+                                                    return [4 /*yield*/, this.server('createEmailDraft', docId, true)];
+                                                case 2:
+                                                    _a.sent();
+                                                    this.toast('Draft Gmail siap.');
+                                                    modal.close();
+                                                    return [3 /*break*/, 5];
+                                                case 3:
+                                                    error_modal = _a.sent();
+                                                    this.toast(error_modal.message, true);
+                                                    return [3 /*break*/, 5];
+                                                case 4:
+                                                    this.setBusy(createDraftBtn, false);
+                                                    return [7 /*endfinally*/];
+                                                case 5: return [2 /*return*/];
+                                            }
+                                        });
+                                    });
+                                });
+                            }
+                            return [3 /*break*/, 4];
+                        case 3:
+                            error_6 = _a.sent();
+                            document.getElementById('emailModalBody').innerHTML = "<div class=\"notice notice-error\">".concat(this.escape(error_6.message), "</div>");
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+</script>

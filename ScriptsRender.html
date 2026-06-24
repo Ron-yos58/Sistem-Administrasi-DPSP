@@ -1,0 +1,293 @@
+<script>
+var App = typeof App !== "undefined" ? App : {};
+
+App.populateOptions = function (options) {
+            var _this = this;
+            this.state.faculties = this.asArray(options.faculties);
+            var typeSelect = document.getElementById('activityType');
+            typeSelect.innerHTML = '<option value="">Pilih tipe kegiatan</option>' +
+                options.activityTypes.map(function (item) { return "<option value=\"".concat(_this.escape(item), "\">").concat(_this.escape(item), "</option>"); }).join('');
+            document.getElementById('requestTypeFilter').innerHTML =
+                '<option value="">Semua tipe</option>' +
+                options.activityTypes.map(function (item) { return "<option value=\"".concat(_this.escape(item), "\">").concat(_this.escape(item), "</option>"); }).join('');
+            var facultyPanel = document.querySelector('#facultyChoices .check-dropdown-items');
+            if (facultyPanel) {
+                facultyPanel.innerHTML = options.faculties.map(function (item) {
+                    return '<label><input type="checkbox" name="faculty" value="' + _this.escape(item) + '"> ' + _this.escape(item) + '</label>';
+                }).join('');
+            }
+            _this.updateCheckDropdownLabel_('facultyChoices', 'Pilih fakultas...');
+            this.renderSignerOptions(options.signers || []);
+            this.setEmployeeCatalog_(options.employeeCatalog || []);
+        }
+
+App.renderSignerOptions = function (signers) {
+            var _this = this;
+            this.state.signers = (signers || []).filter(function (item) { return item && (item.name || item.role || item.nik); });
+            var select = document.getElementById('signerName');
+            var currentValue = select.value;
+            select.innerHTML = '<option value="">Pilih penandatangan</option>' + this.state.signers.map(function (item) {
+                var label = [item.name, item.role, item.nik].filter(Boolean).join(' | ');
+                return "<option value=\"".concat(_this.escape(item.name || ''), "\" title=\"").concat(_this.escape(label), "\">").concat(_this.escape(label), "</option>");
+            }).join('');
+            if (currentValue) {
+                select.value = currentValue;
+            }
+        }
+
+App.renderDashboard = function (summary, requests) {
+            var _this = this;
+            var metrics = [
+                ['Permohonan aktif', summary.total, 'Belum ditandai selesai'],
+                ['Draft', summary.drafts, 'Masih dapat diubah'],
+                ['Siap diproses', summary.ready, 'Data sudah tervalidasi'],
+                ['Perlu tindak lanjut', summary.pendingFollowUp || 0, 'Dokumen atau email belum tuntas']
+            ];
+            document.getElementById('metricGrid').innerHTML = metrics.map(function (item) { return "\n        <article class=\"metric-card\">\n          <span class=\"metric-label\">".concat(_this.escape(item[0]), "</span>\n          <strong>").concat(Number(item[1] || 0), "</strong>\n          <span>").concat(_this.escape(item[2]), "</span>\n        </article>\n      "); }).join('');
+            var html = '';
+            if (requests.length > 0) {
+                html += "\n            <div class=\"request-row request-row-header\">\n              <div>Kegiatan / Mitra</div>\n              <div>Tanggal / Tipe</div>\n              <div>Status</div>\n              <div></div>\n            </div>\n            ";
+                html += requests.slice(0, 6).map(function (item) { return "\n            <div class=\"request-row\">\n              <div><strong>".concat(_this.escape(item.activityName || item.id), "</strong><small>").concat(_this.escape(item.id), " \u00B7 ").concat(_this.escape(item.partnerName), "</small></div>\n              <div><span>").concat(_this.escape(item.dateDisplay || '-'), "</span><small>").concat(_this.escape(item.activityType), "</small></div>\n              <div class=\"status-stack\">").concat(_this.requestWorkflowBadges_(item), "</div>\n              <button class=\"button button-secondary button-small\" data-request-id=\"").concat(_this.escape(item.id), "\">Detail</button>\n            </div>\n          "); }).join('');
+            }
+            else {
+                html = '<div class="empty-state"><strong>Belum ada permohonan</strong><span>Mulai dari formulir baru.</span></div>';
+            }
+            document.getElementById('recentRequests').innerHTML = html;
+        }
+
+App.sortRequests = function (items, sortBy) {
+            return items.slice().sort(function (a, b) {
+                var valA, valB;
+                switch (sortBy) {
+                    case 'date-asc':
+                        valA = a.startDate || a.createdAt || '';
+                        valB = b.startDate || b.createdAt || '';
+                        return valA.localeCompare(valB);
+                    case 'id-asc':
+                        return a.id.localeCompare(b.id);
+                    case 'activity-asc':
+                        valA = a.activityName || '';
+                        valB = b.activityName || '';
+                        return valA.localeCompare(valB);
+                    case 'partner-asc':
+                        valA = a.partnerName || '';
+                        valB = b.partnerName || '';
+                        return valA.localeCompare(valB);
+                    case 'status-asc':
+                        return a.status.localeCompare(b.status);
+                    case 'date-desc':
+                    default:
+                        valA = a.startDate || a.createdAt || '';
+                        valB = b.startDate || b.createdAt || '';
+                        return valB.localeCompare(valA);
+                }
+            });
+        }
+
+App.renderRequestsPage = function () {
+            var sorted = this.sortRequests(this.state.requests, this.state.sortBy);
+            var totalItems = sorted.length;
+            var totalPages = Math.ceil(totalItems / this.state.pageSize) || 1;
+            if (this.state.currentPage > totalPages) {
+                this.state.currentPage = totalPages;
+            }
+            var startIndex = (this.state.currentPage - 1) * this.state.pageSize;
+            var endIndex = Math.min(startIndex + this.state.pageSize, totalItems);
+            var pageItems = sorted.slice(startIndex, endIndex);
+
+            this.renderRequests(pageItems, startIndex);
+
+            var info = document.getElementById('requestPaginationInfo');
+            var prevBtn = document.getElementById('requestPrevPage');
+            var nextBtn = document.getElementById('requestNextPage');
+
+            if (totalItems === 0) {
+                info.textContent = 'Menampilkan 0 dari 0';
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+            } else {
+                info.textContent = 'Menampilkan ' + (startIndex + 1) + '-' + endIndex + ' dari ' + totalItems;
+                prevBtn.disabled = this.state.currentPage === 1;
+                nextBtn.disabled = this.state.currentPage === totalPages;
+            }
+        }
+
+App.renderRequests = function (items, startIndex) {
+            var _this = this;
+            var start = startIndex || 0;
+            var body = document.getElementById('requestTableBody');
+            body.innerHTML = items.map(function (item, index) { return "\n        <tr class=\"".concat(item.status === 'ARCHIVED' ? 'is-archived' : '', "\">\n          <td data-label=\"No.\">").concat(start + index + 1, "</td>\n          <td data-label=\"ID\"><span class=\"table-primary\">").concat(_this.escape(item.id), "</span><span class=\"table-secondary\">").concat(_this.escape(item.updatedBy || item.createdBy || '-'), "</span></td>\n          <td data-label=\"Kegiatan\"><span class=\"table-primary\">").concat(_this.escape(item.activityName || '-'), "</span><span class=\"table-secondary\">").concat(_this.escape(item.activityType), "</span></td>\n          <td data-label=\"Mitra\">").concat(_this.escape(item.partnerName || '-'), "</td>\n          <td data-label=\"Tanggal\">").concat(_this.escape(item.dateDisplay || '-'), "</td>\n          <td data-label=\"Dokumen\"><span class=\"table-primary\">").concat(_this.escape(_this.asArray(item.documentTypes).join(', ') || '-'), "</span></td>\n          <td data-label=\"Status\"><div class=\"status-stack\">").concat(_this.requestWorkflowBadges_(item), "</div></td>\n          <td data-label=\"Aksi\"><button class=\"button button-secondary button-small\" data-request-id=\"").concat(_this.escape(item.id), "\">Detail</button></td>\n        </tr>\n      "); }).join('');
+            document.getElementById('requestEmpty').classList.toggle('is-hidden', items.length > 0);
+        }
+
+App.renderReferences = function (references) {
+            var _this = this;
+            var rows = (references && references.cc) || [];
+            this.state.emailRecipients = rows;
+            document.getElementById('referenceTableBody').innerHTML = rows.map(function (item) { return "\n        <tr><td data-label=\"Unit\">".concat(_this.escape(item.unit), "</td><td data-label=\"Jabatan\">").concat(_this.escape(item.role), "</td><td data-label=\"Email\">").concat(_this.escape(item.email), "</td></tr>\n      "); }).join('');
+            this.renderEmailRecipientChoices_();
+        }
+
+App.renderEmailRecipientChoices_ = function (selectedTo, selectedCc) {
+            var _this = this;
+            var currentTo = selectedTo || this.collectCheckedValues_('input[name="manualTo"]');
+            var currentCc = selectedCc || this.collectCheckedValues_('input[name="manualCc"]');
+            var rows = this.state.emailRecipients || [];
+            var render = function (name, selected) {
+                if (!rows.length) {
+                    return '<p class="helper-text">Master CC belum memiliki data penerima.</p>';
+                }
+                return rows.map(function (item) {
+                    var label = [item.role, item.unit].filter(Boolean).join(' | ');
+                    return "\n          <label>\n            <input type=\"checkbox\" name=\"".concat(name, "\" value=\"").concat(_this.escape(item.email), "\" ").concat(selected.includes(item.email) ? 'checked' : '', ">\n            <span><strong>").concat(_this.escape(label || item.email), "</strong><small>").concat(_this.escape(item.email), "</small></span>\n          </label>\n        ");
+                }).join('');
+            };
+            var toPanel = document.querySelector('#emailToChoices .check-dropdown-items');
+            var ccPanel = document.querySelector('#emailCcChoices .check-dropdown-items');
+            if (toPanel) toPanel.innerHTML = render('manualTo', currentTo);
+            if (ccPanel) ccPanel.innerHTML = render('manualCc', currentCc);
+            this.updateCheckDropdownLabel_('emailToChoices', 'Pilih penerima...');
+            this.updateCheckDropdownLabel_('emailCcChoices', 'Pilih CC...');
+        }
+
+App.loadRequests = function () {
+            return __awaiter(this, void 0, void 0, function () {
+                var filters, result, error_2;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            filters = {
+                                query: document.getElementById('requestSearch').value,
+                                activityType: document.getElementById('requestTypeFilter').value,
+                                status: document.getElementById('requestStatusFilter').value,
+                                includeArchived: document.getElementById('requestStatusFilter').value === 'ARCHIVED',
+                                limit: 250
+                            };
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 3, , 4]);
+                            return [4 /*yield*/, this.server('listRequests', filters)];
+                        case 2:
+                            result = _a.sent();
+                            this.state.requests = result.items;
+                            this.renderRequestsPage();
+                            return [3 /*break*/, 4];
+                        case 3:
+                            error_2 = _a.sent();
+                            this.toast(error_2.message, true);
+                            return [3 /*break*/, 4];
+                        case 4: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.scheduleRequestFilter = function (delay) {
+            var _this = this;
+            if (delay === void 0) { delay = 350; }
+            clearTimeout(this.state.requestFilterTimer);
+            this.state.requestFilterTimer = setTimeout(function () { return _this.loadRequests(); }, delay);
+        }
+
+App.requestStatusBadge_ = function (status) {
+            var clean = String(status || 'DRAFT').toUpperCase();
+            var meta = {
+                DRAFT: ['draft', 'Draft'],
+                READY: ['ready', 'Siap Diproses'],
+                ARCHIVED: ['archived', 'Selesai']
+            }[clean] || ['pending', clean];
+            return this.statusPill_(meta[0], meta[1]);
+        }
+
+App.documentProgressBadge_ = function (progress) {
+            var clean = String((progress || {}).status || 'NOT_CREATED').toUpperCase();
+            var meta = {
+                NOT_CREATED: ['pending', 'Dokumen Belum Dibuat'],
+                IN_PROGRESS: ['generated', 'Sebagian Diproses'],
+                GENERATED: ['generated', 'Doc & PDF Dibuat'],
+                DRAFTED: ['drafted', 'Draft Email Dibuat'],
+                ERROR: ['error', 'Gagal Generate'],
+                COMPLETE: ['archived', 'Selesai / Diarsipkan']
+            }[clean] || ['pending', clean];
+            return this.statusPill_(meta[0], meta[1]);
+        }
+
+App.documentStatusBadge_ = function (document, requestStatus) {
+            if (String(requestStatus || '').toUpperCase() === 'ARCHIVED') {
+                return this.statusPill_('archived', 'Selesai / Diarsipkan');
+            }
+            if (String(document.status || '').toUpperCase() === 'ERROR') {
+                return this.statusPill_('error', 'Gagal Generate');
+            }
+            if (String(document.emailStatus || '').toUpperCase() === 'DRAFTED') {
+                return this.statusPill_('drafted', 'Draft Email Dibuat');
+            }
+            if (String(document.status || '').toUpperCase() === 'GENERATED') {
+                return this.statusPill_('generated', 'Doc & PDF Dibuat');
+            }
+            return this.statusPill_('pending', 'Belum Dibuat');
+        }
+
+App.requestWorkflowBadges_ = function (request) {
+            var requestBadge = this.requestStatusBadge_(request.status);
+            if (String(request.status || '').toUpperCase() === 'ARCHIVED')
+                return requestBadge;
+            var progress = request.documentProgress || this.summarizeDocumentProgress_([], request.status);
+            return requestBadge + this.documentProgressBadge_(progress);
+        }
+
+App.summarizeDocumentProgress_ = function (documents, requestStatus) {
+            var summary = {
+                total: documents.length,
+                notCreated: 0,
+                generated: 0,
+                failed: 0,
+                drafted: 0,
+                status: 'NOT_CREATED'
+            };
+            documents.forEach(function (document) {
+                if (document.status === 'ERROR')
+                    summary.failed++;
+                else if (document.status === 'GENERATED')
+                    summary.generated++;
+                else
+                    summary.notCreated++;
+                if (document.emailStatus === 'DRAFTED')
+                    summary.drafted++;
+            });
+            if (requestStatus === 'ARCHIVED')
+                summary.status = 'COMPLETE';
+            else if (summary.failed)
+                summary.status = 'ERROR';
+            else if (!summary.total || summary.notCreated === summary.total)
+                summary.status = 'NOT_CREATED';
+            else if (summary.drafted === summary.total)
+                summary.status = 'DRAFTED';
+            else if (summary.generated === summary.total)
+                summary.status = 'GENERATED';
+            else
+                summary.status = 'IN_PROGRESS';
+            return summary;
+        }
+
+App.requestStatusMessage_ = function (status, progress) {
+            if (status === 'ARCHIVED') {
+                return 'Permohonan telah selesai dan bersifat hanya-baca.';
+            }
+            if (status === 'DRAFT') {
+                return 'Data masih dapat diubah. Lengkapi lalu tandai Siap Diproses sebelum membuat dokumen.';
+            }
+            if (progress.status === 'DRAFTED') {
+                return 'Seluruh Doc, PDF, dan draft Gmail tersedia. Permohonan dapat ditandai selesai.';
+            }
+            if (progress.status === 'ERROR') {
+                return 'Ada dokumen yang gagal dibuat. Periksa status dokumen lalu jalankan proses kembali.';
+            }
+            return 'Data sudah tervalidasi dan siap dibuat menjadi Doc, PDF, serta draft Gmail.';
+        }
+
+App.statusPill_ = function (className, label) {
+            return "<span class=\"status status-".concat(this.escape(className), "\">").concat(this.escape(label), "</span>");
+        }
+
+</script>

@@ -50,15 +50,26 @@ try {
   console.error(`FAIL syntax combined Apps Script bundle: ${error.message}`);
 }
 
-const scriptsHtml = fs.readFileSync(path.join(root, 'Scripts.html'), 'utf8')
-  .replace(/^\s*<script>\s*/, '')
-  .replace(/\s*<\/script>\s*$/, '');
+const scriptFiles = [
+  'ScriptsCore.html',
+  'ScriptsApp.html',
+  'ScriptsEvents.html',
+  'ScriptsRender.html',
+  'ScriptsForm.html',
+  'ScriptsDetail.html',
+  'ScriptsAdmin.html'
+];
+const scriptsHtml = scriptFiles.map(file => {
+  return fs.readFileSync(path.join(root, file), 'utf8')
+    .replace(/^\s*<script>\s*/, '')
+    .replace(/\s*<\/script>\s*$/, '');
+}).join('\n');
 try {
-  new vm.Script(scriptsHtml, { filename: 'Scripts.html' });
-  console.log('OK syntax Scripts.html');
+  new vm.Script(scriptsHtml, { filename: 'CombinedScripts.js' });
+  console.log('OK syntax combined frontend scripts');
 } catch (error) {
   failed = true;
-  console.error(`FAIL syntax Scripts.html: ${error.message}`);
+  console.error(`FAIL syntax combined frontend scripts: ${error.message}`);
 }
 
 const indexHtml = fs.readFileSync(path.join(root, 'Index.html'), 'utf8');
@@ -83,7 +94,15 @@ if (scriptsHtml.includes("document.addEventListener('DOMContentLoaded', () => Ap
   failed = true;
   console.error('FAIL app startup must not depend solely on DOMContentLoaded');
 }
-const includeNames = new Set(Array.from(indexHtml.matchAll(/include\(['"]([^'"]+)['"]\)/g), match => match[1]));
+const getIncludes = (content) => {
+  return Array.from(content.matchAll(/include\(['"]([^'"]+)['"]\)/g), match => match[1]);
+};
+const includeNames = new Set();
+getIncludes(indexHtml).forEach(name => includeNames.add(name));
+if (fs.existsSync(path.join(root, 'Scripts.html'))) {
+  const scriptsIndex = fs.readFileSync(path.join(root, 'Scripts.html'), 'utf8');
+  getIncludes(scriptsIndex).forEach(name => includeNames.add(name));
+}
 for (const name of includeNames) {
   const file = `${name}.html`;
   if (!fs.existsSync(path.join(root, file))) {

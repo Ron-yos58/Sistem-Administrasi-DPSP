@@ -302,30 +302,14 @@ function getEmailTemplate_(documentType, speakerStatus) {
 
 function buildEmailPlaceholders_(detail, document, routing) {
   const request = detail.request;
-  const employees = detail.employees;
-  const employeeJoin = buildEmployeeJoinPlaceholders_(employees);
-  const plain = {
+  const employeeJoin = buildEmployeeJoinPlaceholders_(detail.employees);
+  const requestFields = {
     kepadaYth: routing.toRoles.join('\n'),
     jenisSurat: document.type,
     subTipe: document.speakerSubtype || '',
     statusNarasumber: document.speakerStatus || '',
     namaKegiatan: request.activityName,
     namaMitra: request.partnerName,
-    narasumber: employeeJoin.narasumber,
-    textJoinNomor: employeeJoin.textJoinNomor,
-    textJoinNama: employeeJoin.textJoinNama,
-    textJoinNikNpm: employeeJoin.textJoinNikNpm,
-    textJoinJabatan: employeeJoin.textJoinJabatan,
-    textJoinProdi: employeeJoin.textJoinProdi,
-    textJoinFakultas: employeeJoin.textJoinFakultas,
-    textJoinEmail: employeeJoin.textJoinEmail,
-    'Text Join Nomor': employeeJoin.textJoinNomor,
-    'Text Join Nama': employeeJoin.textJoinNama,
-    'Text Join NIK/NPM': employeeJoin.textJoinNikNpm,
-    'Text Join Jabatan': employeeJoin.textJoinJabatan,
-    'Text Join Prodi': employeeJoin.textJoinProdi,
-    'Text Join Fakultas': employeeJoin.textJoinFakultas,
-    'Text Join Email': employeeJoin.textJoinEmail,
     hari: request.day,
     tanggal: request.dateDisplay,
     tempat: request.activityPlace,
@@ -338,6 +322,7 @@ function buildEmailPlaceholders_(detail, document, routing) {
     alamatMitra: request.partnerAddress,
     waktuKegiatan: request.activityTime
   };
+  const plain = Object.assign(requestFields, employeeJoin);
   const output = {};
   Object.keys(plain).forEach(function(key) {
     output[key] = {
@@ -347,6 +332,7 @@ function buildEmailPlaceholders_(detail, document, routing) {
   });
   return output;
 }
+
 
 function replaceTemplateTokens_(template, placeholders, html) {
   let output = String(template || '');

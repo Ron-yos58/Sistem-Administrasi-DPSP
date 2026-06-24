@@ -1,0 +1,249 @@
+<script>
+    var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+        function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+        return new (P || (P = Promise))(function (resolve, reject) {
+            function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+            function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+            function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+            step((generator = generator.apply(thisArg, _arguments || [])).next());
+        });
+    };
+    var __generator = (this && this.__generator) || function (thisArg, body) {
+        var _ = { label: 0, sent: function () { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+        return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function () { return this; }), g;
+        function verb(n) { return function (v) { return step([n, v]); }; }
+        function step(op) {
+            if (f) throw new TypeError("Generator is already executing.");
+            while (g && (g = 0, op[0] && (_ = 0)), _) try {
+                if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+                if (y = 0, t) op = [op[0] & 2, t.value];
+                switch (op[0]) {
+                    case 0: case 1: t = op; break;
+                    case 4: _.label++; return { value: op[1], done: false };
+                    case 5: _.label++; y = op[1]; op = [0]; continue;
+                    case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                    default:
+                        if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                        if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                        if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                        if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                        if (t[2]) _.ops.pop();
+                        _.trys.pop(); continue;
+                }
+                op = body.call(thisArg, _);
+            } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+            if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+        }
+    };
+
+    if (!window.CSS) { window.CSS = {}; }
+    if (!window.CSS.escape) {
+        window.CSS.escape = function (value) {
+            return String(value).replace(/[^a-zA-Z0-9_\-]/g, function (character) {
+                return '\\' + character;
+            });
+        };
+    }
+
+
+var App = typeof App !== "undefined" ? App : {};
+
+App.showRefreshProgress_ = function (percent, done, error) {
+            var popup = document.getElementById('refreshProgressPopup');
+            if (!popup) return;
+            var bar = document.getElementById('refreshProgressBar');
+            var label = document.getElementById('refreshProgressLabel');
+            var pct = document.getElementById('refreshProgressPct');
+            if (done || error) {
+                popup.classList.add(error ? 'refresh-popup-error' : 'refresh-popup-done');
+                if (label) label.textContent = error ? 'Gagal memperbarui data.' : 'Selesai!';
+                if (bar) bar.style.width = '100%';
+                if (pct) pct.textContent = error ? '!' : '100%';
+                window.setTimeout(function () {
+                    popup.classList.add('refresh-popup-hide');
+                    window.setTimeout(function () {
+                        popup.classList.add('is-hidden');
+                        popup.classList.remove('refresh-popup-error', 'refresh-popup-done', 'refresh-popup-hide');
+                        if (bar) bar.style.width = '0%';
+                        if (pct) pct.textContent = '0%';
+                    }, 350);
+                }, error ? 1800 : 1200);
+                return;
+            }
+            popup.classList.remove('is-hidden', 'refresh-popup-error', 'refresh-popup-done', 'refresh-popup-hide');
+            var p = Math.max(0, Math.min(100, percent || 0));
+            if (bar) bar.style.width = p + '%';
+            if (pct) pct.textContent = p + '%';
+            if (label) label.textContent = p < 30 ? 'Menghubungi server...' : p < 70 ? 'Memuat data...' : 'Menyiapkan tampilan...';
+        }
+
+App.showGlobalError = function (error) {
+            var box = document.getElementById('globalError');
+            box.textContent = error.message || String(error);
+            box.classList.remove('is-hidden');
+        }
+
+App.toast = function (message, isError) {
+            if (isError === void 0) { isError = false; }
+            var toast = document.createElement('div');
+            toast.className = 'toast' + (isError ? ' is-error' : '');
+            toast.textContent = message;
+            document.getElementById('toastRegion').appendChild(toast);
+            setTimeout(function () { return toast.remove(); }, 5200);
+        }
+
+App.currency = function (value) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0));
+        }
+
+App.parseLocalIsoDate_ = function (value) {
+            var match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!match)
+                return null;
+            var date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
+            return isNaN(date.getTime()) ? null : date;
+        }
+
+App.formatScheduleDate_ = function (start, end) {
+            var days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+            var months = [
+                'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+            ];
+            var dayLabel = start.getTime() === end.getTime()
+                ? days[start.getDay()]
+                : days[start.getDay()] + '\u2013' + days[end.getDay()];
+            var dateLabel;
+            if (start.getTime() === end.getTime()) {
+                dateLabel = start.getDate() + ' ' + months[start.getMonth()] + ' ' + start.getFullYear();
+            }
+            else if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+                dateLabel = start.getDate() + '\u2013' + end.getDate() + ' ' +
+                    months[start.getMonth()] + ' ' + start.getFullYear();
+            }
+            else {
+                dateLabel = start.getDate() + ' ' + months[start.getMonth()] +
+                    (start.getFullYear() !== end.getFullYear() ? ' ' + start.getFullYear() : '') +
+                    '\u2013' + end.getDate() + ' ' + months[end.getMonth()] + ' ' + end.getFullYear();
+            }
+            return dayLabel + ', ' + dateLabel;
+        }
+
+App.normalizeClock_ = function (value) {
+            var match = String(value || '').match(/(?:^|\s)(\d{1,2})[.:](\d{2})(?::\d{2})?/);
+            if (!match || Number(match[1]) > 23 || Number(match[2]) > 59)
+                return '';
+            return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
+        }
+
+App.safeExternalUrl_ = function (value) {
+            try {
+                var url = new URL(String(value || ''));
+                var allowed = ['docs.google.com', 'drive.google.com', 'drive.usercontent.google.com'];
+                return url.protocol === 'https:' && allowed.includes(url.hostname) ? url.href : '';
+            }
+            catch (error) {
+                return '';
+            }
+        }
+
+App.normalizeDriveUrl_ = function (value) {
+            try {
+                var raw = String(value || '');
+                var url = new URL(raw);
+                if (url.protocol !== 'https:') {
+                    return '';
+                }
+                if (url.hostname === 'drive.google.com' && url.pathname === '/uc') {
+                    var id = url.searchParams.get('id');
+                    return this.driveOpenUrl_(id);
+                }
+                return this.safeExternalUrl_(raw);
+            }
+            catch (error) {
+                return '';
+            }
+        }
+
+App.driveOpenUrl_ = function (fileId) {
+            if (!fileId) {
+                return '';
+            }
+            return 'https://drive.google.com/file/d/' + encodeURIComponent(fileId) + '/view?usp=drivesdk';
+        }
+
+App.pdfOpenUrl_ = function (doc) {
+            if (!doc) {
+                return '';
+            }
+            return this.normalizeDriveUrl_(doc.pdfUrl) || this.driveOpenUrl_(doc.pdfId);
+        }
+
+App.driveDownloadUrl_ = function (fileId) {
+            // Dipertahankan sebagai alias agar kode lama tidak error, tetapi diarahkan ke preview Drive.
+            return this.driveOpenUrl_(fileId);
+        }
+
+App.localDateIso = function (date) {
+            if (date === void 0) { date = new Date(); }
+            var year = date.getFullYear();
+            var month = String(date.getMonth() + 1).padStart(2, '0');
+            var day = String(date.getDate()).padStart(2, '0');
+            return "".concat(year, "-").concat(month, "-").concat(day);
+        }
+
+App.asArray = function (value) {
+            return Array.isArray(value) ? value : [];
+        }
+
+App.emailPreviewDocument = function (htmlBody) {
+            return '<!doctype html><html><head><base target="_blank"><meta charset="UTF-8">' +
+                '<style>body{font:14px/1.6 Arial,sans-serif;color:#172321;margin:0;padding:16px}a{color:#015850}</style>' +
+                '</head><body>' + String(htmlBody || '') + '</body></html>';
+        }
+
+App.setBootProgress = function (value, text) {
+            var percent = Math.max(0, Math.min(100, Number(value) || 0));
+            var bar = document.getElementById('bootProgressBar');
+            var label = document.getElementById('bootProgressValue');
+            var message = document.getElementById('bootProgressText');
+            if (bar)
+                bar.style.width = percent + '%';
+            if (label)
+                label.textContent = Math.round(percent) + '%';
+            if (message && text)
+                message.textContent = text;
+        }
+
+App.formatIndonesianDate_ = function (dateValue) {
+            if (!dateValue)
+                return '-';
+            var date = dateValue instanceof Date ? dateValue : this.parseLocalIsoDate_(String(dateValue).split('T')[0]);
+            if (!date)
+                return String(dateValue);
+            var months = [
+                'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+            ];
+            return date.getDate() + ' ' + months[date.getMonth()] + ' ' + date.getFullYear();
+        }
+
+App.escape = function (value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+App.uuid = function () {
+            return window.crypto && crypto.randomUUID
+                ? crypto.randomUUID()
+                : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (character) {
+                    var random = Math.random() * 16 | 0;
+                    return (character === 'x' ? random : (random & 3 | 8)).toString(16);
+                });
+        }
+
+</script>

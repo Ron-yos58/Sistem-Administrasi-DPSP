@@ -40,9 +40,18 @@ vm.createContext(context);
 for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'Migration.gs', 'DocumentService.gs', 'FinanceService.gs']) {
   vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
 }
-const scriptsHtml = fs.readFileSync(path.join(root, 'Scripts.html'), 'utf8');
-const jsCode = scriptsHtml.replace(/<script>/, '').replace(/<\/script>/, '');
-vm.runInContext(jsCode, context, { filename: 'Scripts.html' });
+const scriptFiles = [
+  'ScriptsCore.html',
+  'ScriptsApp.html',
+  'ScriptsEvents.html',
+  'ScriptsRender.html',
+  'ScriptsForm.html',
+  'ScriptsDetail.html',
+  'ScriptsAdmin.html'
+];
+const scriptsHtml = scriptFiles.map(file => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
+const jsCode = scriptsHtml.replace(/<script>/g, '').replace(/<\/script>/g, '');
+vm.runInContext(jsCode, context, { filename: 'CombinedScripts.js' });
 
 function test(name, callback) {
   try {
@@ -797,7 +806,7 @@ test('process request only activates workflow', () => {
 
 test('finance input is managed only in generated spreadsheets', () => {
   const index = fs.readFileSync(path.join(root, 'Index.html'), 'utf8');
-  const scripts = fs.readFileSync(path.join(root, 'Scripts.html'), 'utf8');
+  const scripts = scriptFiles.map(file => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
   const finance = fs.readFileSync(path.join(root, 'FinanceService.gs'), 'utf8');
   if (/view-finance|travelCostForm|travelModal|travelTableBody/.test(index + scripts)) {
     throw new Error('legacy web finance editor is still exposed');
@@ -817,7 +826,7 @@ test('finance input is managed only in generated spreadsheets', () => {
   if (/preview-document|documentPreviewModal/.test(index + scripts)) {
     throw new Error('removed document preview is still exposed');
   }
-  const toolbar = scripts.match(/renderFinanceToolbar_:[\s\S]*?\n\s+handleDetailAction:/);
+  const toolbar = scripts.match(/App\.renderFinanceToolbar_\s*=\s*function[\s\S]*?\nApp\.handleDetailAction\s*=\s*function/);
   if (!toolbar || /export-finance|Buat \/ Update PDF|Buat \/ Update Excel/.test(toolbar[0])) {
     throw new Error('finance export actions are still exposed in request detail');
   }

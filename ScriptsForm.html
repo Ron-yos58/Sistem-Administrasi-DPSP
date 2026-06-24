@@ -1,0 +1,737 @@
+<script>
+var App = typeof App !== "undefined" ? App : {};
+
+App.applySignerConfigFromForm_ = function (source) {
+            var nameInput = document.getElementById('signerName');
+            var nikInput = document.getElementById('signerId');
+            var roleInput = document.getElementById('signerRole');
+            var name = nameInput.value.trim().toLowerCase();
+            var nik = nikInput.value.trim();
+            if (!name && !nik) {
+                roleInput.value = '';
+                this.updateReview();
+                return;
+            }
+            var match = null;
+            if (source === 'name' && name) {
+                match = this.state.signers.find(function (item) { return String(item.name || '').trim().toLowerCase() === name; });
+            }
+            else if (source === 'nik' && nik) {
+                match = this.state.signers.find(function (item) { return item.nik === nik; });
+            }
+            else {
+                match = this.state.signers.find(function (item) {
+                    return (name && String(item.name || '').trim().toLowerCase() === name) ||
+                        (nik && item.nik === nik);
+                });
+            }
+            if (!match)
+                return;
+            if (match.name)
+                nameInput.value = match.name;
+            if (match.nik)
+                nikInput.value = match.nik;
+            if (match.role)
+                roleInput.value = match.role;
+            this.updateReview();
+        }
+
+App.allowedDocuments = function () {
+            var type = document.getElementById('activityType').value;
+            var subtype = document.getElementById('speakerSubtype').value;
+            var descriptions = {
+                'Surat Tugas': 'Penugasan petugas atau narasumber',
+                'Surat Balasan Campus Visit': 'Balasan resmi kepada mitra',
+                'Surat Rekomendasi Campus Visit - SU': 'Rekomendasi kepada Sekretaris Universitas',
+                'Surat izin pimpinan - Campus Visit': 'Permohonan izin kepada pimpinan',
+                'Surat Permohonan Narasumber kepada Dekan': 'Permohonan penugasan atau pencarian dosen'
+            };
+            var types = [];
+            if (type === 'Edu Fair')
+                types = ['Surat Tugas'];
+            if (type === 'Campus Visit')
+                types = ['Surat Tugas', 'Surat Balasan Campus Visit', 'Surat Rekomendasi Campus Visit - SU', 'Surat izin pimpinan - Campus Visit'];
+            if (type === 'Penugasan Narasumber') {
+                types = subtype === 'Promosi' ? ['Surat Tugas'] : ['Surat Tugas', 'Surat Permohonan Narasumber kepada Dekan'];
+            }
+            return types.map(function (typeName) { return ({ type: typeName, description: descriptions[typeName] }); });
+        }
+
+App.updateFormVisibility = function () {
+            var type = document.getElementById('activityType').value;
+            var requestId = document.getElementById('requestId').value;
+            var isEdit = Boolean(requestId);
+
+            document.getElementById('mainLetterSelectionContainer').classList.toggle('is-hidden', isEdit);
+            document.getElementById('requestDocumentsEditor').classList.toggle('is-hidden', !isEdit);
+            if (isEdit) {
+                document.getElementById('requestConditionContainer').classList.add('is-hidden');
+                document.getElementById('requestSubType').removeAttribute('required');
+            } else {
+                document.getElementById('requestSubType').setAttribute('required', 'required');
+                this.onRequestSubTypeChange();
+            }
+
+            document.querySelectorAll('.speaker-only').forEach(function (item) { return item.classList.toggle('is-hidden', type !== 'Penugasan Narasumber'); });
+            var hasSpeakerRequest = type === 'Penugasan Narasumber';
+            document.querySelectorAll('.speaker-request-only').forEach(function (item) { return item.classList.toggle('is-hidden', !hasSpeakerRequest); });
+            var needsIncoming = type === 'Campus Visit' || type === 'Penugasan Narasumber';
+            document.getElementById('incomingFields').classList.toggle('is-hidden', !needsIncoming);
+            this.updateEmployeeRequirements_();
+            this.updateReview();
+        }
+
+App.addSchedule = function (schedule) {
+            if (schedule === void 0) { schedule = {}; }
+            var index = document.querySelectorAll('.schedule-card').length + 1;
+            var card = document.createElement('div');
+            card.className = 'schedule-card';
+            card.innerHTML = "\n        <button type=\"button\" class=\"remove-schedule\" aria-label=\"Hapus sesi\">x</button>\n        <input type=\"hidden\" data-schedule-field=\"id\" value=\"".concat(this.escape(schedule.id || ''), "\">\n        <div class=\"field-grid\">\n          <label class=\"field\"><span>Tanggal mulai *</span><input type=\"date\" data-schedule-field=\"startDate\" value=\"").concat(this.escape(schedule.startDate || ''), "\" required></label>\n          <label class=\"field\"><span>Tanggal selesai</span><input type=\"date\" data-schedule-field=\"endDate\" value=\"").concat(this.escape(schedule.endDate || schedule.startDate || ''), "\"></label>\n          <div class=\"field\"><span>Sesi</span><strong data-schedule-index>").concat(index, "</strong></div>\n          <label class=\"field\"><span>Waktu mulai</span><input type=\"text\" data-schedule-field=\"startTime\" placeholder=\"00:00\" pattern=\"^([0-1]?[0-9]|2[0-3])[.:][0-5][0-9]$\" title=\"Format: HH:mm (contoh: 08:00 atau 13.30)\" value=\"").concat(this.escape(schedule.startTime || '00:00'), "\" onclick=\"App.showTimePicker(this, event)\" onfocus=\"App.showTimePicker(this, event)\" autocomplete=\"off\"></label>\n          <label class=\"field\"><span>Waktu selesai</span><input type=\"text\" data-schedule-field=\"endTime\" placeholder=\"--:--\" pattern=\"^([0-1]?[0-9]|2[0-3])[.:][0-5][0-9]$\" title=\"Format: HH:mm (contoh: 08:00 atau 13.30)\" value=\"").concat(this.escape(schedule.endTime || ''), "\" onclick=\"App.showTimePicker(this, event)\" onfocus=\"App.showTimePicker(this, event)\" autocomplete=\"off\"></label>\n          <label class=\"field schedule-place\"><span>Tempat *</span><input data-schedule-field=\"place\" value=\"").concat(this.escape(schedule.place || ''), "\" required></label>\n        </div>\n      ");
+            document.getElementById('scheduleList').appendChild(card);
+            this.renumberSchedules_();
+            this.updateReview();
+        }
+
+App.showTimePicker = function (input, event) {
+            var _this = this;
+            event.stopPropagation();
+            var existing = document.getElementById('globalTimePicker');
+            if (existing) {
+                existing.remove();
+            }
+            var picker = document.createElement('div');
+            picker.id = 'globalTimePicker';
+            picker.className = 'time-picker-popup';
+
+            var currentVal = input.value.trim() || '00:00';
+            var parts = currentVal.split(/[.:]/);
+            var currentHour = parts[0] ? String(Number(parts[0])).padStart(2, '0') : '00';
+            var currentMin = parts[1] ? String(Math.floor(Number(parts[1]) / 5) * 5).padStart(2, '0') : '00';
+
+            var hoursCol = document.createElement('div');
+            hoursCol.className = 'time-picker-column';
+            for (var h = 0; h < 24; h++) {
+                var hourStr = String(h).padStart(2, '0');
+                var item = document.createElement('div');
+                item.className = 'time-picker-item' + (hourStr === currentHour ? ' is-selected' : '');
+                item.textContent = hourStr;
+                item.dataset.value = hourStr;
+                item.onclick = (function (val) {
+                    return function (e) {
+                        e.stopPropagation();
+                        currentHour = val;
+                        hoursCol.querySelectorAll('.time-picker-item').forEach(function (el) {
+                            el.classList.toggle('is-selected', el.dataset.value === val);
+                        });
+                        _this.updateTimePickerValue_(input, currentHour, currentMin);
+                    };
+                })(hourStr);
+                hoursCol.appendChild(item);
+            }
+            picker.appendChild(hoursCol);
+
+            var minsCol = document.createElement('div');
+            minsCol.className = 'time-picker-column';
+            for (var m = 0; m < 60; m += 5) {
+                var minStr = String(m).padStart(2, '0');
+                var item = document.createElement('div');
+                item.className = 'time-picker-item' + (minStr === currentMin ? ' is-selected' : '');
+                item.textContent = minStr;
+                item.dataset.value = minStr;
+                item.onclick = (function (val) {
+                    return function (e) {
+                        e.stopPropagation();
+                        currentMin = val;
+                        minsCol.querySelectorAll('.time-picker-item').forEach(function (el) {
+                            el.classList.toggle('is-selected', el.dataset.value === val);
+                        });
+                        _this.updateTimePickerValue_(input, currentHour, currentMin);
+                    };
+                })(minStr);
+                minsCol.appendChild(item);
+            }
+            picker.appendChild(minsCol);
+
+            document.body.appendChild(picker);
+
+            var rect = input.getBoundingClientRect();
+            var pickerWidth = 140;
+            var pickerHeight = 200;
+
+            var top = rect.bottom + window.scrollY + 4;
+            var left = rect.left + window.scrollX;
+
+            if (left + pickerWidth > window.innerWidth) {
+                left = window.innerWidth - pickerWidth - 16;
+            }
+            if (rect.bottom + pickerHeight > window.innerHeight && rect.top - pickerHeight > 0) {
+                top = rect.top + window.scrollY - pickerHeight - 4;
+            }
+
+            picker.style.top = top + 'px';
+            picker.style.left = left + 'px';
+
+            setTimeout(function () {
+                var selHour = hoursCol.querySelector('.is-selected');
+                if (selHour) selHour.scrollIntoView({ block: 'nearest' });
+                var selMin = minsCol.querySelector('.is-selected');
+                if (selMin) selMin.scrollIntoView({ block: 'nearest' });
+            }, 50);
+
+            var dismiss = function () {
+                picker.remove();
+                document.removeEventListener('click', dismiss);
+            };
+            document.addEventListener('click', dismiss);
+        }
+
+App.updateTimePickerValue_ = function (input, hour, minute) {
+            input.value = hour + ':' + minute;
+            var evt = document.createEvent('HTMLEvents');
+            evt.initEvent('input', true, true);
+            input.dispatchEvent(evt);
+        }
+
+App.renumberSchedules_ = function () {
+            document.querySelectorAll('.schedule-card').forEach(function (card, index) {
+                var label = card.querySelector('[data-schedule-index]');
+                if (label)
+                    label.textContent = index + 1;
+            });
+        }
+
+App.scheduleFromCard_ = function (card) {
+            var schedule = {};
+            card.querySelectorAll('[data-schedule-field]').forEach(function (input) {
+                schedule[input.dataset.scheduleField] = input.value.trim();
+            });
+            return schedule;
+        }
+
+App.collectSchedules = function () {
+            var _this = this;
+            return Array.from(document.querySelectorAll('.schedule-card'))
+                .map(function (card) { return _this.scheduleFromCard_(card); })
+                .filter(function (schedule) { return schedule.startDate || schedule.startTime || schedule.endTime || schedule.place; });
+        }
+
+App.scheduleLabel_ = function (schedule) {
+            if (schedule.label)
+                return schedule.label;
+            var start = this.parseLocalIsoDate_(schedule.startDate);
+            var end = this.parseLocalIsoDate_(schedule.endDate || schedule.startDate);
+            var date = start ? this.formatScheduleDate_(start, end || start) : '';
+            var startTime = this.normalizeClock_(schedule.startTime);
+            var endTime = this.normalizeClock_(schedule.endTime);
+            var time = startTime
+                ? startTime.replace(':', '.') +
+                (endTime && endTime !== startTime ? '\u2013' + endTime.replace(':', '.') : '') +
+                ' WIB'
+                : endTime
+                    ? endTime.replace(':', '.') + ' WIB'
+                    : '';
+            return [date, time, schedule.place].filter(Boolean).join(' | ') || 'Jadwal belum diisi';
+        }
+
+App.addEmployee = function (employee) {
+            var _this = this;
+            if (employee === void 0) { employee = {}; }
+            employee.unit = this.canonicalUnit_(employee.unit);
+            var index = document.querySelectorAll('.employee-card').length + 1;
+            var catalogCount = this.state.employeeCatalog.length;
+            var hasLegacyFaculty = employee.unit && !this.state.faculties.includes(employee.unit);
+            var facultyOptions = this.state.faculties.map(function (item) { return "\n        <option value=\"".concat(_this.escape(item), "\" ").concat(item === employee.unit ? 'selected' : '', ">").concat(_this.escape(item), "</option>\n      "); }).join('');
+            var legacyFacultyOption = '';
+
+            var selectedLabel = catalogCount ? 'Pilih dari database...' : 'Database pegawai kosong - isi manual';
+            var selectedIdx = '';
+            var pickerItems = this.state.employeeCatalog.map(function (item, itemIndex) {
+                var label = [item.name, item.identifier, item.unit].filter(Boolean).join(' | ');
+                var selected = _this.employeeCatalogMatches_(item, employee);
+                if (selected) {
+                    selectedLabel = label;
+                    selectedIdx = itemIndex;
+                }
+                return "<div class=\"dropdown-item-selectable\" data-value=\"" + itemIndex + "\" style=\"padding: 8px 10px; cursor: pointer; font-size: 12px; font-weight: 600; border-radius: 6px; transition: background .1s ease;\">" + _this.escape(label) + "</div>";
+            }).join('');
+
+            var selectedClass = selectedIdx !== '' ? 'has-value' : '';
+
+            var card = document.createElement('div');
+            card.className = 'employee-card';
+            card.innerHTML = "\n        <button type=\"button\" class=\"remove-employee\" aria-label=\"Hapus orang\">\u00D7</button>\n        <input type=\"hidden\" data-employee-field=\"participantKey\" value=\"".concat(this.escape(employee.participantKey || ''), "\">\n        <label class=\"field field-wide\">\n          <span>Pilih dari database pegawai</span>\n          <div class=\"check-dropdown employee-catalog-dropdown\" style=\"width: 100%;\">\n            <input type=\"hidden\" data-employee-picker value=\"" + selectedIdx + "\">\n            <button type=\"button\" class=\"check-dropdown-trigger\" aria-haspopup=\"listbox\" aria-expanded=\"false\" style=\"width: 100%;\">\n              <span class=\"check-dropdown-label " + selectedClass + "\">" + _this.escape(selectedLabel) + "</span>\n              <svg class=\"icon-svg check-dropdown-chevron\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n                <polyline points=\"6 9 12 15 18 9\" />\n              </svg>\n            </button>\n            <div class=\"check-dropdown-panel\" style=\"max-height: 280px;\">\n              <input type=\"text\" class=\"check-dropdown-search\" placeholder=\"Cari pegawai...\" autocomplete=\"off\">\n              <div class=\"check-dropdown-items\">\n                <div class=\"dropdown-item-selectable\" data-value=\"\" style=\"padding: 8px 10px; cursor: pointer; font-size: 12px; font-weight: 600; border-radius: 6px; transition: background .1s ease; color: var(--muted);\">Isi manual / pilih orang lama</div>\n                " + pickerItems + "\n              </div>\n            </div>\n          </div>\n          <small class=\"catalog-status " + (catalogCount ? '' : 'is-empty') + "\">" + catalogCount + " data pegawai tersedia</small>\n        </label>\n        <div class=\"field-grid\">\n          <label class=\"field\"><span>Nama *</span><input data-employee-field=\"name\" value=\"").concat(this.escape(employee.name || ''), "\" placeholder=\"Orang ").concat(index, "\" aria-required=\"true\"></label>\n          <label class=\"field\"><span>NIP/NPM *</span><input data-employee-field=\"identifier\" value=\"").concat(this.escape(employee.identifier || ''), "\" aria-required=\"true\"></label>\n          <label class=\"field\"><span>Email *</span><input type=\"email\" data-employee-field=\"email\" value=\"").concat(this.escape(employee.email || ''), "\" aria-required=\"true\"></label>\n          <label class=\"field\"><span>Jabatan *</span><input data-employee-field=\"role\" value=\"").concat(this.escape(employee.role || ''), "\" aria-required=\"true\"></label>\n          <label class=\"field\"><span>Fakultas *</span><select data-employee-field=\"unit\" aria-required=\"true\"><option value=\"\">Pilih fakultas</option>").concat(legacyFacultyOption).concat(facultyOptions, "</select></label>\n          <label class=\"field\"><span>Pangkat penunjang</span><input data-employee-field=\"rank\" value=\"").concat(this.escape(employee.rank || ''), "\"></label>\n          <label class=\"field\"><span>Kategori penerima tugas</span><input data-employee-field=\"category\" value=\"").concat(this.escape(employee.category || ''), "\"></label>\n        </div>\n      ");
+            document.getElementById('employeeList').appendChild(card);
+            this.updateEmployeeRequirements_();
+            this.updateReview();
+        }
+
+App.setEmployeeCatalog_ = function (catalogPayload) {
+            var _this = this;
+            var catalog = [];
+            if (catalogPayload && Array.isArray(catalogPayload.items)) {
+                var units = catalogPayload.units || [];
+                var roles = catalogPayload.roles || [];
+                var ranks = catalogPayload.ranks || [];
+                var categories = catalogPayload.categories || [];
+                catalog = catalogPayload.items.map(function(item) {
+                    return {
+                        name: item[0] || '',
+                        identifier: item[1] || '',
+                        role: roles[item[2]] || '',
+                        unit: units[item[3]] || '',
+                        email: item[4] || '',
+                        rank: ranks[item[5]] || '',
+                        category: categories[item[6]] || ''
+                    };
+                });
+            } else if (Array.isArray(catalogPayload)) {
+                catalog = catalogPayload;
+            }
+
+            var cards = Array.from(document.querySelectorAll('.employee-card'));
+            var currentEmployees = cards.map(function (card) { return _this.employeeFromCard_(card); });
+            this.state.employeeCatalog = catalog;
+            if (!cards.length)
+                return;
+            document.getElementById('employeeList').innerHTML = '';
+            currentEmployees.forEach(function (employee) { return _this.addEmployee(employee); });
+        }
+
+App.employeeFromCard_ = function (card) {
+            var _this = this;
+            var employee = {};
+            card.querySelectorAll('[data-employee-field]').forEach(function (input) {
+                employee[input.dataset.employeeField] = input.value.trim();
+            });
+            employee.unit = _this.canonicalUnit_(employee.unit);
+            return employee;
+        }
+
+App.canonicalUnit_ = function (value) {
+            var raw = String(value || '').trim();
+            if (!raw)
+                return '';
+            var key = function (item) {
+                return String(item || '').toLowerCase()
+                    .replace(/&/g, ' dan ')
+                    .replace(/[^a-z0-9]+/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            };
+            var aliases = {
+                fe: 'Fakultas Ekonomi',
+                ff: 'Fakultas Filsafat',
+                fh: 'Fakultas Hukum',
+                fisip: 'Fakultas Ilmu Sosial dan Ilmu Politik',
+                fk: 'Fakultas Kedokteran',
+                fkip: 'Fakultas Keguruan dan Ilmu Pendidikan',
+                fs: 'Fakultas Sains',
+                ft: 'Fakultas Teknik',
+                ftr: 'Fakultas Teknologi Rekayasa',
+                fv: 'Fakultas Vokasi'
+            };
+            var rawKey = key(raw);
+            if (aliases[rawKey])
+                return aliases[rawKey];
+            return this.state.faculties.find(function (item) { return key(item) === rawKey; }) || raw;
+        }
+
+App.employeeCatalogMatches_ = function (catalogItem, employee) {
+            if (!employee)
+                return false;
+            var catalogIdentifier = String(catalogItem.identifier || '').trim().toLowerCase();
+            var employeeIdentifier = String(employee.identifier || '').trim().toLowerCase();
+            var catalogEmail = String(catalogItem.email || '').trim().toLowerCase();
+            var employeeEmail = String(employee.email || '').trim().toLowerCase();
+            var catalogName = String(catalogItem.name || '').trim().toLowerCase();
+            var employeeName = String(employee.name || '').trim().toLowerCase();
+            return Boolean((catalogIdentifier && catalogIdentifier === employeeIdentifier) ||
+                (catalogEmail && catalogEmail === employeeEmail) ||
+                (catalogName && catalogName === employeeName));
+        }
+
+App.applyEmployeeCatalogToCard_ = function (card, selectedIndex) {
+            if (!card)
+                return;
+            var item = this.state.employeeCatalog[Number(selectedIndex)];
+            if (!item)
+                return;
+            card.querySelector('[data-employee-field="name"]').value = item.name || '';
+            card.querySelector('[data-employee-field="identifier"]').value = item.identifier || '';
+            card.querySelector('[data-employee-field="email"]').value = item.email || '';
+            card.querySelector('[data-employee-field="role"]').value = item.role || '';
+            var facultySelect = card.querySelector('[data-employee-field="unit"]');
+            var canonicalUnit = this.canonicalUnit_(item.unit);
+            facultySelect.querySelectorAll('[data-legacy-faculty]').forEach(function (option) { return option.remove(); });
+            facultySelect.value = this.state.faculties.includes(canonicalUnit) ? canonicalUnit : '';
+            if (canonicalUnit && !facultySelect.value) {
+                this.toast('Unit "' + canonicalUnit + '" belum dikenali. Pilih fakultas / unit organisasi.', true);
+            }
+            card.querySelector('[data-employee-field="rank"]').value = item.rank || '';
+            card.querySelector('[data-employee-field="category"]').value = item.category || '';
+            this.updateEmployeeRequirements_();
+            this.updateReview();
+        }
+
+App.updateEmployeeRequirements_ = function () {
+            var type = document.getElementById('activityType').value;
+            var speakerStatusInput = document.querySelector('input[name="speakerStatus"]:checked');
+            var speakerStatus = speakerStatusInput ? speakerStatusInput.value : '';
+            // General check: if activity type is Edu Fair, Campus Visit, or Penugasan Narasumber, we need people
+            var needsPeople = type === 'Edu Fair' || type === 'Campus Visit' || type === 'Penugasan Narasumber';
+            document.querySelectorAll('.employee-card').forEach(function (card) {
+                var hasValue = Array.from(card.querySelectorAll('[data-employee-field]')).some(function (input) {
+                    return input.dataset.employeeField !== 'participantKey' && input.value.trim();
+                });
+                card.querySelectorAll('[data-employee-field="name"], [data-employee-field="identifier"], ' +
+                    '[data-employee-field="email"], [data-employee-field="role"], [data-employee-field="unit"]').forEach(function (input) {
+                        input.required = needsPeople || hasValue;
+                    });
+            });
+        }
+
+App.collectEmployees = function () {
+            var _this = this;
+            return Array.from(document.querySelectorAll('.employee-card'))
+                .map(function (card) { return _this.employeeFromCard_(card); })
+                .filter(function (item) {
+                    return item.name || item.identifier || item.email || item.role ||
+                        item.unit || item.rank || item.category;
+                });
+        }
+
+App.collectForm = function (status) {
+            var _this = this;
+            var hasSpeakerRequest = document.getElementById('activityType').value === 'Penugasan Narasumber';
+            var isNew = !document.getElementById('requestId').value;
+            var docSubType = document.getElementById('requestSubType').value;
+            var docCondition = document.getElementById('requestCondition') ? document.getElementById('requestCondition').value : '-';
+            if (!docCondition) docCondition = '-';
+
+            var docs = [];
+            if (isNew && docSubType) {
+                docs.push({
+                    type: docSubType,
+                    number: document.getElementById('requestLetterNumber').value.trim(),
+                    speakerSubtype: docSubType === 'Surat Tugas' ? docCondition : '',
+                    speakerStatus: docSubType === 'Surat Permohonan Narasumber kepada Dekan' ? docCondition : ''
+                });
+            } else if (!isNew) {
+                docs = Array.from(document.querySelectorAll('[data-edit-document]')).map(function (card) {
+                    return {
+                        id: card.dataset.documentId || '',
+                        type: card.dataset.documentType || '',
+                        number: card.querySelector('[data-document-number]').value.trim(),
+                        speakerSubtype: card.dataset.speakerSubtype || '',
+                        speakerStatus: card.dataset.speakerStatus || ''
+                    };
+                });
+            }
+
+            var schedules = this.collectSchedules();
+            return {
+                id: document.getElementById('requestId').value,
+                revision: document.getElementById('requestRevision').value,
+                clientToken: document.getElementById('clientToken').value,
+                status: status,
+                activityType: document.getElementById('activityType').value,
+                letterNumber: isNew ? document.getElementById('requestLetterNumber').value.trim() : '',
+                speakerSubtype: isNew ? (docSubType === 'Surat Tugas' ? docCondition : '') : '',
+                speakerStatus: isNew ? (docSubType === 'Surat Permohonan Narasumber kepada Dekan' ? docCondition : '') : '',
+                faculties: hasSpeakerRequest ? this.collectCheckedValues_('input[name="faculty"]') : [],
+                documents: docs,
+                incomingNumber: document.getElementById('incomingNumber') ? document.getElementById('incomingNumber').value : '',
+                incomingDate: document.getElementById('incomingDate') ? document.getElementById('incomingDate').value : '',
+                incomingSender: document.getElementById('incomingSender') ? document.getElementById('incomingSender').value : '',
+                incomingSubject: document.getElementById('incomingSubject') ? document.getElementById('incomingSubject').value : '',
+                activityName: document.getElementById('activityName').value,
+                partnerName: document.getElementById('partnerName').value,
+                partnerAddress: document.getElementById('partnerAddress').value,
+                partnerEmail: document.getElementById('partnerEmail').value,
+                letterDate: document.getElementById('letterDate').value,
+                schedules: schedules,
+                startDate: schedules.length ? schedules[0].startDate || '' : '',
+                endDate: schedules.length
+                    ? schedules[schedules.length - 1].endDate || schedules[schedules.length - 1].startDate || ''
+                    : '',
+                activityTime: '',
+                activityPlace: schedules.length ? schedules[0].place || '' : '',
+                signerName: document.getElementById('signerName').value,
+                signerId: document.getElementById('signerId').value,
+                signerRole: document.getElementById('signerRole').value,
+                honor: document.getElementById('honor').value,
+                travel: document.getElementById('travel').value,
+                employees: this.collectEmployees(),
+                manualTo: [],
+                manualCc: this.collectCheckedValues_('input[name="manualCc"]')
+            };
+        }
+
+App.updateReview = function () {
+            var _this = this;
+            var type = document.getElementById('activityType').value || 'Belum dipilih';
+            var name = document.getElementById('activityName').value || 'Permohonan baru';
+            var employees = this.collectEmployees();
+            var schedules = this.collectSchedules();
+            var manualCc = this.collectCheckedValues_('input[name="manualCc"]');
+            document.getElementById('reviewTitle').textContent = name;
+            document.getElementById('reviewContent').innerHTML = [
+                ['Tipe kegiatan', type],
+                ['Jadwal', schedules.map(function (schedule) { return _this.scheduleLabel_(schedule); }).join('\n') || 'Belum diisi'],
+                ['Petugas / narasumber', employees.length + ' orang'],
+                ['Email To', 'Mengikuti pemetaan jenis surat'],
+                ['CC tambahan', manualCc.join(', ') || 'Tidak ada'],
+                ['Honor', document.getElementById('honor').value],
+                ['Perjalanan dinas', document.getElementById('travel').value]
+            ].map(function (item) { return "<div class=\"review-line\"><span>".concat(_this.escape(item[0]), "</span><strong>").concat(_this.escape(item[1]).replace(/\n/g, '<br>'), "</strong></div>"); }).join('');
+        }
+
+App.saveRequest = function (event) {
+            return __awaiter(this, void 0, void 0, function () {
+                var submitter, status, payload, result, error_3;
+                return __generator(this, function (_a) {
+                    switch (_a.label) {
+                        case 0:
+                            event.preventDefault();
+                            submitter = event.submitter;
+                            status = submitter && submitter.dataset.saveStatus
+                                ? submitter.dataset.saveStatus
+                                : 'DRAFT';
+                            payload = this.collectForm(status);
+                            if (!this.validateBeforeSubmit(status, payload))
+                                return [2 /*return*/];
+                            this.setBusy(submitter, true, 'Menyimpan...');
+                            _a.label = 1;
+                        case 1:
+                            _a.trys.push([1, 4, 5, 6]);
+                            return [4 /*yield*/, this.server('saveRequest', payload)];
+                        case 2:
+                            result = _a.sent();
+                            this.toast(status === 'READY'
+                                ? 'Permohonan ' + result.id + ' siap diproses.'
+                                : 'Draft permohonan ' + result.id + ' tersimpan.');
+                            return [4 /*yield*/, this.refreshAll(false)];
+                        case 3:
+                            _a.sent();
+                            this.resetForm();
+                            this.switchView(status === 'READY' ? 'requests' : 'dashboard');
+                            return [3 /*break*/, 6];
+                        case 4:
+                            error_3 = _a.sent();
+                            this.toast(error_3.message, true);
+                            this.focusFirstInvalid();
+                            return [3 /*break*/, 6];
+                        case 5:
+                            this.setBusy(submitter, false);
+                            return [7 /*endfinally*/];
+                        case 6: return [2 /*return*/];
+                    }
+                });
+            });
+        }
+
+App.resetForm = function () {
+            document.getElementById('requestForm').reset();
+            document.getElementById('requestId').value = '';
+            document.getElementById('requestRevision').value = '';
+            document.getElementById('requestLetterNumber').value = '';
+            document.getElementById('requestDocumentsEditor').innerHTML = '';
+            document.getElementById('clientToken').value = this.uuid();
+            document.getElementById('scheduleList').innerHTML = '';
+            document.getElementById('employeeList').innerHTML = '';
+            this.renderEmailRecipientChoices_([], []);
+            this.addSchedule();
+            this.addEmployee();
+            var today = this.localDateIso();
+            document.getElementById('letterDate').value = today;
+            this.updateFormVisibility();
+        }
+
+App.onRequestActivityTypeChange = function () {
+            var activityType = document.getElementById('activityType').value;
+            var subTypeSelect = document.getElementById('requestSubType');
+            var condContainer = document.getElementById('requestConditionContainer');
+            var condSelect = document.getElementById('requestCondition');
+
+            subTypeSelect.innerHTML = '<option value="">Pilih Sub-Tipe</option>';
+            condContainer.classList.add('is-hidden');
+            condSelect.innerHTML = '<option value="-">-</option>';
+
+            if (!activityType) return;
+
+            var mapping = this.state.bootstrap.options.officialLetterMapping || [];
+            var subTypes = [];
+            mapping.forEach(function (item) {
+                if (item.activityType === activityType && !subTypes.includes(item.subType)) {
+                    subTypes.push(item.subType);
+                }
+            });
+
+            subTypes.forEach(function (st) {
+                var opt = document.createElement('option');
+                opt.value = st;
+                opt.textContent = st;
+                subTypeSelect.appendChild(opt);
+            });
+        }
+
+App.onRequestSubTypeChange = function () {
+            var activityType = document.getElementById('activityType').value;
+            var subType = document.getElementById('requestSubType').value;
+            var condContainer = document.getElementById('requestConditionContainer');
+            var condSelect = document.getElementById('requestCondition');
+
+            condSelect.innerHTML = '';
+            condContainer.classList.add('is-hidden');
+
+            if (!activityType || !subType) return;
+
+            var mapping = this.state.bootstrap.options.officialLetterMapping || [];
+            var conditions = [];
+            mapping.forEach(function (item) {
+                if (item.activityType === activityType && item.subType === subType) {
+                    conditions.push(item.condition);
+                }
+            });
+
+            if (conditions.length === 1 && conditions[0] === '-') {
+                condSelect.innerHTML = '<option value="-">-</option>';
+                return;
+            }
+
+            condContainer.classList.remove('is-hidden');
+            conditions.forEach(function (c) {
+                var opt = document.createElement('option');
+                opt.value = c;
+                opt.textContent = c;
+                condSelect.appendChild(opt);
+            });
+        }
+
+App.fillForm = function (detail) {
+            var _this = this;
+            this.resetForm();
+            var request = detail.request;
+            var values = {
+                requestId: request.id,
+                requestRevision: request.revision,
+                clientToken: request.clientToken,
+                activityType: request.activityType,
+                requestLetterNumber: '',
+                incomingNumber: request.incomingNumber,
+                incomingDate: request.incomingDate,
+                incomingSender: request.incomingSender,
+                incomingSubject: request.incomingSubject,
+                activityName: request.activityName,
+                partnerName: request.partnerName,
+                partnerAddress: request.partnerAddress,
+                partnerEmail: request.partnerEmail,
+                letterDate: request.letterDate,
+                signerName: request.signerName,
+                signerId: request.signerId,
+                signerRole: request.signerRole,
+                honor: request.honor,
+                travel: request.travel
+            };
+            Object.keys(values).forEach(function (id) {
+                var input = document.getElementById(id);
+                if (input)
+                    input.value = values[id] == null ? '' : values[id];
+            });
+            document.getElementById('requestDocumentsEditor').innerHTML = this.asArray(detail.documents).map(function (doc) {
+                return '<div class="document-item" data-edit-document data-document-id="' + _this.escape(doc.id) +
+                    '" data-document-type="' + _this.escape(doc.type) +
+                    '" data-speaker-subtype="' + _this.escape(doc.speakerSubtype || '') +
+                    '" data-speaker-status="' + _this.escape(doc.speakerStatus || '') + '">' +
+                    '<div class="document-item-head"><div><strong>' + _this.escape(doc.type) +
+                    '</strong><small>Edit nomor surat pada halaman permohonan.</small></div></div>' +
+                    '<label class="field" style="margin-top:12px"><span>Nomor Surat</span>' +
+                    '<input data-document-number value="' + _this.escape(doc.number || '') +
+                    '" placeholder="Isi nomor surat"></label></div>';
+            }).join('');
+            document.getElementById('scheduleList').innerHTML = '';
+            var schedules = this.asArray(detail.schedules);
+            schedules.forEach(function (schedule) { return _this.addSchedule(schedule); });
+            if (!schedules.length) {
+                this.addSchedule({
+                    startDate: request.startDate,
+                    endDate: request.endDate,
+                    place: request.activityPlace
+                });
+            }
+            var faculties = this.asArray(request.faculties);
+            document.querySelectorAll('input[name="faculty"]').forEach(function (input) {
+                input.checked = faculties.includes(input.value);
+            });
+            _this.updateCheckDropdownLabel_('facultyChoices', 'Pilih fakultas...');
+            document.getElementById('employeeList').innerHTML = '';
+            detail.employees.forEach(function (employee) { return _this.addEmployee(employee); });
+            if (!detail.employees.length)
+                this.addEmployee();
+            this.renderEmailRecipientChoices_(this.asArray(request.manualTo), this.asArray(request.manualCc));
+            this.updateFormVisibility(false);
+            this.updateReview();
+        }
+
+App.focusFirstInvalid = function () {
+            var invalid = document.querySelector('#requestForm :invalid');
+            if (invalid) {
+                invalid.focus();
+                invalid.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            }
+        }
+
+App.validateBeforeSubmit = function (status, payload) {
+            var _this = this;
+            if (status !== 'READY')
+                return true;
+            var form = document.getElementById('requestForm');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return false;
+            }
+            var errors = [];
+            if (!payload.schedules.length)
+                errors.push('Minimal satu sesi jadwal wajib diisi.');
+            payload.schedules.forEach(function (schedule, index) {
+                if (!schedule.startDate)
+                    errors.push('Tanggal sesi ke-' + (index + 1) + ' wajib diisi.');
+                if (!schedule.place)
+                    errors.push('Tempat sesi ke-' + (index + 1) + ' wajib diisi.');
+                if (schedule.startDate && schedule.endDate && schedule.endDate < schedule.startDate) {
+                    errors.push('Tanggal selesai sesi ke-' + (index + 1) + ' tidak boleh sebelum tanggal mulai.');
+                }
+                if (schedule.startTime && schedule.endTime && schedule.endTime < schedule.startTime) {
+                    errors.push('Waktu selesai sesi ke-' + (index + 1) + ' tidak boleh sebelum waktu mulai.');
+                }
+            });
+
+            var needsPeople = payload.activityType === 'Edu Fair' || payload.activityType === 'Campus Visit' || payload.activityType === 'Penugasan Narasumber';
+            if (needsPeople && !payload.employees.length)
+                errors.push('Minimal satu pegawai/narasumber wajib diisi.');
+            payload.employees.forEach(function (employee, index) {
+                var missing = [
+                    ['Nama', employee.name],
+                    ['NIP/NPM', employee.identifier],
+                    ['Email', employee.email],
+                    ['Jabatan', employee.role],
+                    ['Fakultas', employee.unit]
+                ].filter(function (item) { return !item[1]; }).map(function (item) { return item[0]; });
+                if (missing.length) {
+                    errors.push('Data orang ke-' + (index + 1) + ' belum lengkap: ' + missing.join(', ') + '.');
+                }
+                if (employee.unit && !_this.state.faculties.includes(_this.canonicalUnit_(employee.unit))) {
+                    errors.push('Unit/Fakultas orang ke-' + (index + 1) + ' tidak dikenali: ' + employee.unit + '.');
+                }
+            });
+            if (payload.activityType === 'Penugasan Narasumber' && !payload.documents.length) {
+                errors.push('Minimal satu jenis surat narasumber wajib tersedia.');
+            }
+            if (errors.length) {
+                this.toast(errors.join('\n'), true);
+                return false;
+            }
+            return true;
+        }
+
+</script>

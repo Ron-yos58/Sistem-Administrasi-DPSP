@@ -6,51 +6,7 @@ function doGet() {
 }
 
 function include(filename) {
-  const cache = CacheService.getScriptCache();
-  const metaKey = 'file_meta_' + filename;
-  const metaStr = cache.get(metaKey);
-
-  if (metaStr) {
-    try {
-      const meta = JSON.parse(metaStr);
-      const keys = [];
-      for (let i = 0; i < meta.chunks; i++) {
-        keys.push('file_chunk_' + filename + '_' + i);
-      }
-      const results = cache.getAll(keys);
-      let content = '';
-      let ok = true;
-      for (let i = 0; i < meta.chunks; i++) {
-        const chunk = results[keys[i]];
-        if (!chunk) {
-          ok = false;
-          break;
-        }
-        content += chunk;
-      }
-      if (ok) return content;
-    } catch (e) {
-      // fallback
-    }
-  }
-
-  const content = HtmlService.createHtmlOutputFromFile(filename).getContent();
-  try {
-    const chunkSize = 90000;
-    const chunks = [];
-    for (let offset = 0; offset < content.length; offset += chunkSize) {
-      chunks.push(content.substring(offset, offset + chunkSize));
-    }
-    const cacheData = {};
-    chunks.forEach(function(chunk, idx) {
-      cacheData['file_chunk_' + filename + '_' + idx] = chunk;
-    });
-    cacheData[metaKey] = JSON.stringify({ chunks: chunks.length });
-    cache.putAll(cacheData, 21600);
-  } catch (e) {
-    // ignore
-  }
-  return content;
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
 function getSystemStatus() {
@@ -111,10 +67,11 @@ function getSystemStatus() {
     return { rows: rows.length, types: types.length };
   });
 
-  Object.keys(APP_CONFIG.TEMPLATES).forEach(function(key) {
-    addCheck('TEMPLATE_' + key, function() {
-      const file = DriveApp.getFileById(APP_CONFIG.TEMPLATES[key]);
-      return { name: file.getName(), id: file.getId() };
+  getTemplateConfigsInternal_().forEach(function(cfg) {
+    addCheck('TEMPLATE_' + cfg.key, function() {
+      if (!cfg.templateId) throw new Error('Template Google Docs belum dikonfigurasi.');
+      const file = DriveApp.getFileById(cfg.templateId);
+      return { name: file.getName(), id: file.getId(), active: cfg.active };
     });
   });
 
