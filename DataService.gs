@@ -677,19 +677,28 @@
     };
   }
 
+  function cleanIdentifier_(raw) {
+    // Sheets returns numeric NIK/NIM as float (e.g. 123.0) — normalise to integer string.
+    const s = String(raw == null ? '' : raw).trim();
+    return s.replace(/\.0$/, '');
+  }
+
   function getEmployeesByRequest_(requestId) {
     return readDataRows_(getSheet_('EMPLOYEES'), EMPLOYEE_HEADERS.length)
       .filter(function(row) { return text_(row[0]) === requestId; })
       .map(function(row) {
+        const unit = canonicalOrganizationUnit_(row[4]);
         return {
-          name: row[1],
-          identifier: row[2],
-          role: row[3],
-          unit: canonicalOrganizationUnit_(row[4]),
-          email: row[5],
-          rank: row[6],
-          category: row[7],
-          participantKey: row[8]
+          name: text_(row[1]),
+          identifier: cleanIdentifier_(row[2]),
+          role: text_(row[3]),
+          unit: unit,
+          faculty: unit,   // alias so DocumentService lookups work
+          studyProgram: unit, // alias — single source is column 4
+          email: text_(row[5]),
+          rank: text_(row[6]),
+          category: text_(row[7]),
+          participantKey: text_(row[8])
         };
       });
   }

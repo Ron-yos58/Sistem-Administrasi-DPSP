@@ -52,11 +52,19 @@ App.showRefreshProgress_ = function (percent, done, error) {
             var overlayText = document.getElementById('blockingOverlayText');
             if (!overlayText) return;
             
+            if (App._overlayTimer) {
+                window.clearInterval(App._overlayTimer);
+                App._overlayTimer = null;
+            }
+            
             if (done || error) {
                 if (error) {
                     overlayText.textContent = 'Gagal memperbarui data.';
                 } else {
                     overlayText.textContent = 'Menyelesaikan...';
+                }
+                if (typeof App._overlaySetPct === 'function') {
+                    App._overlaySetPct(100);
                 }
                 return;
             }
@@ -64,6 +72,9 @@ App.showRefreshProgress_ = function (percent, done, error) {
             var p = Math.max(0, Math.min(100, percent || 0));
             var status = p < 30 ? 'Menghubungi server...' : p < 70 ? 'Memuat data...' : 'Menyiapkan tampilan...';
             overlayText.textContent = status + ' ' + p + '%';
+            if (typeof App._overlaySetPct === 'function') {
+                App._overlaySetPct(p);
+            }
         }
 
 App.showGlobalError = function (error) {

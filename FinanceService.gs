@@ -270,7 +270,7 @@ function getFinanceReadiness_(requestId, preloadedDetail, preloadedFiles) {
       });
       honor.message = honor.complete
         ? 'Data Honor pada spreadsheet sudah lengkap.'
-        : 'Silakan lengkapi data Honor terlebih dahulu.';
+        : 'Silakan lengkapi nominal Data Honor pada Google Sheet terlebih dahulu.';
     }
   }
 

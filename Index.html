@@ -20,81 +20,43 @@
       --yellow: #fcc419;
       --canvas: #f6f9f8;
     }
+    /* Boot screen — minimal inline styles for first paint before Styles.html loads */
     .boot-loader {
-      position: fixed;
-      z-index: 200;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      align-content: center;
-      gap: 16px;
-      color: var(--green-950);
-      background: var(--canvas);
+      position: fixed; z-index: 200; inset: 0;
+      display: grid; place-items: center; align-content: center; gap: 16px;
+      color: var(--green-950); background: var(--canvas);
       transition: opacity .35s ease;
       font-family: 'Manrope', system-ui, -apple-system, sans-serif;
     }
-    .boot-loader.is-done {
-      pointer-events: none;
-      opacity: 0;
-    }
-    .boot-loader strong {
-      font-size: 16px;
-      font-weight: 700;
-    }
+    .boot-loader.is-done { pointer-events: none; opacity: 0; }
+    .boot-loader strong { font-size: 16px; font-weight: 700; }
     .loader-spinner {
-      position: relative;
-      width: 54px;
-      height: 54px;
-      border: 4px solid var(--green-100);
-      border-top-color: var(--green-900);
-      border-radius: 50%;
-      animation: loader-spin .85s linear infinite;
+      position: relative; width: 54px; height: 54px;
+      border: 4px solid var(--green-100); border-top-color: var(--green-900);
+      border-radius: 50%; animation: loader-spin .85s linear infinite;
     }
     .loader-spinner::before {
-      position: absolute;
-      inset: 6px;
-      border: 3px solid transparent;
-      border-right-color: var(--yellow);
-      border-radius: 50%;
-      animation: loader-spin .6s linear infinite reverse;
-      content: "";
+      position: absolute; inset: 6px;
+      border: 3px solid transparent; border-right-color: var(--yellow);
+      border-radius: 50%; animation: loader-spin .6s linear infinite reverse; content: "";
     }
     .loader-spinner span {
-      position: absolute;
-      inset: 50% auto auto 50%;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green-900);
-      box-shadow: 0 0 0 6px rgba(1, 88, 80, .12);
-      transform: translate(-50%, -50%);
+      position: absolute; inset: 50% auto auto 50%;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green-900); box-shadow: 0 0 0 6px rgba(1,88,80,.12);
+      transform: translate(-50%,-50%);
     }
-    @keyframes loader-spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
+    @keyframes loader-spin { to { transform: rotate(360deg); } }
     .boot-progress {
-      overflow: hidden;
-      width: min(340px, calc(100vw - 48px));
-      height: 8px;
-      border: 1px solid rgba(1, 88, 80, .15);
-      border-radius: 99px;
-      background: #e5ebe9;
+      overflow: hidden; width: min(340px, calc(100vw - 48px)); height: 8px;
+      border: 1px solid rgba(1,88,80,.15); border-radius: 99px; background: #e5ebe9;
     }
     .boot-progress span {
-      display: block;
-      width: 0%;
-      height: 100%;
-      border-radius: inherit;
+      display: block; width: 0%; height: 100%; border-radius: inherit;
       background: linear-gradient(90deg, var(--green-900), var(--yellow));
       transition: width .25s ease;
     }
-    .boot-percent {
-      color: var(--green-800);
-      font-size: 12px;
-      font-weight: 800;
-    }
+    .boot-percent { color: var(--green-800); font-size: 12px; font-weight: 800; }
   </style>
   <?!= include('Styles'); ?>
 </head>
@@ -307,11 +269,9 @@
                 <tbody id="requestTableBody"></tbody>
               </table>
             </div>
-            <div class="pagination-toolbar" id="requestPagination"
-              style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-top: 1px solid var(--line); background-color: var(--green-50); border-bottom-left-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg);">
-              <span class="pagination-info" id="requestPaginationInfo"
-                style="font-size: 13px; color: var(--muted); font-weight: 500;">Menampilkan 1-10 dari 100</span>
-              <div class="pagination-buttons" style="display: flex; gap: 8px;">
+            <div class="pagination-toolbar" id="requestPagination">
+              <span class="pagination-info" id="requestPaginationInfo">Menampilkan 1-10 dari 100</span>
+              <div class="pagination-buttons">
                 <button class="button button-secondary button-small" id="requestPrevPage" type="button"
                   disabled>Sebelumnya</button>
                 <button class="button button-secondary button-small" id="requestNextPage" type="button"
@@ -863,10 +823,13 @@
     <div id="globalTimePicker"></div>
   </div>
 
-  <div id="blockingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; justify-content:center; align-items:center; color:white; font-family:sans-serif; flex-direction:column; font-size:16px;">
-    <div style="width:40px; height:40px; border:4px solid #dcece9; border-top:4px solid #087168; border-radius:50%; animation:spin 1s linear infinite;"></div>
-    <div id="blockingOverlayText" style="margin-top:16px; font-weight:bold; color:#015850; background:var(--canvas); padding:6px 12px; border-radius:12px;">Memproses...</div>
-    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+  <div id="blockingOverlay" class="blocking-overlay">
+    <div class="blocking-overlay-spinner"></div>
+    <div id="blockingOverlayText" class="blocking-overlay-text">Memproses...</div>
+    <div class="blocking-overlay-progress-track">
+      <div class="blocking-overlay-progress-bar" id="blockingOverlayBar"></div>
+    </div>
+    <span class="blocking-overlay-pct" id="blockingOverlayPct">0%</span>
   </div>
 
   <?!= include('ScriptsCore'); ?>

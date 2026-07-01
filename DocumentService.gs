@@ -284,20 +284,11 @@ function replaceDynamicTables_(doc, employees) {
       ];
       
       employees.forEach(function(emp, index) {
-        let unitText = '';
-        if (emp.faculty && emp.studyProgram) {
-            unitText = emp.faculty + ' - ' + emp.studyProgram;
-        } else {
-            unitText = emp.faculty || emp.studyProgram || emp.unit || '-';
-        }
-        
-        const rawNik = String(emp.identifier || '').trim();
-        const cleanNik = rawNik.replace(/\.0$/, '') || '-';
-        
+        const unitText = emp.unit || '-';
         tableData.push([
           String(index + 1),
           emp.name || '-',
-          cleanNik,
+          emp.identifier || '-',
           unitText
         ]);
       });
@@ -348,12 +339,10 @@ function replaceDynamicTables_(doc, employees) {
           newRow.replaceText('\\{\\{No\\}\\}', String(index + 1));
           newRow.replaceText('\\{\\{Nama Pegawai\\}\\}', emp.name || '');
           
-          const rawNik = String(emp.identifier || '').trim();
-          newRow.replaceText('\\{\\{NIK/NPM\\}\\}', rawNik.replace(/\.0$/, '') || '');
-          
+          newRow.replaceText('\\{\\{NIK/NPM\\}\\}', emp.identifier || '');
           newRow.replaceText('\\{\\{Jabatan Pegawai\\}\\}', emp.rank || '');
-          newRow.replaceText('\\{\\{Prodi\\}\\}', emp.studyProgram || emp.unit || '');
-          newRow.replaceText('\\{\\{Fakultas\\}\\}', emp.faculty || emp.unit || '');
+          newRow.replaceText('\\{\\{Prodi\\}\\}', emp.unit || '');
+          newRow.replaceText('\\{\\{Fakultas\\}\\}', emp.unit || '');
         });
         table.removeRow(r);
         break;

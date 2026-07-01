@@ -78,23 +78,62 @@ App.init = function () {
             });
         }
 
+App._overlayRefCount = 0;
+App._overlayTimer = null;
+App._overlayPct = 0;
+
+App._overlaySetPct = function (pct) {
+    var bar = document.getElementById('blockingOverlayBar');
+    var label = document.getElementById('blockingOverlayPct');
+    App._overlayPct = pct;
+    if (bar) bar.style.width = pct + '%';
+    if (label) label.textContent = Math.round(pct) + '%';
+};
+
 App.showOverlay = function (message) {
-            var overlay = document.getElementById('blockingOverlay');
-            var overlayText = document.getElementById('blockingOverlayText');
-            if (overlay && overlay.style.display !== 'flex') {
-                if (overlayText && message) {
-                    overlayText.textContent = message;
-                }
-                overlay.style.display = 'flex';
-            }
+    var overlay = document.getElementById('blockingOverlay');
+    var overlayText = document.getElementById('blockingOverlayText');
+    
+    App._overlayRefCount++;
+    
+    if (overlay) {
+        if (overlayText && message) overlayText.textContent = message;
+        
+        if (overlay.style.display !== 'flex') {
+            App._overlaySetPct(0);
+            overlay.style.display = 'flex';
+            if (App._overlayTimer) window.clearInterval(App._overlayTimer);
+            App._overlayTimer = window.setInterval(function () {
+                var current = App._overlayPct;
+                var increment = (88 - current) * 0.045; // decelerate as it approaches 88%
+                if (increment < 0.15) increment = 0.15;
+                App._overlaySetPct(Math.min(current + increment, 88));
+            }, 300);
         }
+    }
+};
 
 App.hideOverlay = function () {
-            var overlay = document.getElementById('blockingOverlay');
-            if (overlay) {
-                overlay.style.display = 'none';
-            }
+    App._overlayRefCount--;
+    if (App._overlayRefCount < 0) App._overlayRefCount = 0;
+    
+    if (App._overlayRefCount === 0) {
+        var overlay = document.getElementById('blockingOverlay');
+        if (App._overlayTimer) {
+            window.clearInterval(App._overlayTimer);
+            App._overlayTimer = null;
         }
+        if (overlay) {
+            App._overlaySetPct(100);
+            window.setTimeout(function () {
+                if (App._overlayRefCount === 0) {
+                    overlay.style.display = 'none';
+                    App._overlaySetPct(0);
+                }
+            }, 250);
+        }
+    }
+}
 
 App.server = function (method) {
             var args = [];
@@ -272,12 +311,9 @@ App.refreshAll = function () {
         }
 
 App.setBusy = function (button, busy, label, hideOverlay) {
-            var overlay = document.getElementById('blockingOverlay');
-            var overlayText = document.getElementById('blockingOverlayText');
             if (busy) {
-                if (overlay && !hideOverlay) {
-                    if (overlayText) overlayText.textContent = label || 'Memproses...';
-                    overlay.style.display = 'flex';
+                if (!hideOverlay) {
+                    App.showOverlay(label || 'Memproses...');
                 }
                 if (!button) return;
                 button.dataset.originalHtml = button.innerHTML;
@@ -288,7 +324,9 @@ App.setBusy = function (button, busy, label, hideOverlay) {
                 button.disabled = true;
             }
             else {
-                if (overlay && !hideOverlay) overlay.style.display = 'none';
+                if (!hideOverlay) {
+                    App.hideOverlay();
+                }
                 if (!button) return;
                 if (button.dataset.originalHtml)
                     button.innerHTML = button.dataset.originalHtml;

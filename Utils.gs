@@ -510,18 +510,14 @@ function buildEmployeeJoinPlaceholders_(employees) {
   const names = rows.map(function(item) { return text_(item && item.name); });
   const identifiers = rows.map(function(item) { return text_(item && item.identifier); });
   const roles = rows.map(function(item) { return text_(item && item.rank); });
-  const units = rows.map(function(item) { 
-    if (item && item.faculty && item.studyProgram) return text_(item.faculty) + ' - ' + text_(item.studyProgram);
-    return text_(item && (item.faculty || item.studyProgram || item.unit)); 
-  });
+  const units = rows.map(function(item) { return text_(item && item.unit); });
   const emails = rows.map(function(item) { return text_(item && item.email); });
 
   const narasumber = rows.map(function(item, index) {
     const lines = [(index + 1) + '. ' + text_(item && item.name)];
     if (text_(item && item.identifier)) lines.push('   NIK/NPM: ' + text_(item.identifier));
     if (text_(item && item.rank)) lines.push('   Jabatan: ' + text_(item.rank));
-    const unitText = (item && item.faculty && item.studyProgram) ? text_(item.faculty) + ' - ' + text_(item.studyProgram) : text_(item && (item.faculty || item.studyProgram || item.unit));
-    if (unitText) lines.push('   Prodi/Unit: ' + unitText);
+    if (text_(item && item.unit)) lines.push('   Prodi/Unit: ' + text_(item.unit));
     if (text_(item && item.email)) lines.push('   Email: ' + text_(item.email));
     return lines.join('\n');
   }).join('\n\n');
