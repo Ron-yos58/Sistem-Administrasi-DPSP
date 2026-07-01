@@ -71,7 +71,7 @@ App.showRefreshProgress_ = function (percent, done, error) {
             
             var p = Math.max(0, Math.min(100, percent || 0));
             var status = p < 30 ? 'Menghubungi server...' : p < 70 ? 'Memuat data...' : 'Menyiapkan tampilan...';
-            overlayText.textContent = status + ' ' + p + '%';
+            overlayText.textContent = status;
             if (typeof App._overlaySetPct === 'function') {
                 App._overlaySetPct(p);
             }
