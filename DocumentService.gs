@@ -81,7 +81,7 @@ function generateDocumentInternal_(documentId, force, user, mode) {
     const googleDoc = DocumentApp.openById(docFile.getId());
     createdDoc = true;
     try {
-      replaceDocumentPlaceholders_(googleDoc, buildDocumentPlaceholders_(detail, document));
+      replaceDocumentPlaceholders_(googleDoc, buildDocumentPlaceholders_(detail, document), detail.employees);
       googleDoc.saveAndClose();
     } catch (error) {
       docFile.setTrashed(true);
@@ -130,6 +130,7 @@ function generateDocumentInternal_(documentId, force, user, mode) {
 
   updateMasterDocumentLinks_(detail.request.id, docFile, pdfFile);
 
+  clearAppCache_();
   return {
     ok: true,
     reused: false,
@@ -261,12 +262,116 @@ function buildDocumentPlaceholders_(detail, document) {
   return values;
 }
 
-function replaceDocumentPlaceholders_(doc, values) {
+function replaceDynamicTables_(doc, employees) {
+  if (!employees || !employees.length) return;
+  const body = doc.getBody();
+
+  // 1. Fully dynamic table replacing {{TABEL_PEGAWAI}}
+  const placeholder = '{{TABEL_PEGAWAI}}';
+  let found = body.findText(placeholder);
+  while (found) {
+    const element = found.getElement();
+    let parent = element.getParent();
+    while (parent && parent.getType() !== DocumentApp.ElementType.PARAGRAPH) {
+      parent = parent.getParent();
+    }
+    
+    if (parent) {
+      const childIndex = body.getChildIndex(parent);
+      
+      const tableData = [
+        ['No', 'Nama', 'NIK/NPM', 'Unit/Fakultas/Program Studi']
+      ];
+      
+      employees.forEach(function(emp, index) {
+        let unitText = '';
+        if (emp.faculty && emp.studyProgram) {
+            unitText = emp.faculty + ' - ' + emp.studyProgram;
+        } else {
+            unitText = emp.faculty || emp.studyProgram || emp.unit || '-';
+        }
+        
+        const rawNik = String(emp.identifier || '').trim();
+        const cleanNik = rawNik.replace(/\.0$/, '') || '-';
+        
+        tableData.push([
+          String(index + 1),
+          emp.name || '-',
+          cleanNik,
+          unitText
+        ]);
+      });
+      
+      const newTable = body.insertTable(childIndex + 1, tableData);
+      
+      // format table
+      const headerRow = newTable.getRow(0);
+      for (let i = 0; i < headerRow.getNumCells(); i++) {
+        const cell = headerRow.getCell(i);
+        const text = cell.editAsText();
+        text.setBold(true);
+        const para = cell.getChild(0).asParagraph();
+        para.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+        cell.setBackgroundColor('#d9d9d9'); // Light gray header
+      }
+      
+      for(let r = 1; r < newTable.getNumRows(); r++) {
+         let row = newTable.getRow(r);
+         row.getCell(0).getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+         row.getCell(2).getChild(0).asParagraph().setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+      }
+      
+      // Column widths (pts) - Assuming standard A4/Letter size
+      try {
+        newTable.setColumnWidth(0, 35);
+        newTable.setColumnWidth(1, 160);
+        newTable.setColumnWidth(2, 100);
+        newTable.setColumnWidth(3, 175);
+      } catch (e) {
+        console.warn('Failed to set column widths: ' + e.message);
+      }
+      
+      parent.removeFromParent(); // remove the placeholder paragraph
+    }
+    found = body.findText(placeholder, found);
+  }
+
+  // 2. Fallback for existing templates using {{#pegawai}} inside drawn tables
+  const tables = body.getTables();
+  tables.forEach(function(table) {
+    for (let r = 0; r < table.getNumRows(); r++) {
+      const row = table.getRow(r);
+      if (row.getText().indexOf('{{#pegawai}}') !== -1) {
+        employees.forEach(function(emp, index) {
+          const newRow = table.insertTableRow(r + 1 + index, row.copy());
+          newRow.replaceText('\\{\\{#pegawai\\}\\}', '');
+          newRow.replaceText('\\{\\{No\\}\\}', String(index + 1));
+          newRow.replaceText('\\{\\{Nama Pegawai\\}\\}', emp.name || '');
+          
+          const rawNik = String(emp.identifier || '').trim();
+          newRow.replaceText('\\{\\{NIK/NPM\\}\\}', rawNik.replace(/\.0$/, '') || '');
+          
+          newRow.replaceText('\\{\\{Jabatan Pegawai\\}\\}', emp.rank || '');
+          newRow.replaceText('\\{\\{Prodi\\}\\}', emp.studyProgram || emp.unit || '');
+          newRow.replaceText('\\{\\{Fakultas\\}\\}', emp.faculty || emp.unit || '');
+        });
+        table.removeRow(r);
+        break;
+      }
+    }
+  });
+}
+
+function replaceDocumentPlaceholders_(doc, values, employees) {
   const sections = [doc.getBody()];
   const header = doc.getHeader();
   const footer = doc.getFooter();
   if (header) sections.push(header);
   if (footer) sections.push(footer);
+
+  if (employees) {
+    replaceDynamicTables_(doc, employees);
+  }
 
   Object.keys(values).forEach(function(key) {
     const replacement = String(values[key] == null ? '' : values[key])
@@ -325,23 +430,11 @@ function driveFileExists_(fileId) {
 function grantGeneratedFileAccess_(file, user, options) {
   if (!file) return;
   options = options || {};
-  const email = text_(user && user.email);
   const asEditor = Boolean(options.editor);
   const anyoneCanEdit = Boolean(options.anyoneCanEdit);
   const allowAnyoneWithLink = options.allowAnyoneWithLink !== false;
 
-  if (email && email.indexOf('@') !== -1) {
-    try {
-      if (asEditor) {
-        file.addEditor(email);
-      } else {
-        file.addViewer(email);
-      }
-    } catch (error) {
-      console.warn('Gagal memberi akses file ke ' + email + ': ' + error.message);
-    }
-  }
-
+  // PONYTAIL ULTRA: Only use anyone with link sharing to avoid notification spam and excessive API calls.
   if (allowAnyoneWithLink) {
     try {
       file.setSharing(
@@ -349,8 +442,6 @@ function grantGeneratedFileAccess_(file, user, options) {
         asEditor && anyoneCanEdit ? DriveApp.Permission.EDIT : DriveApp.Permission.VIEW
       );
     } catch (error) {
-      // Beberapa domain Google Workspace melarang "Anyone with link".
-      // Jika ini gagal, akses langsung via addEditor/addViewer di atas tetap dipakai.
       console.warn('Gagal mengatur akses anyone-with-link: ' + error.message);
     }
   }
@@ -663,9 +754,10 @@ function saveDocumentDetails(documentId, number, emailTo, emailCc, emailBcc, sta
       }
     }
     
+    const numberChanged = String(row[5] || '') !== text_(number);
     row[5] = text_(number);
     
-    if (comboChanged) {
+    if (comboChanged || numberChanged) {
       try {
         if (row[8]) DriveApp.getFileById(row[8]).setTrashed(true);
         if (row[10]) DriveApp.getFileById(row[10]).setTrashed(true);

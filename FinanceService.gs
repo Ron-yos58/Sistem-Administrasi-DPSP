@@ -183,11 +183,12 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
     sheet = spreadsheet.getSheets()[0];
     sheet.setName(sheetName);
     sheet.addDeveloperMetadata('DPSP_GENERATED', reportKind + '|' + requestId);
-    if (reportKind === 'HONOR') {
-      renderHonorSheet_(sheet, detail);
-    } else {
-      renderTravelSheet_(sheet, detail);
-    }
+  }
+  const sheetToRender = spreadsheet.getSheetByName(sheetName) || spreadsheet.insertSheet(sheetName);
+  if (reportKind === 'HONOR') {
+    renderHonorSheet_(sheetToRender, detail);
+  } else {
+    renderTravelSheet_(spreadsheet, sheetToRender, detail);
   }
   const artifactKey = 'FINANCE_' + reportKind;
   const sheetUrl = spreadsheet.getUrl();
@@ -202,18 +203,19 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
     {
       kind: reportKind,
       sheetName: sheetName,
-      sheetId: sheet.getSheetId(),
+      sheetId: sheetToRender.getSheetId(),
       spreadsheetId: spreadsheet.getId(),
       storage: 'SEPARATE_SPREADSHEET'
     }
   );
   logAudit_('GENERATE_FINANCE_SHEET', requestId, true, {
     kind: reportKind,
-    sheetId: sheet.getSheetId(),
+    sheetId: sheetToRender.getSheetId(),
     dataAccess: 'SERVER_SIDE_SPREADSHEET_READ',
     openedForUser: 'GENERATED_SHEET_ONLY'
   });
   clearFinanceReadinessCache_(requestId);
+  clearAppCache_();
   return {
     ok: true,
     requestId: requestId,
@@ -221,7 +223,7 @@ function generateFinanceSheetInternal_(requestId, reportKind) {
     reused: reused,
     spreadsheetId: spreadsheet.getId(),
     sheetName: sheetName,
-    sheetId: sheet.getSheetId(),
+    sheetId: sheetToRender.getSheetId(),
     url: sheetUrl
   };
 }
@@ -244,13 +246,15 @@ function getFinanceReadiness_(requestId, preloadedDetail, preloadedFiles) {
   const honor = {
     required: detail.request.honor === 'Ya',
     complete: false,
-    message: 'Honor tidak diperlukan.'
+    message: ''
   };
-  if (honor.required) {
+  if (honor.required && detail.request.status === 'READY') {
     if (!detail.employees.length) {
       honor.message = 'Tambahkan penerima Honor terlebih dahulu.';
-    } else if (!honorSheet || !isGeneratedSheet_(honorSheet)) {
-      honor.message = 'Buat dan lengkapi Google Sheet Honor terlebih dahulu.';
+    } else if (!honorOutput) {
+      honor.message = 'Belum ada sheet Honor yang di-generate.';
+    } else if (!honorSheet) {
+      honor.message = 'Sheet tidak ditemukan. Muat ulang (generate) Sheet Honor.';
     } else {
       const startRow = 9;
       const count = detail.employees.length;
@@ -273,13 +277,15 @@ function getFinanceReadiness_(requestId, preloadedDetail, preloadedFiles) {
   const travel = {
     required: detail.request.travel === 'Ya',
     complete: false,
-    message: 'Perjadin tidak diperlukan.'
+    message: ''
   };
-  if (travel.required) {
-    if (!detail.travel.length) {
-      travel.message = 'Tambahkan pelaksana Perjadin terlebih dahulu.';
-    } else if (!travelSheet || !isGeneratedSheet_(travelSheet)) {
-      travel.message = 'Buat dan lengkapi Google Sheet Perjadin terlebih dahulu.';
+  if (travel.required && detail.request.status === 'READY') {
+    if (!detail.travel || !detail.travel.length) {
+      travel.message = 'Detail perjalanan belum lengkap (Simpan ulang form permohonan).';
+    } else if (!travelOutput) {
+      travel.message = 'Belum ada sheet Perjadin yang di-generate.';
+    } else if (!travelSheet) {
+      travel.message = 'Sheet tidak ditemukan. Muat ulang (generate) Sheet Perjadin.';
     } else {
       travel.complete = isTravelSheetComplete_(travelSheet, detail.travel.length);
       travel.message = travel.complete
@@ -335,9 +341,25 @@ function getFinanceSpreadsheetOutput_(requestId, reportKind, allowLegacy, preloa
       if (!allowLegacy && spreadsheet.getId() === getSpreadsheet_().getId()) {
         return null;
       }
-      const sheetName = text_(artifact.metadata.sheetName) || generatedSheetName_(reportKind, requestId);
-      const sheet = spreadsheet.getSheetByName(sheetName);
-      if (sheet && isGeneratedSheet_(sheet)) {
+      
+      let sheet = null;
+      if (artifact.metadata && artifact.metadata.sheetId != null) {
+        const targetId = Number(artifact.metadata.sheetId);
+        const sheets = spreadsheet.getSheets();
+        for (let i = 0; i < sheets.length; i++) {
+          if (sheets[i].getSheetId() === targetId) {
+            sheet = sheets[i];
+            break;
+          }
+        }
+      }
+      
+      if (!sheet) {
+        const sheetName = text_(artifact.metadata.sheetName) || generatedSheetName_(reportKind, requestId);
+        sheet = spreadsheet.getSheetByName(sheetName);
+      }
+      
+      if (sheet) {
         return { spreadsheet: spreadsheet, sheet: sheet, artifact: artifact };
       }
     } catch (error) {
@@ -406,24 +428,44 @@ function renderHonorSheet_(sheet, detail) {
   renderEduCampusHonorSheet_(sheet, detail);
 }
 
-function renderTravelSheet_(sheet, detail) {
+function renderTravelSheet_(spreadsheet, baseSheet, detail) {
   const request = detail.request;
   const travel = detail.travel;
-  sheet.clearFormats();
-  sheet.clearNotes();
-  sheet.setHiddenGridlines(false);
+  
   if (!travel.length) {
-    sheet.getRange('A1:F1').merge().setValue('PERMOHONAN PENCAIRAN PERJALANAN DINAS')
+    baseSheet.clear();
+    baseSheet.setHiddenGridlines(false);
+    baseSheet.getRange('A1:F1').merge().setValue('PERMOHONAN PENCAIRAN PERJALANAN DINAS')
       .setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
-    sheet.getRange('A3:F3').merge().setValue('Belum ada data perjadin untuk permohonan ini.')
+    baseSheet.getRange('A3:F3').merge().setValue('Belum ada data perjadin untuk permohonan ini.')
       .setHorizontalAlignment('center');
     return;
   }
 
-  setTravelSheetColumnWidths_(sheet);
-  let startRow = 1;
+  // PONYTAIL ULTRA: Buat satu sheet (tab) per pegawai
+  const existingSheets = spreadsheet.getSheets();
+  const sheetsToKeep = [];
+
   travel.forEach(function(item, index) {
-    startRow = renderTravelParticipantSection_(sheet, startRow, request, item, index + 1, travel.length);
+    const safeName = String(item.name || 'Pegawai_' + (index + 1)).replace(/[^A-Za-z0-9 ]/g, '').substring(0, 30);
+    let sheet = index === 0 ? baseSheet : spreadsheet.getSheetByName(safeName);
+    if (!sheet) {
+      sheet = spreadsheet.insertSheet();
+    }
+    sheet.setName(safeName + (index > 0 && spreadsheet.getSheetByName(safeName) !== sheet ? ' ' + index : ''));
+    sheetsToKeep.push(sheet.getSheetId());
+    
+    sheet.clear();
+    sheet.setHiddenGridlines(false);
+    setTravelSheetColumnWidths_(sheet);
+    renderTravelParticipantSection_(sheet, 1, request, item, 1, 1);
+  });
+
+  // Hapus sisa sheet yang tidak terpakai dari generate sebelumnya
+  existingSheets.forEach(function(sheet) {
+    if (sheetsToKeep.indexOf(sheet.getSheetId()) === -1 && spreadsheet.getSheets().length > 1) {
+      try { spreadsheet.deleteSheet(sheet); } catch(e) {}
+    }
   });
 }
 
@@ -441,8 +483,7 @@ function renderEduCampusHonorSheet_(sheet, detail) {
   const request = detail.request;
   const employees = detail.employees;
   const formulaSeparator = financeFormulaSeparator_();
-  sheet.clearFormats();
-  sheet.clearNotes();
+  sheet.clear();
 
   setMergedRichLabel_(sheet, 1, 1, 6, 'Daftar Honor: ', request.activityName || '');
   setMergedRichLabel_(sheet, 2, 1, 6, 'Tipe Kegiatan: ', request.activityType || '');
@@ -519,8 +560,7 @@ function renderSpeakerHonorSheet_(sheet, detail) {
   const request = detail.request;
   const employees = detail.employees;
   const formulaSeparator = financeFormulaSeparator_();
-  sheet.clearFormats();
-  sheet.clearNotes();
+  sheet.clear();
 
   setMergedRichLabel_(sheet, 1, 1, 7, 'Daftar Honor: ', request.activityName || '');
   setMergedRichLabel_(sheet, 2, 1, 7, 'Tipe Kegiatan: ',
@@ -872,7 +912,7 @@ function financeFormulaSeparator_() {
 function buildEduCampusHonorFormula_(rowNumber, separator) {
   const subEnd = 'SUBSTITUTE(E' + rowNumber + separator + '"."' + separator + '":")';
   const subStart = 'SUBSTITUTE(D' + rowNumber + separator + '"."' + separator + '":")';
-  const timeDiff = 'MOD(TIMEVALUE(' + subEnd + ')-TIMEVALUE(' + subStart + ')' + separator + '1)*24*9000';
+  const timeDiff = 'MOD(TIMEVALUE(' + subEnd + ')-TIMEVALUE(' + subStart + ')' + separator + '1)*24*90000';
   const andPart = 'AND(LEN(D' + rowNumber + ')' + separator + 'LEN(E' + rowNumber + '))';
   return '=IF(' + andPart + separator + timeDiff + separator + '0)';
 }

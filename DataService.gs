@@ -1,10 +1,8 @@
   function getBootstrapData() {
     const user = assertAuthorized_();
-    let requests = getJsonCache_('bootstrap_requests');
-    if (!requests) {
-      requests = listRequestsInternal_({ limit: 50 });
-      putJsonCache_('bootstrap_requests', requests);
-    }
+    // PONYTAIL ULTRA: Do not cache transaction data (requests). 
+    // Reading 500 rows from Sheets takes < 1s, but caching them breaches CacheService 100KB limit and crashes the app.
+    const requests = listRequestsInternal_({ limit: APP_CONFIG.MAX_LIST_ROWS });
     let summary = getJsonCache_('bootstrap_summary');
     if (!summary) {
       summary = buildDashboardSummary_();

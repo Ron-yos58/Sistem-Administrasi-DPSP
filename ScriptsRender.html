@@ -151,35 +151,27 @@ App.renderEmailRecipientChoices_ = function (selectedTo, selectedCc) {
         }
 
 App.loadRequests = function () {
-            return __awaiter(this, void 0, void 0, function () {
-                var filters, result, error_2;
-                return __generator(this, function (_a) {
-                    switch (_a.label) {
-                        case 0:
-                            filters = {
-                                query: document.getElementById('requestSearch').value,
-                                activityType: document.getElementById('requestTypeFilter').value,
-                                status: document.getElementById('requestStatusFilter').value,
-                                includeArchived: document.getElementById('requestStatusFilter').value === 'ARCHIVED',
-                                limit: 250
-                            };
-                            _a.label = 1;
-                        case 1:
-                            _a.trys.push([1, 3, , 4]);
-                            return [4 /*yield*/, this.server('listRequests', filters)];
-                        case 2:
-                            result = _a.sent();
-                            this.state.requests = result.items;
-                            this.renderRequestsPage();
-                            return [3 /*break*/, 4];
-                        case 3:
-                            error_2 = _a.sent();
-                            this.toast(error_2.message, true);
-                            return [3 /*break*/, 4];
-                        case 4: return [2 /*return*/];
-                    }
-                });
+            var query = (document.getElementById('requestSearch').value || '').toLowerCase().trim();
+            var activityType = document.getElementById('requestTypeFilter').value;
+            var status = document.getElementById('requestStatusFilter').value;
+            var filtered = (this.state.allRequests || []).filter(function (item) {
+                if (activityType && item.activityType !== activityType) return false;
+                if (status && item.status !== status) return false;
+                if (query) {
+                    var haystack = [
+                        item.id || '',
+                        item.activityType || '',
+                        item.activityName || '',
+                        item.partnerName || '',
+                        item.documentNumber || '',
+                        Array.isArray(item.documentTypes) ? item.documentTypes.join(' ') : ''
+                    ].join(' ').toLowerCase();
+                    if (haystack.indexOf(query) === -1) return false;
+                }
+                return true;
             });
+            this.state.requests = filtered;
+            this.renderRequestsPage();
         }
 
 App.scheduleRequestFilter = function (delay) {

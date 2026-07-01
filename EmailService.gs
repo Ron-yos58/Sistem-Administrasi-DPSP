@@ -242,10 +242,6 @@ function createEmailDraftInternal_(documentId, force, user, customRecipientsJson
     }
   }
 
-  if (document.status !== 'GENERATED' || !document.pdfId || !driveFileExists_(document.pdfId)) {
-    throw new Error('Buat dokumen dan PDF sebelum membuat draft email.');
-  }
-
   let customRecipients = null;
   if (customRecipientsJson) {
     try {

@@ -331,42 +331,6 @@ App.renderDetail = function (detail) {
                 + '</div>';
 
             var addLetterFormHtml = '';
-            if (request.status === 'READY') {
-                var actTypes = ['Edu Fair', 'Campus Visit', 'Penugasan Narasumber'];
-                var actOptions = actTypes.map(function (t) {
-                    var selected = t === request.activityType ? 'selected' : '';
-                    return '<option value="' + _this.escape(t) + '" ' + selected + '>' + _this.escape(t) + '</option>';
-                }).join('');
-
-                addLetterFormHtml = '<div class="add-letter-bar" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">'
-                    + '<div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:140px;">'
-                    + '<span style="font-size:11px; font-weight:700; color:var(--muted);">Tipe Kegiatan</span>'
-                    + '<select id="addLetterActivityType" class="add-letter-select" onchange="App.onAddLetterActivityTypeChange()">'
-                    + '<option value="">Pilih Tipe Kegiatan</option>'
-                    + actOptions
-                    + '</select>'
-                    + '</div>'
-
-                    + '<div style="display:flex; flex-direction:column; gap:4px; flex:1.2; min-width:180px;">'
-                    + '<span style="font-size:11px; font-weight:700; color:var(--muted);">Sub-Tipe</span>'
-                    + '<select id="addLetterSubType" class="add-letter-select" onchange="App.onAddLetterSubTypeChange()">'
-                    + '<option value="">Pilih Sub-Tipe</option>'
-                    + '</select>'
-                    + '</div>'
-
-                    + '<div id="addLetterConditionContainer" class="is-hidden" style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:140px;">'
-                    + '<span style="font-size:11px; font-weight:700; color:var(--muted);">Kondisi Tambahan</span>'
-                    + '<select id="addLetterCondition" class="add-letter-select">'
-                    + '<option value="-">-</option>'
-                    + '</select>'
-                    + '</div>'
-
-                    + '<button class="button button-primary button-small" onclick="App.submitAddLetter()" style="align-self:flex-end; min-height:38px;">'
-                    + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
-                    + ' Tambah Surat</button>'
-                    + '</div>';
-            }
-
             var employees = detail.employees.map(function (item) { return '<li>' + _this.escape(item.name) + (item.identifier ? ' · ' + _this.escape(item.identifier) : '') + (item.email ? ' · ' + _this.escape(item.email) : '') + '</li>'; }).join('');
             var schedules = this.asArray(detail.schedules).map(function (item) {
                 return '<li>' + _this.escape(_this.scheduleLabel_(item)) + '</li>';
@@ -401,9 +365,6 @@ App.renderDetail = function (detail) {
                 + '<section class="detail-section"><h3>Petugas / Narasumber</h3><ol>' + (employees || '<li>Belum ada data.</li>') + '</ol></section>';
 
             if (request.status === 'READY') {
-                setTimeout(function () {
-                    _this.onAddLetterActivityTypeChange();
-                }, 50);
             }
         }
 
@@ -580,7 +541,7 @@ App.actionGenerateDoc_ = function (documentId) {
                             _a.label = 1;
                         case 1:
                             _a.trys.push([1, 4, 5, 6]);
-                            return [4 /*yield*/, this.server('generateDocument', documentId, false)];
+                            return [4 /*yield*/, this.server('generateDocument', documentId, true)];
                         case 2:
                             _a.sent();
                             return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id)];
@@ -589,6 +550,7 @@ App.actionGenerateDoc_ = function (documentId) {
                             if (document.getElementById('letterDrawer').classList.contains('is-open')) {
                                 this.openLetterDetail(documentId);
                             }
+                            this.refreshAll(false).catch(console.error);
                             this.toast('Dokumen dan PDF berhasil dibuat.');
                             return [3 /*break*/, 6];
                         case 4:
@@ -617,6 +579,10 @@ App.actionGenerateGoogleDoc_ = function (documentId) {
                             return [4 /*yield*/, this.openRequestDetail(result.requestId)];
                         case 2:
                             _a.sent();
+                            if (document.getElementById('letterDrawer').classList.contains('is-open')) {
+                                this.openLetterDetail(documentId);
+                            }
+                            this.refreshAll(false).catch(console.error);
                             this.toast('Google Docs berhasil dibuat.');
                             return [3 /*break*/, 4];
                         case 3:
@@ -642,6 +608,10 @@ App.actionGeneratePdf_ = function (documentId) {
                             return [4 /*yield*/, this.openRequestDetail(result.requestId)];
                         case 2:
                             _a.sent();
+                            if (document.getElementById('letterDrawer').classList.contains('is-open')) {
+                                this.openLetterDetail(documentId);
+                            }
+                            this.refreshAll(false).catch(console.error);
                             this.toast('PDF berhasil dibuat.');
                             return [3 /*break*/, 4];
                         case 3:
@@ -674,6 +644,7 @@ App.actionCreateDraft_ = function (documentId) {
                             if (document.getElementById('letterDrawer').classList.contains('is-open')) {
                                 this.openLetterDetail(documentId);
                             }
+                            this.refreshAll(false).catch(console.error);
                             this.toast('Draft Gmail berhasil dibuat.');
                             return [3 /*break*/, 6];
                         case 4:
@@ -743,7 +714,7 @@ App.renderDocumentToolbar_ = function (documents, request) {
             if (!documents.length || request.status !== 'READY')
                 return '';
             var options = documents.map(function (doc) { return "\n        <option value=\"".concat(_this.escape(doc.id), "\">").concat(_this.escape(doc.type)).concat(doc.number ? ' | ' + _this.escape(doc.number) : '', "</option>\n      "); }).join('');
-            return "\n        <section class=\"detail-section action-section\">\n          <h3>Aksi dokumen dan email</h3>\n          <div class=\"toolbar-row\">\n            <select data-detail-document-select aria-label=\"Pilih dokumen\">".concat(options, "</select>\n            <button class=\"button button-primary\" data-action=\"generate-doc\">Buat / Update Doc & PDF</button>\n            <button class=\"button button-secondary\" data-action=\"preview-email\">Preview Draft Email</button>\n            <button class=\"button button-secondary\" data-action=\"draft-email\">Buat / Update Gmail Draft</button>\n          </div>\n          <p class=\"finance-output-note\">Gmail Draft hanya dapat dibuat setelah PDF tersedia.</p>\n        </section>\n      ");
+            return "\n        <section class=\"detail-section action-section\">\n          <h3>Aksi dokumen dan email</h3>\n          <div class=\"toolbar-row\">\n            <select data-detail-document-select aria-label=\"Pilih dokumen\">".concat(options, "</select>\n            <button class=\"button button-primary\" data-action=\"generate-doc\">Buat / Update Doc & PDF</button>\n            <button class=\"button button-secondary\" data-action=\"preview-email\">Preview Draft Email</button>\n            <button class=\"button button-secondary\" data-action=\"draft-email\">Buat / Update Gmail Draft</button>\n          </div>\n        </section>\n      ");
         }
 
 App.renderFinanceToolbar_ = function (request, storedArtifacts) {
@@ -827,9 +798,11 @@ App.handleDetailAction = function (event) {
                             if (!(action === 'generate-doc')) return [3 /*break*/, 6];
                             documentId = button.dataset.documentId || this.selectedDetailDocumentId_();
                             this.setBusy(button, true, 'Membuat...');
-                            return [4 /*yield*/, this.server('generateDocument', documentId, false)];
+                            return [4 /*yield*/, this.server('generateDocument', documentId, true)];
                         case 5:
                             _a.sent();
+                            this.openRequestDetail(request.id);
+                            this.refreshAll(false).catch(console.error);
                             this.toast('Dokumen dan PDF siap.');
                             _a.label = 6;
                         case 6:
@@ -851,6 +824,8 @@ App.handleDetailAction = function (event) {
                             return [4 /*yield*/, this.server('createEmailDraft', documentId, false)];
                         case 9:
                             _a.sent();
+                            this.openRequestDetail(request.id);
+                            this.refreshAll(false).catch(console.error);
                             this.toast('Draft Gmail siap.');
                             _a.label = 10;
                         case 10:
@@ -942,39 +917,7 @@ App.openEmailPreview = function (documentId) {
                         case 2:
                             preview = _a.sent();
                             document.getElementById('emailModalTitle').textContent = 'Draft ' + preview.type;
-                            document.getElementById('emailModalBody').innerHTML = "\n          <div class=\"email-envelope\">\n            <input type=\"hidden\" id=\"emailPreviewDocId\" value=\"".concat(_this.escape(preview.documentId), "\">\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewTo\"><strong>To:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewTo\" value=\"").concat(_this.escape(preview.to.join(', ')), "\" readonly>\n            </div>\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewCc\"><strong>CC:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewCc\" value=\"").concat(_this.escape(preview.cc.join(', ')), "\" readonly>\n            </div>\n            <div class=\"envelope-row\">\n              <label for=\"emailPreviewBcc\"><strong>BCC:</strong></label>\n              <input type=\"text\" class=\"form-input\" id=\"emailPreviewBcc\" value=\"").concat(_this.escape((preview.bcc || []).join(', ')), "\" readonly>\n            </div>\n            <div style=\"margin-top:8px\"><span>Subjek</span><br><strong>").concat(_this.escape(preview.subject), "</strong></div>\n            <div style=\"margin-top:8px\"><span>Lampiran</span><br>").concat(preview.hasAttachment ? 'PDF siap' : 'PDF belum dibuat', "</div>\n          </div>\n          ").concat(preview.notes.length ? "<div class=\"notice notice-error\">".concat(_this.escape(preview.notes.join('\n')), "</div>") : '', "\n          <div style=\"margin: 12px 0; display: flex; gap: 8px;\">\n            <button class=\"button button-primary\" id=\"emailModalCreateDraftBtn\">Buat / Update Gmail Draft</button>\n          </div>\n          <iframe class=\"email-preview-frame\" sandbox=\"\" referrerpolicy=\"no-referrer\" srcdoc=\"").concat(_this.escape(_this.emailPreviewDocument(preview.htmlBody)), "\"></iframe>\n        ");
-                            createDraftBtn = document.getElementById('emailModalCreateDraftBtn');
-                            if (createDraftBtn) {
-                                createDraftBtn.addEventListener('click', function () {
-                                    return __awaiter(_this, void 0, void 0, function () {
-                                        var docId, error_modal;
-                                        return __generator(this, function (_a) {
-                                            switch (_a.label) {
-                                                case 0:
-                                                    docId = document.getElementById('emailPreviewDocId').value;
-                                                    this.setBusy(createDraftBtn, true, 'Membuat draft...');
-                                                    _a.label = 1;
-                                                case 1:
-                                                    _a.trys.push([1, 3, 4, 5]);
-                                                    return [4 /*yield*/, this.server('createEmailDraft', docId, true)];
-                                                case 2:
-                                                    _a.sent();
-                                                    this.toast('Draft Gmail siap.');
-                                                    modal.close();
-                                                    return [3 /*break*/, 5];
-                                                case 3:
-                                                    error_modal = _a.sent();
-                                                    this.toast(error_modal.message, true);
-                                                    return [3 /*break*/, 5];
-                                                case 4:
-                                                    this.setBusy(createDraftBtn, false);
-                                                    return [7 /*endfinally*/];
-                                                case 5: return [2 /*return*/];
-                                            }
-                                        });
-                                    });
-                                });
-                            }
+                            document.getElementById('emailModalBody').innerHTML = "<div style=\"margin-top:8px\"><span>Subjek</span><br><strong>".concat(_this.escape(preview.subject), "</strong></div>\n          </div>\n          ").concat(preview.notes.length ? "<div class=\"notice notice-error\">".concat(_this.escape(preview.notes.join('\n')), "</div>") : '', "\n          <iframe class=\"email-preview-frame\" sandbox=\"\" referrerpolicy=\"no-referrer\" srcdoc=\"").concat(_this.escape(_this.emailPreviewDocument(preview.htmlBody)), "\"></iframe>\n        ");
                             return [3 /*break*/, 4];
                         case 3:
                             error_6 = _a.sent();

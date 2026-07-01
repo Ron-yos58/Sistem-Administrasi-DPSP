@@ -5,7 +5,7 @@ const APP_CONFIG = Object.freeze({
   SPREADSHEET_ID: '1jDY5XW86HmDdzYTcPVxpQBULHcP5qW-cxqCuEJZeyVI',
   OUTPUT_FOLDER_ID: '1MsDCWr-xJRd2K91KZLyJago5uiV4L4Dx',
   CACHE_SECONDS: 120,
-  MAX_LIST_ROWS: 250,
+  MAX_LIST_ROWS: 1000,
   SHEETS: {
     MASTER: { name: 'Master Permohonan', aliases: [] },
     DOCUMENTS: { name: 'Dokumen Permohonan', aliases: [] },

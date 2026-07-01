@@ -40,6 +40,7 @@ App.init = function () {
                             data = _a.sent();
                             this.setBootProgress(55, 'Merender dashboard...');
                             this.state.bootstrap = data;
+                            this.state.allRequests = data.requests || [];
                             this.state.requests = data.requests || [];
                             this.hydrateUser(data);
                             this.populateOptions(data.options);
@@ -77,10 +78,53 @@ App.init = function () {
             });
         }
 
+App.showOverlay = function (message) {
+            var overlay = document.getElementById('blockingOverlay');
+            var overlayText = document.getElementById('blockingOverlayText');
+            if (overlay && overlay.style.display !== 'flex') {
+                if (overlayText && message) {
+                    overlayText.textContent = message;
+                }
+                overlay.style.display = 'flex';
+            }
+        }
+
+App.hideOverlay = function () {
+            var overlay = document.getElementById('blockingOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+            }
+        }
+
 App.server = function (method) {
             var args = [];
             for (var _i = 1; _i < arguments.length; _i++) {
                 args[_i - 1] = arguments[_i];
+            }
+            var mutatingMethods = {
+                'saveRequest': 'Menyimpan permohonan...',
+                'addDocument': 'Menambahkan surat baru...',
+                'saveDocumentDetails': 'Menyimpan rincian surat...',
+                'generateDocument': 'Membuat dokumen...',
+                'generateGoogleDoc': 'Membuat Google Doc...',
+                'generatePdf': 'Membuat PDF...',
+                'createEmailDraft': 'Membuat draft email...',
+                'deleteDocument': 'Menghapus surat...',
+                'archiveRequest': 'Mengarsipkan permohonan...',
+                'processRequest': 'Memproses permohonan...',
+                'generateFinanceSheet': 'Membuat lembar honor...',
+                'generateAndExportFinance': 'Mengekspor data honor...',
+                'addReferenceCC': 'Menambahkan CC email...',
+                'setupSystem': 'Menyiapkan sistem...',
+                'migrateLegacyData': 'Memigrasikan data...',
+                'cleanupMigratedAutocratColumns': 'Membersihkan kolom...',
+                'repairMigratedMasterIds': 'Memperbaiki ID Master...',
+                'repairMigratedEmployeeIds': 'Memperbaiki ID Pegawai...',
+                'deleteGeneratedSheets': 'Menghapus sheet...'
+            };
+            var isMutating = mutatingMethods.hasOwnProperty(method);
+            if (isMutating) {
+                App.showOverlay(mutatingMethods[method]);
             }
             return new Promise(function (resolve, reject) {
                 var settled = false;
@@ -88,6 +132,7 @@ App.server = function (method) {
                     if (settled)
                         return;
                     settled = true;
+                    if (isMutating) App.hideOverlay();
                     reject(new Error('Server tidak merespons saat menjalankan ' + method + '.'));
                 }, 60000);
                 var succeed = function (value) {
@@ -95,6 +140,7 @@ App.server = function (method) {
                         return;
                     settled = true;
                     window.clearTimeout(timeout);
+                    if (isMutating) App.hideOverlay();
                     resolve(value);
                 };
                 var fail = function (error) {
@@ -102,6 +148,7 @@ App.server = function (method) {
                         return;
                     settled = true;
                     window.clearTimeout(timeout);
+                    if (isMutating) App.hideOverlay();
                     reject(new Error(error && error.message ? error.message : String(error)));
                 };
                 var runner = google.script.run
@@ -192,6 +239,7 @@ App.refreshAll = function () {
                             data = _a.sent();
                             if (showToast) this.showRefreshProgress_(50);
                             this.state.bootstrap = data;
+                            this.state.allRequests = data.requests || [];
                             this.state.requests = data.requests || [];
                             this.populateOptions(data.options || {});
                             this.renderDashboard(data.summary, this.state.requests);
@@ -223,10 +271,15 @@ App.refreshAll = function () {
             });
         }
 
-App.setBusy = function (button, busy, label) {
-            if (!button)
-                return;
+App.setBusy = function (button, busy, label, hideOverlay) {
+            var overlay = document.getElementById('blockingOverlay');
+            var overlayText = document.getElementById('blockingOverlayText');
             if (busy) {
+                if (overlay && !hideOverlay) {
+                    if (overlayText) overlayText.textContent = label || 'Memproses...';
+                    overlay.style.display = 'flex';
+                }
+                if (!button) return;
                 button.dataset.originalHtml = button.innerHTML;
                 button.setAttribute('aria-busy', 'true');
                 if (!button.classList.contains('icon-button')) {
@@ -235,6 +288,8 @@ App.setBusy = function (button, busy, label) {
                 button.disabled = true;
             }
             else {
+                if (overlay && !hideOverlay) overlay.style.display = 'none';
+                if (!button) return;
                 if (button.dataset.originalHtml)
                     button.innerHTML = button.dataset.originalHtml;
                 button.removeAttribute('aria-busy');
