@@ -516,13 +516,14 @@ App.actionSaveLetterDetails_ = function (documentId) {
                         case 3:
                             _a.sent();
                             this.toast('Perubahan nomor dan penerima email disimpan.');
+                            this.setBusy(btn, false);
                             return [3 /*break*/, 6];
                         case 4:
                             error_save = _a.sent();
                             this.toast(error_save.message, true);
+                            this.setBusy(btn, false);
                             return [3 /*break*/, 6];
                         case 5:
-                            this.setBusy(btn, false);
                             return [7 /*endfinally*/];
                         case 6: return [2 /*return*/];
                     }
@@ -552,13 +553,14 @@ App.actionGenerateDoc_ = function (documentId) {
                             }
                             this.refreshAll(false).catch(console.error);
                             this.toast('Dokumen dan PDF berhasil dibuat.');
+                            this.setBusy(btn, false);
                             return [3 /*break*/, 6];
                         case 4:
                             error_gen = _a.sent();
                             this.toast(error_gen.message, true);
+                            this.setBusy(btn, false);
                             return [3 /*break*/, 6];
                         case 5:
-                            this.setBusy(btn, false);
                             return [7 /*endfinally*/];
                         case 6: return [2 /*return*/];
                     }
@@ -646,13 +648,14 @@ App.actionCreateDraft_ = function (documentId) {
                             }
                             this.refreshAll(false).catch(console.error);
                             this.toast('Draft Gmail berhasil dibuat.');
+                            this.setBusy(btn, false);
                             return [3 /*break*/, 6];
                         case 4:
                             error_draft = _a.sent();
                             this.toast(error_draft.message, true);
+                            this.setBusy(btn, false);
                             return [3 /*break*/, 6];
                         case 5:
-                            this.setBusy(btn, false);
                             return [7 /*endfinally*/];
                         case 6: return [2 /*return*/];
                     }
@@ -681,13 +684,14 @@ App.actionDeleteLetter_ = function (documentId) {
                             this.renderDetail(result);
                             this.closeLetterDrawer();
                             this.toast('Surat berhasil dihapus.');
+                            this.setBusy(btn, false);
                             return [3 /*break*/, 5];
                         case 3:
                             error_del = _a.sent();
                             this.toast(error_del.message, true);
+                            this.setBusy(btn, false);
                             return [3 /*break*/, 5];
                         case 4:
-                            this.setBusy(btn, false);
                             return [7 /*endfinally*/];
                         case 5: return [2 /*return*/];
                     }

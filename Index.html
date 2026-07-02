@@ -5,6 +5,7 @@
   <base target="_top">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Sistem Administrasi Surat DPSP — Universitas Katolik Parahyangan">
   <meta name="theme-color" content="#015850">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -243,9 +244,9 @@
               <option value="status-asc">Urutkan: Status</option>
             </select>
             <select id="requestPageSize" aria-label="Tampilkan jumlah data">
+              <option value="25" selected>Tampilkan: 25</option>
               <option value="10">Tampilkan: 10</option>
               <option value="5">Tampilkan: 5</option>
-              <option value="20">Tampilkan: 20</option>
               <option value="50">Tampilkan: 50</option>
               <option value="100">Tampilkan: 100</option>
             </select>
@@ -517,6 +518,7 @@
 
             <div class="form-actions">
               <button class="button button-secondary" type="button" id="resetForm">Reset</button>
+              <button class="button button-secondary is-hidden" type="button" id="btnRevertChanges">Batal ubah</button>
               <div>
                 <button class="button button-secondary" type="submit" data-save-status="DRAFT" formnovalidate>Simpan
                   draft</button>

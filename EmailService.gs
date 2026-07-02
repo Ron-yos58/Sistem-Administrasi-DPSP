@@ -15,6 +15,7 @@ function previewEmail(documentId, customRecipientsJson) {
 function createEmailDraft(documentId, force, customRecipientsJson) {
   const user = assertAuthorized_();
   assertCanWrite_(user);
+  assertRateLimit_('create_email_draft', 3);
   const id = text_(documentId);
 
   return withScriptLock_(function() {
@@ -96,6 +97,14 @@ function buildEmailPreviewForDocument_(document, customRecipients) {
 
   if (!routing.to.length) {
     throw new Error('Penerima To belum tersedia. Periksa email pegawai, mitra, atau Master CC.');
+  }
+  if (routing.notes && routing.notes.length) {
+    const ccErrors = routing.notes.filter(function(note) {
+      return note.indexOf('Master CC tidak menemukan') !== -1;
+    });
+    if (ccErrors.length) {
+      throw new Error('Gagal memproses email: ' + ccErrors.join('; '));
+    }
   }
   if (routing.to.length + routing.cc.length > 50) {
     throw new Error('Jumlah penerima melebihi batas aman 50 alamat.');

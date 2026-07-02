@@ -1,5 +1,6 @@
 function getSpreadsheet_() {
-  return SpreadsheetApp.openById(APP_CONFIG.SPREADSHEET_ID);
+  const propId = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  return SpreadsheetApp.openById(propId || APP_CONFIG.SPREADSHEET_ID);
 }
 
 function getSheet_(key, required) {
@@ -62,9 +63,9 @@ function assertAdmin_(user) {
 function withScriptLock_(callback) {
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(120000);
+    lock.waitLock(25000);
   } catch (error) {
-    throw new Error('Proses sebelumnya belum selesai. Tunggu sebentar lalu coba kembali.');
+    throw new Error('Sistem sedang sibuk memproses permintaan lain. Silakan coba beberapa saat lagi.');
   }
   try {
     const result = callback();
@@ -127,32 +128,43 @@ function canonicalOrganizationUnit_(value) {
   return canonical || raw;
 }
 
+function isDate_(value) {
+  return value && (value instanceof Date || Object.prototype.toString.call(value) === '[object Date]' || (typeof value.getMonth === 'function'));
+}
+
 function formatDate_(value, pattern) {
   if (!value) return '';
-  const date = value instanceof Date ? value : new Date(value);
+  const date = isDate_(value) ? value : new Date(value);
   if (isNaN(date.getTime())) return text_(value);
   return Utilities.formatDate(date, APP_CONFIG.TIME_ZONE, pattern || 'yyyy-MM-dd');
 }
 
 function parseIsoDate_(value) {
+  if (isDate_(value)) return value;
   const clean = text_(value);
   if (!clean) return null;
   const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) throw new Error('Format tanggal harus YYYY-MM-DD: ' + clean);
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0);
-  if (
-    date.getFullYear() !== Number(match[1]) ||
-    date.getMonth() !== Number(match[2]) - 1 ||
-    date.getDate() !== Number(match[3])
-  ) {
-    throw new Error('Tanggal tidak valid: ' + clean);
+  if (match) {
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0);
+    if (
+      date.getFullYear() !== Number(match[1]) ||
+      date.getMonth() !== Number(match[2]) - 1 ||
+      date.getDate() !== Number(match[3])
+    ) {
+      throw new Error('Tanggal tidak valid: ' + clean);
+    }
+    return date;
   }
-  return date;
+  const fallbackDate = new Date(clean);
+  if (!isNaN(fallbackDate.getTime())) {
+    return fallbackDate;
+  }
+  throw new Error('Format tanggal harus YYYY-MM-DD: ' + clean);
 }
 
 function formatIndonesianDate_(value) {
   if (!value) return '';
-  const date = value instanceof Date ? value : parseIsoDate_(value);
+  const date = isDate_(value) ? value : parseIsoDate_(value);
   const months = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -198,7 +210,7 @@ function joinIndonesian_(values) {
 
 function normalizeTimeValue_(value) {
   if (value == null || value === '') return '';
-  if (value instanceof Date && !isNaN(value.getTime())) {
+  if (isDate_(value) && !isNaN(value.getTime())) {
     return Utilities.formatDate(value, APP_CONFIG.TIME_ZONE, 'HH:mm');
   }
   if (typeof value === 'number' && isFinite(value)) {
@@ -227,7 +239,7 @@ function formatTimeRange_(startTime, endTime) {
 
 function parseTimeRange_(value) {
   if (!value) return { startTime: '', endTime: '' };
-  if (value instanceof Date && !isNaN(value.getTime())) {
+  if (isDate_(value) && !isNaN(value.getTime())) {
     return {
       startTime: Utilities.formatDate(value, APP_CONFIG.TIME_ZONE, 'HH:mm'),
       endTime: ''
@@ -354,7 +366,7 @@ function buildScheduleSummary_(schedules) {
 }
 
 function serializeValue_(value) {
-  if (value instanceof Date) return formatDate_(value, 'yyyy-MM-dd');
+  if (isDate_(value)) return formatDate_(value, 'yyyy-MM-dd');
   if (Array.isArray(value)) return value.map(serializeValue_);
   if (value && typeof value === 'object') {
     return Object.keys(value).reduce(function(result, key) {
@@ -383,7 +395,12 @@ function getJsonCache_(key) {
 
 function putJsonCache_(key, value) {
   try {
-    CacheService.getScriptCache().put(key, JSON.stringify(value), APP_CONFIG.CACHE_SECONDS);
+    const stringified = JSON.stringify(value);
+    if (stringified.length < 100000) {
+      CacheService.getScriptCache().put(key, stringified, APP_CONFIG.CACHE_SECONDS);
+    } else {
+      console.warn('Cache payload too large to store: ' + key + ' (' + stringified.length + ' bytes)');
+    }
   } catch (error) {
     // Oversized cache payloads should not break the main request path.
   }
@@ -444,6 +461,10 @@ function logAudit_(action, entityId, success, details) {
   try {
     const sheet = getSheet_('AUDIT', false);
     if (!sheet) return;
+    let detailsStr = JSON.stringify(details || {});
+    if (detailsStr.length > 5000) {
+      detailsStr = detailsStr.slice(0, 4970) + '...[TRUNCATED_DPSP]';
+    }
     appendDataRow_(sheet, [
       Utilities.getUuid(),
       new Date(),
@@ -451,7 +472,7 @@ function logAudit_(action, entityId, success, details) {
       action,
       entityId || '',
       Boolean(success),
-      JSON.stringify(details || {})
+      detailsStr
     ]);
   } catch (error) {
     console.error('Audit log gagal: ' + error.message);
@@ -556,4 +577,15 @@ function buildEmployeeJoinPlaceholders_(employees) {
   };
   Object.keys(aliases).forEach(function(key) { values[key] = aliases[key]; });
   return values;
+}
+
+function assertRateLimit_(action, cooldownSeconds) {
+  const key = 'rl_' + action + '_' + getCurrentUser_();
+  const props = PropertiesService.getUserProperties();
+  const last = Number(props.getProperty(key) || 0);
+  const now = Date.now();
+  if (now - last < cooldownSeconds * 1000) {
+    throw new Error('Terlalu banyak permintaan. Mohon tunggu ' + cooldownSeconds + ' detik sebelum mencoba kembali.');
+  }
+  props.setProperty(key, String(now));
 }

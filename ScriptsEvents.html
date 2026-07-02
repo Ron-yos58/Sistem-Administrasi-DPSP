@@ -71,7 +71,7 @@ App.bindEvents = function () {
                     if (panel) {
                         var itemsContainer = panel.querySelector('.check-dropdown-items');
                         if (itemsContainer) {
-                            itemsContainer.querySelectorAll('label').forEach(function (lbl) {
+                            itemsContainer.querySelectorAll('label, .dropdown-item-selectable').forEach(function (lbl) {
                                 var text = lbl.textContent.toLowerCase();
                                 if (text.indexOf(query) !== -1) {
                                     lbl.style.display = '';
@@ -157,6 +157,20 @@ App.bindEvents = function () {
                 }
             });
             document.getElementById('resetForm').addEventListener('click', function () { return _this.resetForm(); });
+            document.getElementById('btnRevertChanges').addEventListener('click', function () {
+                if (_this.state.originalEditDetail) {
+                    try {
+                        _this.fillForm(_this.state.originalEditDetail);
+                        _this.switchView('detail');
+                        _this.toast('Perubahan permohonan dibatalkan.');
+                    } catch (e) {
+                        console.error('Gagal membatalkan perubahan:', e);
+                        _this.toast('Gagal membatalkan perubahan: ' + e.message, true);
+                    }
+                } else {
+                    _this.toast('Gagal membatalkan: Data permohonan asli tidak ditemukan.', true);
+                }
+            });
             document.getElementById('requestSearch').addEventListener('input', function () { return _this.scheduleRequestFilter(); });
             document.getElementById('requestSearch').addEventListener('search', function () { return _this.scheduleRequestFilter(0); });
             document.getElementById('requestTypeFilter').addEventListener('change', function () { return _this.scheduleRequestFilter(0); });
@@ -218,6 +232,14 @@ App.bindEvents = function () {
             document.querySelectorAll('[data-close-dialog]').forEach(function (button) {
                 button.addEventListener('click', function () { return document.getElementById(button.dataset.closeDialog).close(); });
             });
+            var emailModal = document.getElementById('emailModal');
+            if (emailModal) {
+                emailModal.addEventListener('click', function (event) {
+                    if (event.target === emailModal) {
+                        emailModal.close();
+                    }
+                });
+            }
         }
 
 App.collectCheckedValues_ = function (selector) {

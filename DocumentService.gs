@@ -13,6 +13,7 @@ function generatePdf(documentId, force) {
 function generateDocumentByMode_(documentId, force, mode) {
   const user = assertAuthorized_();
   assertCanWrite_(user);
+  assertRateLimit_('generate_doc', 3);
   const id = text_(documentId);
 
   return withScriptLock_(function() {
@@ -388,7 +389,8 @@ function getOutputFolder_() {
   const configured = exportSheet.getLastRow() >= 2
     ? text_(exportSheet.getRange(2, 2).getValue())
     : '';
-  return DriveApp.getFolderById(configured || APP_CONFIG.OUTPUT_FOLDER_ID);
+  const folderId = configured || PropertiesService.getScriptProperties().getProperty('OUTPUT_FOLDER_ID') || APP_CONFIG.OUTPUT_FOLDER_ID;
+  return DriveApp.getFolderById(folderId);
 }
 
 function driveFileExists_(fileId) {

@@ -204,7 +204,8 @@ const MASTER_HEADERS = Object.freeze([
   'Client Token',
   'Tanggal Mulai ISO',
   'Tanggal Selesai ISO',
-  'Revision'
+  'Revision',
+  'Manual Recipients'
 ]);
 
 const LEGACY_MASTER_HEADERS = Object.freeze(
@@ -305,3 +306,30 @@ const TEMPLATE_CONFIG_HEADERS = Object.freeze([
   'Template Google Docs',
   'Status Aktif'
 ]);
+
+const FALLBACK_ROUTING = Object.freeze({
+  'Surat Balasan Campus Visit': {
+    defaultTo: 'email mitra',
+    defaultCc: ''
+  },
+  'Surat Rekomendasi Campus Visit - SU': {
+    defaultTo: 'Sekretaris Universitas|Rektorat',
+    defaultCc: ''
+  },
+  'Surat izin pimpinan - Campus Visit': {
+    defaultTo: [
+      'Sekretaris Universitas|Rektorat',
+      'Dekan Fakultas Ekonomi|Fakultas Ekonomi',
+      'Dekan Fakultas Hukum|Fakultas Hukum',
+      'Dekan Fakultas Ilmu Sosial dan Ilmu Politik|Fakultas Ilmu Sosial dan Ilmu Politik',
+      'Dekan Fakultas Teknik|Fakultas Teknik',
+      'Dekan Fakultas Teknologi Rekayasa|Fakultas Teknologi Rekayasa',
+      'Dekan Fakultas Sains|Fakultas Sains',
+      'Dekan Fakultas Vokasi|Fakultas Vokasi',
+      'Direktur Kemahasiswaan|Direktorat Kemahasiswaan',
+      'Direktur Manajemen Aset, Keuangan, dan Sarana Prasarana|Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana',
+      'Kepala Perpustakaan|Unit Perpustakaan'
+    ].join('\n'),
+    defaultCc: ''
+  }
+});

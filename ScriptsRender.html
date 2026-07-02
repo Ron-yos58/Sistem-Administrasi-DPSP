@@ -224,42 +224,8 @@ App.requestWorkflowBadges_ = function (request) {
             var requestBadge = this.requestStatusBadge_(request.status);
             if (String(request.status || '').toUpperCase() === 'ARCHIVED')
                 return requestBadge;
-            var progress = request.documentProgress || this.summarizeDocumentProgress_([], request.status);
+            var progress = request.documentProgress || { status: 'NOT_CREATED' };
             return requestBadge + this.documentProgressBadge_(progress);
-        }
-
-App.summarizeDocumentProgress_ = function (documents, requestStatus) {
-            var summary = {
-                total: documents.length,
-                notCreated: 0,
-                generated: 0,
-                failed: 0,
-                drafted: 0,
-                status: 'NOT_CREATED'
-            };
-            documents.forEach(function (document) {
-                if (document.status === 'ERROR')
-                    summary.failed++;
-                else if (document.status === 'GENERATED')
-                    summary.generated++;
-                else
-                    summary.notCreated++;
-                if (document.emailStatus === 'DRAFTED')
-                    summary.drafted++;
-            });
-            if (requestStatus === 'ARCHIVED')
-                summary.status = 'COMPLETE';
-            else if (summary.failed)
-                summary.status = 'ERROR';
-            else if (!summary.total || summary.notCreated === summary.total)
-                summary.status = 'NOT_CREATED';
-            else if (summary.drafted === summary.total)
-                summary.status = 'DRAFTED';
-            else if (summary.generated === summary.total)
-                summary.status = 'GENERATED';
-            else
-                summary.status = 'IN_PROGRESS';
-            return summary;
         }
 
 App.requestStatusMessage_ = function (status, progress) {

@@ -107,6 +107,7 @@ function saveTravelCosts(payload) {
     supersedeGeneratedArtifacts_(requestId, 'FINANCE_PERJADIN', ['SHEET', 'PDF', 'XLSX']);
     logAudit_('SAVE_TRAVEL_COSTS', requestId, true, { participantKey: participantKey });
     clearFinanceReadinessCache_(requestId);
+    clearAppCache_();
     return { ok: true, item: travelRowToDto_(rows[index]) };
   });
 }
@@ -448,11 +449,19 @@ function renderTravelSheet_(spreadsheet, baseSheet, detail) {
 
   travel.forEach(function(item, index) {
     const safeName = String(item.name || 'Pegawai_' + (index + 1)).replace(/[^A-Za-z0-9 ]/g, '').substring(0, 30);
-    let sheet = index === 0 ? baseSheet : spreadsheet.getSheetByName(safeName);
-    if (!sheet) {
-      sheet = spreadsheet.insertSheet();
+    let sheet = spreadsheet.getSheetByName(safeName);
+    
+    if (!sheet && index === 0) {
+      sheet = baseSheet;
+      try {
+        sheet.setName(safeName);
+      } catch (e) {
+        sheet = spreadsheet.insertSheet(safeName);
+      }
+    } else if (!sheet) {
+      sheet = spreadsheet.insertSheet(safeName);
     }
-    sheet.setName(safeName + (index > 0 && spreadsheet.getSheetByName(safeName) !== sheet ? ' ' + index : ''));
+    
     sheetsToKeep.push(sheet.getSheetId());
     
     sheet.clear();

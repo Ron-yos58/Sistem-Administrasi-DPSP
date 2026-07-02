@@ -52,26 +52,56 @@
     const type = text_(filters.activityType);
     const status = text_(filters.status);
     const rows = sheet.getRange(2, 1, lastRow - 1, MASTER_HEADERS.length).getValues();
-    const documentsByRequest = buildDocumentsByRequestMap_();
-    const items = rows.map(function(row) {
-      return enrichRequestWithDocuments_(masterRowToDto_(row), documentsByRequest);
-    }).filter(function(item) {
-      if (!item.id) return false;
-      if (type && item.activityType !== type) return false;
-      if (status && item.status !== status) return false;
-      if (query) {
-        const haystack = [
-          item.id, item.activityType, item.activityName, item.partnerName,
-          item.documentTypes.join(' '), item.documentNumber
-        ].join(' ').toLowerCase();
-        if (haystack.indexOf(query) === -1) return false;
+    
+    let documentsByRequest = null;
+    function getDocsMap() {
+      if (!documentsByRequest) {
+        documentsByRequest = buildDocumentsByRequestMap_();
       }
-      return true;
-    }).sort(function(a, b) {
+      return documentsByRequest;
+    }
+
+    const filteredDtos = [];
+    for (let i = 0; i < rows.length; i++) {
+      const dto = masterRowToDto_(rows[i]);
+      if (!dto.id) continue;
+      if (type && dto.activityType !== type) continue;
+      if (status && dto.status !== status) continue;
+      
+      if (query) {
+        const basicHaystack = [
+          dto.id, dto.activityType, dto.activityName, dto.partnerName
+        ].join(' ').toLowerCase();
+        
+        if (basicHaystack.indexOf(query) !== -1) {
+          filteredDtos.push(dto);
+        } else {
+          const enriched = enrichRequestWithDocuments_(dto, getDocsMap());
+          const docHaystack = [
+            enriched.documentTypes.join(' '), enriched.documentNumber
+          ].join(' ').toLowerCase();
+          if (docHaystack.indexOf(query) !== -1) {
+            filteredDtos.push(enriched);
+          }
+        }
+      } else {
+        filteredDtos.push(dto);
+      }
+    }
+
+    filteredDtos.sort(function(a, b) {
       return String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt));
     });
 
-    return { items: items.slice(0, limit), total: items.length };
+    const total = filteredDtos.length;
+    const sliced = filteredDtos.slice(0, limit);
+
+    const finalItems = sliced.map(function(item) {
+      if (item.documentProgress) return item;
+      return enrichRequestWithDocuments_(item, getDocsMap());
+    });
+
+    return { items: finalItems, total: total };
   }
 
   function getRequestDetail(requestId) {
@@ -204,9 +234,9 @@
       }
 
       const currentRevision = Number(existing[masterColumn_('Revision') - 1] || 0);
-      if (!isNew && clean.revision !== null && clean.revision !== currentRevision) {
+      if (!isNew && (clean.revision === null || clean.revision === undefined || clean.revision !== currentRevision)) {
         throw new Error(
-          'Data sudah diubah pengguna lain. Muat ulang detail sebelum menyimpan.'
+          'Data sudah diubah pengguna lain atau revisi tidak valid. Muat ulang detail sebelum menyimpan.'
         );
       }
       if (!isNew && !clean.documents.length) {
@@ -407,6 +437,11 @@
     if (!emails.length) {
       throw new Error('Format email tidak valid.');
     }
+    const domain = emails[0].split('@')[1];
+    const allowedDomains = ['unpar.ac.id', 'example.com'];
+    if (allowedDomains.indexOf(domain) === -1) {
+      throw new Error('Email CC harus menggunakan domain resmi instansi: ' + allowedDomains[0]);
+    }
 
     return withScriptLock_(function() {
       const sheet = getSheet_('CC');
@@ -579,27 +614,40 @@
     if (!raw) return '';
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
-    const date = value instanceof Date ? value : new Date(raw);
+    const date = isDate_(value) ? value : new Date(raw);
     if (isNaN(date.getTime())) return '';
     return formatDate_(date, 'yyyy-MM-dd');
   }
 
   function masterRowToDto_(row) {
-    // Parse manual To/CC selections stored as MANUAL_JSON prefix in Keterangan Email
-    var rawNote = String(masterValue_(row, 'Keterangan Email') || '');
     var manualTo = [];
     var manualCc = [];
-    var emailNote = rawNote;
-    if (rawNote.indexOf('MANUAL_JSON:') === 0) {
+    var emailNote = '';
+    
+    var manualRecipientsRaw = '';
+    try {
+      manualRecipientsRaw = String(masterValue_(row, 'Manual Recipients') || '');
+    } catch (e) {}
+
+    if (manualRecipientsRaw) {
       try {
-        var newlinePos = rawNote.indexOf('\n');
-        var jsonStr = newlinePos === -1 ? rawNote.slice(12) : rawNote.slice(12, newlinePos);
-        var parsed = JSON.parse(jsonStr);
+        var parsed = JSON.parse(manualRecipientsRaw);
         manualTo = Array.isArray(parsed.to) ? parsed.to : [];
         manualCc = Array.isArray(parsed.cc) ? parsed.cc : [];
-        emailNote = newlinePos === -1 ? '' : rawNote.slice(newlinePos + 1);
-      } catch (e) {
-        // Parsing failed, treat raw as note
+      } catch (e) {}
+      emailNote = String(masterValue_(row, 'Keterangan Email') || '');
+    } else {
+      var rawNote = String(masterValue_(row, 'Keterangan Email') || '');
+      emailNote = rawNote;
+      if (rawNote.indexOf('MANUAL_JSON:') === 0) {
+        try {
+          var newlinePos = rawNote.indexOf('\n');
+          var jsonStr = newlinePos === -1 ? rawNote.slice(12) : rawNote.slice(12, newlinePos);
+          var parsed = JSON.parse(jsonStr);
+          manualTo = Array.isArray(parsed.to) ? parsed.to : [];
+          manualCc = Array.isArray(parsed.cc) ? parsed.cc : [];
+          emailNote = newlinePos === -1 ? '' : rawNote.slice(newlinePos + 1);
+        } catch (e) {}
       }
     }
     return {
@@ -620,7 +668,9 @@
       partnerEmail: masterValue_(row, 'Email Mitra'),
       letterDate: serializeValue_(masterValue_(row, 'Tanggal Surat Dibuat')),
       day: masterValue_(row, 'Hari Kegiatan'),
-      dateDisplay: masterValue_(row, 'Tanggal Kegiatan'),
+      dateDisplay: isDate_(masterValue_(row, 'Tanggal Kegiatan'))
+        ? formatIndonesianDate_(masterValue_(row, 'Tanggal Kegiatan'))
+        : text_(masterValue_(row, 'Tanggal Kegiatan')),
       startDate: normalizeIsoDateString_(masterValue_(row, 'Tanggal Mulai ISO')),
       endDate: normalizeIsoDateString_(masterValue_(row, 'Tanggal Selesai ISO')),
       activityTime: masterValue_(row, 'Waktu Kegiatan'),
@@ -1058,9 +1108,15 @@
     if (APP_CONFIG.ACTIVITY_TYPES.indexOf(payload.activityType) === -1) {
       errors.push('Tipe kegiatan tidak valid.');
     }
+    if (isReady && (!documents || !documents.length)) {
+      errors.push('Minimal satu jenis surat wajib dipilih.');
+    }
     if (isReady && !payload.activityName) errors.push('Nama kegiatan wajib diisi.');
     if (isReady && !payload.partnerName) errors.push('Nama mitra wajib diisi.');
     if (isReady && !schedules.length) errors.push('Minimal satu sesi jadwal wajib diisi.');
+    if (isReady && !payload.letterDate) {
+      errors.push('Tanggal surat dibuat wajib diisi.');
+    }
 
     schedules.forEach(function(schedule, index) {
       if (!schedule.startDate) {
@@ -1177,14 +1233,14 @@
     setMaster_(row, 'Email CC', routing.cc.join('\n'));
     setMaster_(row, 'Jabatan Email CC', routing.ccRoles.join('\n'));
 
-    // Store manual To/CC selections as structured JSON prefix in Keterangan Email
-    // so they can be restored when the form is re-opened for editing.
-    const manualMeta = 'MANUAL_JSON:' + JSON.stringify({
+    // Store manual To/CC selections in a dedicated column
+    const manualMeta = JSON.stringify({
       to: request.manualTo || [],
       cc: request.manualCc || []
     });
+    setMaster_(row, 'Manual Recipients', manualMeta);
     const noteText = routing.notes.length ? routing.notes.join(' | ') : '';
-    setMaster_(row, 'Keterangan Email', manualMeta + (noteText ? '\n' + noteText : ''));
+    setMaster_(row, 'Keterangan Email', noteText);
   }
 
   function computeEmailRouting_(request, employees, documentType) {
@@ -1328,46 +1384,12 @@
         resolveConfiguredRecipients(cfg.defaultCc, cc, ccRoles);
         resolveConfiguredRecipients(cfg.defaultBcc, bcc, []);
       } else {
-        // Fallback rules
-        if (type === 'Surat Balasan Campus Visit') {
-          emailList_(request.partnerEmail).forEach(function(email) { to.push(email); });
-          toRoles.push(request.partnerName);
-          // addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
-        } else if (type === 'Surat Rekomendasi Campus Visit - SU') {
-          addByRole(to, toRoles, 'Sekretaris Universitas', 'Rektorat');
-          // addByRole(cc, ccRoles, 'Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat');
-        } else if (type === 'Surat izin pimpinan - Campus Visit') {
-          [
-            ['Sekretaris Universitas', 'Rektorat'],
-            ['Dekan Fakultas Ekonomi', 'Fakultas Ekonomi'],
-            ['Dekan Fakultas Hukum', 'Fakultas Hukum'],
-            ['Dekan Fakultas Ilmu Sosial dan Ilmu Politik', 'Fakultas Ilmu Sosial dan Ilmu Politik'],
-            ['Dekan Fakultas Teknik', 'Fakultas Teknik'],
-            ['Dekan Fakultas Teknologi Rekayasa', 'Fakultas Teknologi Rekayasa'],
-            ['Dekan Fakultas Sains', 'Fakultas Sains'],
-            ['Dekan Fakultas Vokasi', 'Fakultas Vokasi'],
-            ['Direktur Kemahasiswaan', 'Direktorat Kemahasiswaan'],
-            ['Direktur Manajemen Aset, Keuangan, dan Sarana Prasarana', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-            ['Kepala Perpustakaan', 'Unit Perpustakaan']
-          ].forEach(function(pair) { addByRole(to, toRoles, pair[0], pair[1]); });
-
-          /*
-          [
-            ['Wakil Rektor Bidang Kerjasama, Alumni, Inovasi dan Bisnis', 'Rektorat'],
-            ['Manajer Aset dan Sarana Prasarana', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-            ['Manajer Kemahasiswaan', 'Direktorat Kemahasiswaan'],
-            ['Koordinator Kebersihan, Keamanan dan Ketertiban', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-            ['Koordinator Kelas dan Fasilitas Pendukung', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-            ['Koordinator Pemeliharaan Kelas', 'Direktorat Manajemen Aset, Keuangan, dan Sarana Prasarana'],
-            ['Koordinator Administrasi Fakultas Ekonomi', 'Fakultas Ekonomi'],
-            ['Koordinator Administrasi Fakultas Hukum', 'Fakultas Hukum'],
-            ['Koordinator Administrasi Fakultas Ilmu Sosial dan Ilmu Politik', 'Fakultas Ilmu Sosial dan Ilmu Politik'],
-            ['Koordinator Administrasi Fakultas Sains', 'Fakultas Sains'],
-            ['Koordinator Administrasi Fakultas Teknik', 'Fakultas Teknik'],
-            ['Koordinator Administrasi Fakultas Teknologi Rekayasa', 'Fakultas Teknologi Rekayasa'],
-            ['Koordinator Administrasi Fakultas Vokasi', 'Fakultas Vokasi']
-          ].forEach(function(pair) { addByRole(cc, ccRoles, pair[0], pair[1]); });
-          */
+        const fallback = FALLBACK_ROUTING[type];
+        if (fallback) {
+          if (type !== 'Surat Permohonan Narasumber kepada Dekan') {
+            resolveConfiguredRecipients(fallback.defaultTo, to, toRoles);
+          }
+          resolveConfiguredRecipients(fallback.defaultCc, cc, ccRoles);
         }
       }
 
@@ -1522,9 +1544,14 @@
   }
 
   function rewriteDataRows_(sheet, rows, width) {
+    const dataHeight = rows.length;
     const oldRows = Math.max((Number(sheet.getLastRow()) || 1) - 1, 0);
-    if (oldRows) sheet.getRange(2, 1, oldRows, width).clearContent();
-    if (rows.length) sheet.getRange(2, 1, rows.length, width).setValues(rows);
+    if (dataHeight > 0) {
+      sheet.getRange(2, 1, dataHeight, width).setValues(rows);
+    }
+    if (oldRows > dataHeight) {
+      sheet.getRange(2 + dataHeight, 1, oldRows - dataHeight, width).clearContent();
+    }
   }
 
   function findRowByColumnValue_(sheet, value, column) {

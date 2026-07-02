@@ -188,3 +188,38 @@ function sheetContentHash_(sheet, format, options) {
     return ('0' + value.toString(16)).slice(-2);
   }).join('');
 }
+
+function cleanupTempExportFiles() {
+  try {
+    const user = assertAuthorized_();
+    if (user.role !== 'ADMIN') {
+      throw new Error('Hanya Admin yang dapat menjalankan pembersihan file.');
+    }
+  } catch (e) {
+    // Allow cron/time-driven triggers to run without active user session
+  }
+
+  const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+  const formattedTime = twelveHoursAgo.toISOString().replace(/\.\d+Z$/, 'Z');
+
+  const queries = [
+    "title contains 'TEMP_EXPORT_' and mimeType = 'application/vnd.google-apps.spreadsheet' and createdDate < '" + formattedTime + "'",
+    "title contains 'TEMP-DPSP-' and mimeType = 'application/vnd.google-apps.spreadsheet' and createdDate < '" + formattedTime + "'"
+  ];
+
+  let deletedCount = 0;
+  queries.forEach(function(query) {
+    const files = DriveApp.searchFiles(query);
+    while (files.hasNext()) {
+      const file = files.next();
+      try {
+        file.setTrashed(true);
+        deletedCount++;
+      } catch (e) {
+        console.error('Gagal menghapus temp file ' + file.getName() + ': ' + e.message);
+      }
+    }
+  });
+
+  return { ok: true, cleaned: deletedCount };
+}

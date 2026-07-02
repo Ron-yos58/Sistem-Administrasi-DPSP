@@ -77,6 +77,15 @@ test('Indonesian day range', () => {
   equal(context.formatDayRange_('2026-06-01', '2026-06-03'), 'Senin - Rabu');
 });
 
+test('single date formatting and edge cases', () => {
+  equal(context.formatDateRange_('2026-07-02', '2026-07-02'), '2 Juli 2026');
+  equal(context.formatDateRange_('2026-07-02', null), '2 Juli 2026');
+  equal(context.formatIndonesianDate_('2026-07-02'), '2 Juli 2026');
+  equal(context.formatIndonesianDate_(new Date('2026-07-02T12:00:00Z')), '2 Juli 2026');
+  equal(context.formatIndonesianDate_(null), '');
+  equal(context.formatIndonesianDate_(''), '');
+});
+
 test('non-contiguous sessions stay one schedule summary', () => {
   const summary = context.buildScheduleSummary_([
     {
@@ -388,8 +397,8 @@ test('legacy Master compacts without Autocrat columns', () => {
   const legacyRow = legacyHeaders.map(header => `value:${header}`);
   const compacted = context.compactLegacyMasterRow_(legacyRow);
 
-  equal(masterHeaders.length, 48);
-  equal(legacyHeaders.length, 84);
+  equal(masterHeaders.length, 49);
+  equal(legacyHeaders.length, 85);
   equal(autocratHeaders.length, 36);
   equal(compacted.length, masterHeaders.length);
   equal(compacted[masterHeaders.indexOf('Email Status')], 'value:Email Status');

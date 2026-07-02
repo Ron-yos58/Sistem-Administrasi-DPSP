@@ -75,10 +75,20 @@ function getSystemStatus() {
     });
   });
 
-  return serializeValue_({
+  const payload = {
     ok: Object.keys(checks).every(function(key) { return checks[key].ok; }),
     user: user,
     version: APP_CONFIG.APP_VERSION,
     checks: checks
-  });
+  };
+
+  if (user.role !== 'ADMIN') {
+    Object.keys(payload.checks).forEach(function(key) {
+      if (payload.checks[key].id) {
+        payload.checks[key].id = '[DIATUR_OLEH_ADMIN]';
+      }
+    });
+  }
+
+  return serializeValue_(payload);
 }
