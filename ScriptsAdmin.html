@@ -149,6 +149,9 @@ App.handleAdminAction = function (button) {
                             this.renderAdminObject('Hapus sheet generate', result);
                             this.setBusy(button, false);
                             return [3 /*break*/, 24];
+                        case 21:
+                            this.setBusy(button, false);
+                            return [3 /*break*/, 24];
                         case 22:
                             error_12 = _a.sent();
                             this.toast(error_12.message, true);
