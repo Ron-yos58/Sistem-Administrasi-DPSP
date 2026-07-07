@@ -803,7 +803,7 @@ test('unchanged document rewrite preserves generated artifacts', () => {
 
 test('process request only activates workflow', () => {
   const source = fs.readFileSync(path.join(root, 'EmailService.gs'), 'utf8');
-  const match = source.match(/function processRequest\([\s\S]*?\n}\n\nfunction buildEmailPreviewInternal_/);
+  const match = source.match(/function processRequest\([\s\S]*?\r?\n}\r?\n\r?\nfunction buildEmailPreviewInternal_/);
   if (!match) throw new Error('processRequest function was not found');
   if (!match[0].includes('activateRequestInternal_')) {
     throw new Error('processRequest does not activate the request');

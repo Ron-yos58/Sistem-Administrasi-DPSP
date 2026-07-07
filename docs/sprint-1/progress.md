@@ -40,3 +40,4 @@
 - [x] UI Admin: tombol Jalankan migrasi dengan konfirmasi MIGRATE dan refresh data otomatis
 - [x] Jadwal multi-sesi: satu permohonan dapat memuat tanggal/waktu terpisah tanpa menggandakan Surat Tugas atau proses tanda tangan
 - [x] Refactor workflow UI: pisahkan status pengajuan dari progres dokumen/email, sederhanakan Ringkasan/Detail, dan jadikan pengajuan selesai hanya-baca
+- [x] Audit+debug statis semua .gs/.html: perbaiki false negative test `processRequest` pada Windows CRLF di `tools/test-pure.js`; `npm run check` kembali hijau
