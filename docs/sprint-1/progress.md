@@ -40,4 +40,7 @@
 - [x] UI Admin: tombol Jalankan migrasi dengan konfirmasi MIGRATE dan refresh data otomatis
 - [x] Jadwal multi-sesi: satu permohonan dapat memuat tanggal/waktu terpisah tanpa menggandakan Surat Tugas atau proses tanda tangan
 - [x] Refactor workflow UI: pisahkan status pengajuan dari progres dokumen/email, sederhanakan Ringkasan/Detail, dan jadikan pengajuan selesai hanya-baca
-- [x] Audit+debug statis semua .gs/.html: perbaiki false negative test `processRequest` pada Windows CRLF di `tools/test-pure.js`; `npm run check` kembali hijau
+- [x] Hotfix edit draft: tampilkan kembali tombol Simpan draft saat mengubah permohonan berstatus DRAFT
+- [x] Admin archive tahunan: preview dan pindahkan permohonan Selesai tahun sebelumnya ke spreadsheet arsip terpisah
+- [x] Penyelarasan copy workflow: README dan kartu Ringkasan menjelaskan lifecycle `Draft`/`Siap Diproses`/`Selesai` terpisah dari progres dokumen
+- [x] UI Admin migrasi: pisahkan migrasi utama dari recovery tools agar cleanup/repair tidak terlihat sebagai langkah wajib

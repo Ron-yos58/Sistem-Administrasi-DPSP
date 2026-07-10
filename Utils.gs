@@ -19,14 +19,18 @@ function getSheet_(key, required) {
 }
 
 function getCurrentUser_() {
-  return String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  var email = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  if (!email) {
+    email = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+  }
+  return email;
 }
 
 function assertAuthorized_() {
   const email = getCurrentUser_();
   if (!email) {
     throw new Error(
-      'Identitas pengguna tidak tersedia. Deploy web app sebagai "User accessing the web app" dan batasi akses ke domain.'
+      'Identitas pengguna tidak tersedia. Pastikan Anda telah masuk (login) dengan Google Account dan deploy web app dikonfigurasi dengan benar.'
     );
   }
 
@@ -37,10 +41,18 @@ function assertAuthorized_() {
 
   const values = accessSheet.getRange(2, 1, accessSheet.getLastRow() - 1, 3).getDisplayValues();
   const match = values.find(function(row) {
-    return String(row[0]).trim().toLowerCase() === email && isAccessActive_(row[1]);
+    return String(row[0]).trim().toLowerCase() === email;
   });
-  if (!match) throw new Error('Akun ' + email + ' tidak memiliki akses.');
-  return { email: email, role: normalizeRole_(match[2]) };
+
+  if (match) {
+    if (!isAccessActive_(match[1])) {
+      throw new Error('Akun ' + email + ' telah dinonaktifkan.');
+    }
+    return { email: email, role: normalizeRole_(match[2]) };
+  }
+
+  // Default ke role OPERATOR untuk semua pengguna unlisted agar bisa mengakses sistem secara penuh kecuali menu admin
+  return { email: email, role: 'OPERATOR' };
 }
 
 function isAccessActive_(value) {
@@ -588,4 +600,22 @@ function assertRateLimit_(action, cooldownSeconds) {
     throw new Error('Terlalu banyak permintaan. Mohon tunggu ' + cooldownSeconds + ' detik sebelum mencoba kembali.');
   }
   props.setProperty(key, String(now));
+}
+
+function normalizeStatusFromSheet_(s) {
+  var clean = String(s || 'DRAFT').toUpperCase().trim();
+  if (clean === 'ARCHIVED' || clean === 'ARCHIEVED' || clean === 'SELESAI') return 'ARCHIVED';
+  if (clean === 'READY' || clean === 'SIAP DIPROSES') return 'READY';
+  return 'DRAFT';
+}
+
+function normalizeStatusToSheet_(status) {
+  var s = String(status || 'DRAFT').toUpperCase().trim();
+  if (s === 'ARCHIVED' || s === 'SELESAI') return 'Selesai';
+  if (s === 'READY' || s === 'SIAP DIPROSES') return 'Siap Diproses';
+  return 'Draft';
+}
+
+function isArchivedStatus_(status) {
+  return normalizeStatusFromSheet_(status) === 'ARCHIVED';
 }

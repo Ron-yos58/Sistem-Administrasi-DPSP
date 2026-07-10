@@ -383,43 +383,6 @@ function assertFinanceExportReady_(requestId, reportKind) {
   return state;
 }
 
-function previewGeneratedSheetCleanup() {
-  const user = assertAuthorized_();
-  assertAdmin_(user);
-  const sheets = getSpreadsheet_().getSheets().filter(isGeneratedSheet_);
-  return sheets.map(function(sheet) {
-    return { name: sheet.getName(), sheetId: sheet.getSheetId() };
-  });
-}
-
-function deleteGeneratedSheets(sheetNames) {
-  const user = assertAuthorized_();
-  assertAdmin_(user);
-  const targets = uniqueTextList_(sheetNames || []);
-
-  return withScriptLock_(function() {
-    const ss = getSpreadsheet_();
-    const deleted = [];
-    targets.forEach(function(name) {
-      const sheet = ss.getSheetByName(name);
-      if (!sheet || !isGeneratedSheet_(sheet)) {
-        throw new Error('Sheet bukan artefak sistem dan tidak boleh dihapus: ' + name);
-      }
-      const metadata = generatedSheetMetadata_(sheet);
-      ss.deleteSheet(sheet);
-      supersedeGeneratedArtifacts_(
-        metadata.requestId,
-        'FINANCE_' + metadata.kind,
-        ['SHEET']
-      );
-      clearFinanceReadinessCache_(metadata.requestId);
-      deleted.push(name);
-    });
-    logAudit_('DELETE_GENERATED_SHEETS', '', true, { deleted: deleted });
-    return { ok: true, deleted: deleted };
-  });
-}
-
 function renderHonorSheet_(sheet, detail) {
   const request = detail.request;
   if (request.activityType === 'Penugasan Narasumber') {

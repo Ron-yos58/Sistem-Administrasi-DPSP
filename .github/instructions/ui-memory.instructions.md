@@ -20,7 +20,7 @@ Keep the sidebar footer credit visible as "Designed and Developed by Ronald Seba
 Treat request lifecycle and document processing as separate concepts:
 
 - Request lifecycle uses `DRAFT`, `READY`, and `ARCHIVED`, displayed as `Draft`, `Siap Diproses`, and `Selesai`.
-- Document progress uses one derived indicator: `Belum Dibuat`, `Doc & PDF Dibuat`, `Draft Email Dibuat`, `Gagal Generate`, or `Selesai / Diarsipkan`.
+- Document progress uses one derived indicator: `Belum Dibuat`, `Doc & PDF Dibuat`, `Draft Email Dibuat`, `Gagal Generate`, or `Selesai`.
 - Render each concept through its centralized helper. Do not add generic `AKTIF` badges or duplicate status blocks.
 - Archived requests are read-only. Hide edit/process actions and require an explicit restore feature before allowing changes.
 

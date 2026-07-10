@@ -1,14 +1,16 @@
 <script>
 var App = typeof App !== "undefined" ? App : {};
 
-App.openRequestDetail = function (requestId) {
+App.openRequestDetail = function (requestId, silent) {
             return __awaiter(this, void 0, void 0, function () {
                 var detail, error_4;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
                             document.getElementById('drawerTitle').textContent = requestId;
-                            document.getElementById('drawerBody').innerHTML = '<div class="skeleton" style="height:180px;border-radius:14px"></div>';
+                            if (!silent) {
+                                document.getElementById('drawerBody').innerHTML = '<div class="skeleton" style="height:180px;border-radius:14px"></div>';
+                            }
                             this.switchView('detail');
                             _a.label = 1;
                         case 1:
@@ -281,22 +283,41 @@ App.renderDetail = function (detail) {
 
                 var condText = props.condition && props.condition !== '-' ? ' · Kondisi: ' + props.condition : '';
 
+                var actionsHtml = '';
+                if (request.status !== 'DRAFT') {
+                    var buttons = [];
+                    // 1. Preview Draft Email
+                    buttons.push('<button class="button button-secondary button-small" onclick="App.openEmailPreview(\'' + _this.escape(doc.id) + '\')">Preview Draft</button>');
+
+                    // 2. Gmail Draft
+                    if (request.status === 'READY') {
+                        buttons.push('<button class="button button-secondary button-small" onclick="App.actionCreateDraft_(\'' + _this.escape(doc.id) + '\')">Buat Gmail Draft</button>');
+                    }
+
+                    // 3. Google Docs
+                    if (doc.docUrl) {
+                        buttons.push('<a class="button button-secondary button-small" href="' + _this.escape(_this.safeExternalUrl_(doc.docUrl)) + '" target="_blank" style="display:inline-flex; align-items:center; gap:4px;"><svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg> Buka Google Docs</a>');
+                    } else if (request.status === 'READY') {
+                        buttons.push('<button class="button button-primary button-small" onclick="App.actionGenerateGoogleDoc_(\'' + _this.escape(doc.id) + '\')">Buat Google Docs</button>');
+                    }
+
+                    // 4. PDF
+                    if (doc.pdfId) {
+                        buttons.push('<a class="button button-secondary button-small" href="' + _this.escape(_this.pdfOpenUrl_(doc)) + '" target="_blank" rel="noopener noreferrer" style="display:inline-flex; align-items:center; gap:4px;"><svg style="width:14px; height:14px;" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v1.25c0 .41-.34.75-.75.75s-.75-.34-.75-.75V8c0-.55.45-1 1-1H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2c-.55 0-1-.45-1-1V8c0-.55.45-1 1-1h2c.83 0 1.5.67 1.5 1.5v3.5zm4-3.75c0 .41-.34.75-.75.75H19v1h.75c.41 0 .75.34.75.75s-.34.75-.75.75H19v1.25c0 .41-.34.75-.75.75s-.75-.34-.75-.75V8c0-.55.45-1 1-1h1.5c.41 0 .75.34.75.75zM9 10h1V8.5H9V10zm5.5 2V8.5h-1V12h1zM4 6c-.55 0-1 .45-1 1v14c0 1.1.9 2 2 2h14c.55 0 1-.45 1-1s-.45-1-1-1H5V7c0-.55-.45-1-1-1z"/></svg> Buka PDF</a>');
+                    } else if (request.status === 'READY') {
+                        buttons.push('<button class="button button-primary button-small" onclick="App.actionGeneratePdf_(\'' + _this.escape(doc.id) + '\')">Buat PDF</button>');
+                    }
+
+                    actionsHtml = '<div class="document-item-actions" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">'
+                        + buttons.join('')
+                        + '</div>';
+                }
+
                 return '<div class="document-item" data-doc-id="' + _this.escape(doc.id) + '">'
                     + '<div class="document-item-head" style="align-items: center;">'
                     + '<div>'
                     + '<strong>' + _this.escape(props.subType) + '</strong>'
                     + '<small>' + _this.escape(props.activityType) + condText + '</small>'
-                    + '</div>'
-                    + '<div class="action-dropdown">'
-                    + '<button class="button button-secondary button-small dropdown-trigger" onclick="App.toggleActionMenu(event, \'' + _this.escape(doc.id) + '\')">Aksi ▾</button>'
-                    + '<div class="action-menu is-hidden" id="menu-' + _this.escape(doc.id) + '" style="right: 0;">'
-                    + '<button class="action-menu-item" onclick="App.openEmailPreview(\'' + _this.escape(doc.id) + '\')">Preview Draft</button>'
-                    + (request.status === 'READY' ? '<button class="action-menu-item" onclick="App.actionCreateDraft_(\'' + _this.escape(doc.id) + '\')">Buat Gmail Draft</button>' : '')
-                    + (request.status === 'READY' ? '<button class="action-menu-item" onclick="App.actionGenerateGoogleDoc_(\'' + _this.escape(doc.id) + '\')">Generate Google Docs</button>' : '')
-                    + (request.status === 'READY' ? '<button class="action-menu-item" onclick="App.actionGeneratePdf_(\'' + _this.escape(doc.id) + '\')">Generate PDF</button>' : '')
-                    + (doc.docUrl ? '<a class="action-menu-item" href="' + _this.escape(_this.safeExternalUrl_(doc.docUrl)) + '" target="_blank">Buka Google Docs</a>' : '<span class="action-menu-item is-disabled">Buka Google Docs</span>')
-                    + (doc.pdfId ? '<a class="action-menu-item" href="' + _this.escape(_this.pdfOpenUrl_(doc)) + '" target="_blank" rel="noopener noreferrer">Buka PDF</a>' : '<span class="action-menu-item is-disabled">Buka PDF</span>')
-                    + '</div>'
                     + '</div>'
                     + '</div>'
                     + '<div class="document-item-body">'
@@ -323,6 +344,7 @@ App.renderDetail = function (detail) {
                     + '</div>'
                     + '</div>'
                     + '</div>'
+                    + actionsHtml
                     + '</div>';
             }).join('');
 
@@ -358,11 +380,15 @@ App.renderDetail = function (detail) {
                 + '</div>'
                 + '</section>'
                 + '<section class="detail-section letter-section">'
-                + '<div class="detail-section-head"><h3>Daftar Surat untuk Kegiatan Ini</h3><span class="letter-count-badge">' + detailDocuments.length + ' surat</span></div>'
+                + '<div class="detail-section-head"><h3>Data Surat untuk Kegiatan ini</h3></div>'
                 + listHtml
                 + addLetterFormHtml
                 + '</section>'
-                + '<section class="detail-section"><h3>Petugas / Narasumber</h3><ol>' + (employees || '<li>Belum ada data.</li>') + '</ol></section>';
+                + '<section class="detail-section"><h3>Petugas / Narasumber</h3><ol>' + (employees || '<li>Belum ada data.</li>') + '</ol></section>'
+                + '<section class="detail-section" style="border-top: 1px solid var(--line); padding-top: 16px; margin-top: 24px; font-size: 11px; color: var(--muted); display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">'
+                + '<div><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--subtle); display: block; margin-bottom: 2px;">Dibuat Oleh</span><strong style="color: var(--ink); font-weight: 600;">' + this.escape(request.createdBy || '-') + '</strong><br><span style="color: var(--subtle);">' + this.escape(request.createdAt || '-') + '</span></div>'
+                + '<div><span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--subtle); display: block; margin-bottom: 2px;">Terakhir Diubah</span><strong style="color: var(--ink); font-weight: 600;">' + this.escape(request.updatedBy || '-') + '</strong><br><span style="color: var(--subtle);">' + this.escape(request.updatedAt || '-') + '</span></div>'
+                + '</section>';
 
             if (request.status === 'READY') {
             }
@@ -457,7 +483,7 @@ App.openLetterDetail = function (documentId, focusField) {
             var docLetterCode = doc.letterCode || 'I';
             var genDate = (doc.status === 'GENERATED' && doc.updatedAt) ? this.formatIndonesianDate_(doc.updatedAt) : '-';
 
-            document.getElementById('letterDrawerBody').innerHTML = "\n      <div style=\"display:flex; flex-direction:column; gap:16px\">\n        <div class=\"detail-hero\" style=\"background:var(--green-900); padding:20px\">\n          <p class=\"eyebrow\">ID Dokumen: " + this.escape(doc.id) + "</p>\n          <h3>" + this.escape(doc.type) + "</h3>\n          <div class=\"status-stack\" style=\"margin-top:10px\">" + this.documentStatusBadge_(doc, detail.request.status) + "</div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Informasi & Status Dokumen</h3>\n          <div class=\"detail-grid\" style=\"margin-top:12px\">\n            <div><span>Status Nomor</span><strong>" + this.escape(numStatus) + "</strong></div>\n            <div><span>Kode Suffix</span><strong>" + this.escape(docLetterCode) + "</strong></div>\n            <div class=\"detail-wide\"><span>Jenis Surat</span><strong>" + this.escape(docLetterType) + "</strong></div>\n            <div class=\"detail-wide\"><span>Terakhir Generate</span><strong>" + this.escape(genDate) + "</strong></div>\n          </div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Jenis & Konfigurasi Surat</h3>\n          <div style=\"display:grid; gap:12px; margin-top:12px\">\n            <label class=\"field\">\n              <span>Tipe Kegiatan *</span>\n              <select id=\"editLetterActivityType\" onchange=\"App.onEditLetterActivityTypeChange()\">\n                " + actOptions + "\n              </select>\n            </label>\n            <label class=\"field\">\n              <span>Sub-Tipe *</span>\n              <select id=\"editLetterSubType\" onchange=\"App.onEditLetterSubTypeChange()\">\n                " + subTypeOptions + "\n              </select>\n            </label>\n            <label class=\"field " + (isCondHidden ? 'is-hidden' : '') + "\" id=\"editLetterConditionContainer\">\n              <span>Kondisi Tambahan</span>\n              <select id=\"editLetterCondition\" onchange=\"App.onEditLetterConditionChange()\">\n                " + condOptions + "\n              </select>\n            </label>\n          </div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Nomor Surat & Routing Penerima</h3>\n          <div style=\"display:grid; gap:12px; margin-top:12px\">\n            <label class=\"field\">\n              <span>Nomor Surat (Lengkap) *</span>\n              <input type=\"text\" id=\"letterDetailNumber\" value=\"" + this.escape(doc.number || '') + "\" placeholder=\"Isi nomor lengkap beserta suffix\">\n            </label>\n            <label class=\"field\">\n              <span>Email To *</span>\n              <input type=\"text\" id=\"letterDetailEmailTo\" value=\"" + this.escape(doc.emailTo || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <label class=\"field\">\n              <span>Email CC</span>\n              <input type=\"text\" id=\"letterDetailEmailCc\" value=\"" + this.escape(doc.emailCc || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <label class=\"field\">\n              <span>Email BCC</span>\n              <input type=\"text\" id=\"letterDetailEmailBcc\" value=\"" + this.escape(doc.emailBcc || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <div style=\"display:flex; justify-content:flex-end; gap:8px; margin-top:8px\">\n              <button class=\"button button-primary\" id=\"btnSaveLetterDetails\">Simpan Perubahan</button>\n            </div>\n          </div>\n        </div>\n\n        <div class=\"detail-section action-section\">\n          <h3>Aksi Dokumen & Email</h3>\n          <div style=\"display:flex; flex-wrap:wrap; gap:8px; margin-top:12px\">\n            <button class=\"button button-primary\" id=\"btnGenerateDoc\">Buat / Update Doc & PDF</button>\n            <button class=\"button button-secondary\" id=\"btnPreviewEmail\">Preview Email</button>\n            <button class=\"button button-secondary\" id=\"btnCreateDraft\">Buat Gmail Draft</button>\n          </div>\n          <div class=\"document-links\" style=\"margin-top:12px\">\n            " + (doc.docUrl ? "<a class=\"button button-secondary button-small\" href=\"" + this.escape(this.safeExternalUrl_(doc.docUrl)) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka Google Doc</a>" : '') + "\n            " + (doc.pdfId ? "<a class=\"button button-secondary button-small\" href=\"" + this.escape(this.pdfOpenUrl_(doc)) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka PDF</a>" : '') + "\n          </div>\n        </div>\n\n        <div style=\"margin-top:24px; padding-top:16px; border-top:1px solid var(--line); display:flex; justify-content:space-between\">\n          <button class=\"button button-danger\" id=\"btnDeleteLetter\">Hapus Surat</button>\n          <button class=\"button button-secondary\" onclick=\"App.closeLetterDrawer()\">Tutup</button>\n        </div>\n      </div>\n    ";
+            document.getElementById('letterDrawerBody').innerHTML = "\n      <div style=\"display:flex; flex-direction:column; gap:16px\">\n        <div class=\"detail-hero\" style=\"background:var(--green-900); padding:20px\">\n          <p class=\"eyebrow\">ID Dokumen: " + this.escape(doc.id) + "</p>\n          <h3>" + this.escape(doc.type) + "</h3>\n          <div class=\"status-stack\" style=\"margin-top:10px\">" + this.documentStatusBadge_(doc, detail.request.status) + "</div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Informasi & Status Dokumen</h3>\n          <div class=\"detail-grid\" style=\"margin-top:12px\">\n            <div><span>Status Nomor</span><strong>" + this.escape(numStatus) + "</strong></div>\n            <div><span>Kode Suffix</span><strong>" + this.escape(docLetterCode) + "</strong></div>\n            <div class=\"detail-wide\"><span>Jenis Surat</span><strong>" + this.escape(docLetterType) + "</strong></div>\n            <div class=\"detail-wide\"><span>Terakhir Generate</span><strong>" + this.escape(genDate) + "</strong></div>\n          </div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Jenis & Konfigurasi Surat</h3>\n          <div style=\"display:grid; gap:12px; margin-top:12px\">\n            <label class=\"field\">\n              <span>Tipe Kegiatan *</span>\n              <select id=\"editLetterActivityType\" onchange=\"App.onEditLetterActivityTypeChange()\">\n                " + actOptions + "\n              </select>\n            </label>\n            <label class=\"field\">\n              <span>Sub-Tipe *</span>\n              <select id=\"editLetterSubType\" onchange=\"App.onEditLetterSubTypeChange()\">\n                " + subTypeOptions + "\n              </select>\n            </label>\n            <label class=\"field " + (isCondHidden ? 'is-hidden' : '') + "\" id=\"editLetterConditionContainer\">\n              <span>Kondisi Tambahan</span>\n              <select id=\"editLetterCondition\" onchange=\"App.onEditLetterConditionChange()\">\n                " + condOptions + "\n              </select>\n            </label>\n          </div>\n        </div>\n\n        <div class=\"detail-section\">\n          <h3>Nomor Surat & Routing Penerima</h3>\n          <div style=\"display:grid; gap:12px; margin-top:12px\">\n            <label class=\"field\">\n              <span>Nomor Surat (Lengkap) *</span>\n              <input type=\"text\" id=\"letterDetailNumber\" value=\"" + this.escape(doc.number || '') + "\" placeholder=\"Isi nomor lengkap beserta suffix\">\n            </label>\n            <label class=\"field\">\n              <span>Email To *</span>\n              <input type=\"text\" id=\"letterDetailEmailTo\" value=\"" + this.escape(doc.emailTo || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <label class=\"field\">\n              <span>Email CC</span>\n              <input type=\"text\" id=\"letterDetailEmailCc\" value=\"" + this.escape(doc.emailCc || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <label class=\"field\">\n              <span>Email BCC</span>\n              <input type=\"text\" id=\"letterDetailEmailBcc\" value=\"" + this.escape(doc.emailBcc || '') + "\" placeholder=\"Gunakan koma untuk banyak email\">\n            </label>\n            <div style=\"display:flex; justify-content:flex-end; gap:8px; margin-top:8px\">\n              <button class=\"button button-primary\" id=\"btnSaveLetterDetails\">Simpan Perubahan</button>\n            </div>\n          </div>\n        </div>\n\n        <div class=\"detail-section action-section\">\n          <h3>Aksi Dokumen & Email</h3>\n          <div style=\"display:flex; flex-wrap:wrap; gap:8px; margin-top:12px\">\n            <button class=\"button button-primary\" id=\"btnGenerateDoc\">Buat Doc & PDF</button>\n            <button class=\"button button-secondary\" id=\"btnPreviewEmail\">Preview Email</button>\n            <button class=\"button button-secondary\" id=\"btnCreateDraft\">Buat Gmail Draft</button>\n          </div>\n          <div class=\"document-links\" style=\"margin-top:12px\">\n            " + (doc.docUrl ? "<a class=\"button button-secondary button-small\" href=\"" + this.escape(this.safeExternalUrl_(doc.docUrl)) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka Google Doc</a>" : '') + "\n            " + (doc.pdfId ? "<a class=\"button button-secondary button-small\" href=\"" + this.escape(this.pdfOpenUrl_(doc)) + "\" target=\"_blank\" rel=\"noopener noreferrer\">Buka PDF</a>" : '') + "\n          </div>\n        </div>\n\n        <div style=\"margin-top:24px; padding-top:16px; border-top:1px solid var(--line); display:flex; justify-content:space-between\">\n          <button class=\"button button-danger\" id=\"btnDeleteLetter\">Hapus Surat</button>\n          <button class=\"button button-secondary\" onclick=\"App.closeLetterDrawer()\">Tutup</button>\n        </div>\n      </div>\n    ";
 
             document.getElementById('btnSaveLetterDetails').addEventListener('click', function () { return _this.actionSaveLetterDetails_(documentId); });
             document.getElementById('btnGenerateDoc').addEventListener('click', function () { return _this.actionGenerateDoc_(documentId); });
@@ -533,19 +559,34 @@ App.actionSaveLetterDetails_ = function (documentId) {
 
 App.actionGenerateDoc_ = function (documentId) {
             return __awaiter(this, void 0, void 0, function () {
-                var btn, result, error_gen;
+                var btn, newTabDoc, newTabPdf, result, error_gen;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
                             btn = document.getElementById('btnGenerateDoc');
                             this.setBusy(btn, true, 'Membuat...');
+                            newTabDoc = window.open('about:blank', '_blank');
+                            newTabPdf = window.open('about:blank', '_blank');
                             _a.label = 1;
                         case 1:
                             _a.trys.push([1, 4, 5, 6]);
                             return [4 /*yield*/, this.server('generateDocument', documentId, true)];
                         case 2:
-                            _a.sent();
-                            return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id)];
+                            result = _a.sent();
+                            if (result && result.document) {
+                                if (newTabDoc && result.document.docUrl) {
+                                    newTabDoc.location.href = this.safeExternalUrl_(result.document.docUrl);
+                                } else if (newTabDoc) {
+                                    try { newTabDoc.close(); } catch (e) {}
+                                }
+                                if (newTabPdf) {
+                                    newTabPdf.location.href = this.pdfOpenUrl_(result.document);
+                                }
+                            } else {
+                                if (newTabDoc) try { newTabDoc.close(); } catch (e) {}
+                                if (newTabPdf) try { newTabPdf.close(); } catch (e) {}
+                            }
+                            return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id, true)];
                         case 3:
                             _a.sent();
                             if (document.getElementById('letterDrawer').classList.contains('is-open')) {
@@ -557,6 +598,12 @@ App.actionGenerateDoc_ = function (documentId) {
                             return [3 /*break*/, 6];
                         case 4:
                             error_gen = _a.sent();
+                            if (newTabDoc) {
+                                try { newTabDoc.close(); } catch (e) {}
+                            }
+                            if (newTabPdf) {
+                                try { newTabPdf.close(); } catch (e) {}
+                            }
                             this.toast(error_gen.message, true);
                             this.setBusy(btn, false);
                             return [3 /*break*/, 6];
@@ -570,28 +617,39 @@ App.actionGenerateDoc_ = function (documentId) {
 
 App.actionGenerateGoogleDoc_ = function (documentId) {
             return __awaiter(this, void 0, void 0, function () {
-                var result, error_gen;
+                var newTab, result, error_gen;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
-                            _a.trys.push([0, 3, , 4]);
-                            return [4 /*yield*/, this.server('generateGoogleDoc', documentId, true)];
+                            newTab = window.open('about:blank', '_blank');
+                            _a.label = 1;
                         case 1:
-                            result = _a.sent();
-                            return [4 /*yield*/, this.openRequestDetail(result.requestId)];
+                            _a.trys.push([1, 4, , 5]);
+                            return [4 /*yield*/, this.server('generateGoogleDoc', documentId, true)];
                         case 2:
+                            result = _a.sent();
+                            if (newTab && result && result.document && result.document.docUrl) {
+                                newTab.location.href = this.safeExternalUrl_(result.document.docUrl);
+                            } else if (newTab) {
+                                try { newTab.close(); } catch (e) {}
+                            }
+                            return [4 /*yield*/, this.openRequestDetail(result.requestId, true)];
+                        case 3:
                             _a.sent();
                             if (document.getElementById('letterDrawer').classList.contains('is-open')) {
                                 this.openLetterDetail(documentId);
                             }
                             this.refreshAll(false).catch(console.error);
                             this.toast('Google Docs berhasil dibuat.');
-                            return [3 /*break*/, 4];
-                        case 3:
+                            return [3 /*break*/, 5];
+                        case 4:
                             error_gen = _a.sent();
+                            if (newTab) {
+                                try { newTab.close(); } catch (e) {}
+                            }
                             this.toast(error_gen.message, true);
-                            return [3 /*break*/, 4];
-                        case 4: return [2 /*return*/];
+                            return [3 /*break*/, 5];
+                        case 5: return [2 /*return*/];
                     }
                 });
             });
@@ -599,28 +657,39 @@ App.actionGenerateGoogleDoc_ = function (documentId) {
 
 App.actionGeneratePdf_ = function (documentId) {
             return __awaiter(this, void 0, void 0, function () {
-                var result, error_pdf;
+                var newTab, result, error_pdf;
                 return __generator(this, function (_a) {
                     switch (_a.label) {
                         case 0:
-                            _a.trys.push([0, 3, , 4]);
-                            return [4 /*yield*/, this.server('generatePdf', documentId, true)];
+                            newTab = window.open('about:blank', '_blank');
+                            _a.label = 1;
                         case 1:
-                            result = _a.sent();
-                            return [4 /*yield*/, this.openRequestDetail(result.requestId)];
+                            _a.trys.push([1, 4, , 5]);
+                            return [4 /*yield*/, this.server('generatePdf', documentId, true)];
                         case 2:
+                            result = _a.sent();
+                            if (newTab && result && result.document) {
+                                newTab.location.href = this.pdfOpenUrl_(result.document);
+                            } else if (newTab) {
+                                try { newTab.close(); } catch (e) {}
+                            }
+                            return [4 /*yield*/, this.openRequestDetail(result.requestId, true)];
+                        case 3:
                             _a.sent();
                             if (document.getElementById('letterDrawer').classList.contains('is-open')) {
                                 this.openLetterDetail(documentId);
                             }
                             this.refreshAll(false).catch(console.error);
                             this.toast('PDF berhasil dibuat.');
-                            return [3 /*break*/, 4];
-                        case 3:
+                            return [3 /*break*/, 5];
+                        case 4:
                             error_pdf = _a.sent();
+                            if (newTab) {
+                                try { newTab.close(); } catch (e) {}
+                            }
                             this.toast(error_pdf.message, true);
-                            return [3 /*break*/, 4];
-                        case 4: return [2 /*return*/];
+                            return [3 /*break*/, 5];
+                        case 5: return [2 /*return*/];
                     }
                 });
             });
@@ -640,7 +709,7 @@ App.actionCreateDraft_ = function (documentId) {
                             return [4 /*yield*/, this.server('createEmailDraft', documentId, false)];
                         case 2:
                             _a.sent();
-                            return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id)];
+                            return [4 /*yield*/, this.openRequestDetail(this.state.currentDetail.request.id, true)];
                         case 3:
                             _a.sent();
                             if (document.getElementById('letterDrawer').classList.contains('is-open')) {
@@ -805,10 +874,13 @@ App.handleDetailAction = function (event) {
                             return [4 /*yield*/, this.server('generateDocument', documentId, true)];
                         case 5:
                             _a.sent();
-                            this.openRequestDetail(request.id);
+                            _a.label = 51;
+                            return [4 /*yield*/, this.openRequestDetail(request.id, true)];
+                        case 51:
+                            _a.sent();
                             this.refreshAll(false).catch(console.error);
                             this.toast('Dokumen dan PDF siap.');
-                            _a.label = 6;
+                            return [2 /*return*/];
                         case 6:
                             if (!(action === 'preview-email')) return [3 /*break*/, 8];
                             return [4 /*yield*/, this.openEmailPreview(button.dataset.documentId || this.selectedDetailDocumentId_())];
@@ -828,17 +900,20 @@ App.handleDetailAction = function (event) {
                             return [4 /*yield*/, this.server('createEmailDraft', documentId, false)];
                         case 9:
                             _a.sent();
-                            this.openRequestDetail(request.id);
+                            _a.label = 91;
+                            return [4 /*yield*/, this.openRequestDetail(request.id, true)];
+                        case 91:
+                            _a.sent();
                             this.refreshAll(false).catch(console.error);
                             this.toast('Draft Gmail siap.');
-                            _a.label = 10;
+                            return [2 /*return*/];
                         case 10:
                             if (!(action === 'process-request')) return [3 /*break*/, 13];
                             this.setBusy(button, true, 'Memproses...');
                             return [4 /*yield*/, this.server('processRequest', request.id, request.revision)];
                         case 11:
                             result = _a.sent();
-                            return [4 /*yield*/, this.openRequestDetail(request.id)];
+                            return [4 /*yield*/, this.openRequestDetail(request.id, true)];
                         case 12:
                             _a.sent();
                             this.toast(result.reused
@@ -850,34 +925,46 @@ App.handleDetailAction = function (event) {
                             kind = button.dataset.kind;
                             if (!kind)
                                 throw new Error('Jenis laporan tidak tersedia.');
-                            outputWindow = window.open('', '_blank');
                             this.setBusy(button, true, 'Membuat sheet...');
                             return [4 /*yield*/, this.server('generateFinanceSheet', request.id, kind)];
                         case 14:
                             result = _a.sent();
-                            if (outputWindow)
-                                outputWindow.location = this.normalizeDriveUrl_(result.url) || result.url;
-                            else
-                                window.open(this.normalizeDriveUrl_(result.url) || result.url, '_blank');
-                            this.toast('Sheet ' + kind.toLowerCase() + ' siap.');
+                            try {
+                                var targetUrl = this.normalizeDriveUrl_(result.url) || result.url;
+                                var openedWin = window.open(targetUrl, '_blank');
+                                if (!openedWin || openedWin.closed || typeof openedWin.closed === 'undefined') {
+                                    this.toast('Sheet ' + kind.toLowerCase() + ' siap. Klik "Buka Spreadsheet" jika tidak terbuka otomatis.', false);
+                                } else {
+                                    this.toast('Sheet ' + kind.toLowerCase() + ' siap.');
+                                }
+                            } catch (e) {
+                                console.error(e);
+                                this.toast('Sheet ' + kind.toLowerCase() + ' siap.', false);
+                            }
                             _a.label = 15;
                         case 15:
                             if (!(action === 'export-finance')) return [3 /*break*/, 17];
                             kind = button.dataset.kind;
                             if (!kind)
                                 throw new Error('Jenis laporan tidak tersedia.');
-                            outputWindow = window.open('', '_blank');
                             this.setBusy(button, true, 'Mengekspor...');
                             return [4 /*yield*/, this.server('generateAndExportFinance', request.id, kind, button.dataset.format)];
                         case 16:
                             result = _a.sent();
-                            if (outputWindow)
-                                outputWindow.location = this.normalizeDriveUrl_(result.url) || result.url;
-                            else
-                                window.open(this.normalizeDriveUrl_(result.url) || result.url, '_blank');
-                            this.toast(result.format + ' siap.');
+                            try {
+                                var targetUrl = this.normalizeDriveUrl_(result.url) || result.url;
+                                var openedWin = window.open(targetUrl, '_blank');
+                                if (!openedWin || openedWin.closed || typeof openedWin.closed === 'undefined') {
+                                    this.toast(result.format + ' siap. Klik "Buka" jika tidak terbuka otomatis.', false);
+                                } else {
+                                    this.toast(result.format + ' siap.');
+                                }
+                            } catch (e) {
+                                console.error(e);
+                                this.toast(result.format + ' siap.', false);
+                            }
                             _a.label = 17;
-                        case 17: return [4 /*yield*/, this.openRequestDetail(request.id)];
+                        case 17: return [4 /*yield*/, this.openRequestDetail(request.id, true)];
                         case 18:
                             _a.sent();
                             return [3 /*break*/, 21];

@@ -204,18 +204,17 @@
               <h2>Alur permohonan</h2>
               <ol class="workflow-list">
                 <li><span>1</span>
-                  <div><strong>Draft</strong><small>Data masih dapat diubah dan belum final.</small></div>
+                  <div><strong>Draft</strong><small>Data masih dapat diubah; aksi generate dokumen masih dikunci.</small></div>
                 </li>
                 <li><span>2</span>
-                  <div><strong>Siap Diproses</strong><small>Data valid; Doc, PDF, dan draft email dapat dibuat.</small>
+                  <div><strong>Siap Diproses</strong><small>Data valid; Doc, PDF, draft email, dan output finance dibuat lewat aksi manual.</small>
                   </div>
                 </li>
                 <li><span>3</span>
-                  <div><strong>Dokumen & Draft Email</strong><small>Progres ditampilkan terpisah untuk setiap
-                      dokumen.</small></div>
+                  <div><strong>Progres Dokumen</strong><small>Badge turunan ditampilkan terpisah: Belum Dibuat, Doc &amp; PDF Dibuat, Draft Email Dibuat, Gagal Generate, atau Selesai.</small></div>
                 </li>
                 <li><span>4</span>
-                  <div><strong>Selesai</strong><small>Ditutup manual setelah seluruh draft email tersedia.</small></div>
+                  <div><strong>Selesai</strong><small>Permohonan ditutup manual setelah draft email siap, lalu menjadi hanya-baca.</small></div>
                 </li>
               </ol>
             </article>
@@ -307,6 +306,7 @@
           <form id="requestForm" novalidate>
             <input type="hidden" id="requestId">
             <input type="hidden" id="requestRevision">
+            <input type="hidden" id="requestCurrentStatus">
             <input type="hidden" id="clientToken">
 
             <div class="form-layout">
@@ -609,19 +609,42 @@
                   <p class="eyebrow">ADMIN AREA</p>
                   <h2>Maintenance sistem</h2>
                 </div>
+                <a id="adminSpreadsheetLink" href="#" target="_blank" class="button button-accent" style="display: none; align-items: center; gap: 8px; text-decoration: none;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                  Buka Spreadsheet Utama
+                </a>
               </div>
+              <p class="helper-text" style="margin: 0 0 16px;">
+                Gunakan <strong>Preview migrasi</strong> lalu <strong>Jalankan migrasi utama</strong> untuk alur standar.
+                Cleanup Autocrat dan repair ID hanya dipakai saat pemulihan data lama atau hasil migrasi parsial.
+              </p>
               <div class="admin-actions">
                 <button class="button button-primary" data-admin-action="system-status">Periksa sistem</button>
                 <button class="button button-secondary" data-admin-action="setup-system">Setup struktur</button>
+                <button class="button button-secondary" data-admin-action="preview-yearly-archive">Preview arsip tahun lalu</button>
+                <button class="button button-accent" data-admin-action="run-yearly-archive">Arsipkan tahun lalu</button>
                 <button class="button button-secondary" data-admin-action="preview-migration">Preview migrasi</button>
-                <button class="button button-accent" data-admin-action="run-migration">Jalankan migrasi</button>
-                <button class="button button-secondary" data-admin-action="cleanup-autocrat">Bersihkan kolom
-                  Autocrat</button>
-                <button class="button button-secondary" data-admin-action="repair-master">Repair ID Master</button>
-                <button class="button button-secondary" data-admin-action="repair-employee">Repair ID Pegawai</button>
-                <button class="button button-secondary" data-admin-action="preview-cleanup">Tinjau sheet
-                  generate</button>
-                <button class="button button-danger" data-admin-action="delete-generated">Hapus sheet terpilih</button>
+                <button class="button button-accent" data-admin-action="run-migration">Jalankan migrasi utama</button>
+              </div>
+              <details class="panel" style="margin-top: 16px;">
+                <summary style="cursor: pointer; font-weight: 700; color: var(--green-900);">Perbaikan lanjutan pasca-migrasi</summary>
+                <p class="helper-text" style="margin: 12px 0 16px;">
+                  Tombol berikut tidak diperlukan untuk migrasi normal. Pakai hanya jika Master lama belum bersih,
+                  atau ada ID kosong/tidak sinkron setelah migrasi atau cleanup manual.
+                </p>
+                <div class="admin-actions">
+                  <button class="button button-secondary" data-admin-action="cleanup-autocrat">Bersihkan kolom Autocrat</button>
+                  <button class="button button-secondary" data-admin-action="repair-master">Repair ID Master</button>
+                  <button class="button button-secondary" data-admin-action="repair-employee">Repair ID Pegawai</button>
+                </div>
+              </details>
+              <div class="helper-text" style="margin-top: 16px;">
+                Migrasi utama sudah mencakup penulisan ulang Master, Dokumen, Jadwal, pembersihan kolom Autocrat,
+                dan remap awal ID pegawai hasil migrasi.
               </div>
               <div class="admin-result" id="adminResult">
                 <div class="empty-state"><strong>Belum ada pemeriksaan</strong><span>Pilih salah satu aksi admin.</span>
@@ -632,7 +655,7 @@
               <p class="eyebrow">BATAS AKSES</p>
               <h2>Admin vs Operator</h2>
               <ul class="info-list">
-                <li><strong>Admin</strong><span>Setup, migrasi, repair, cleanup, dan semua pekerjaan operator.</span>
+                <li><strong>Admin</strong><span>Setup, migrasi, arsip tahunan, recovery data, dan semua pekerjaan operator.</span>
                 </li>
                 <li><strong>Operator</strong><span>Input/edit permohonan, generate dokumen, draft email, honor, dan
                     perjadin.</span></li>

@@ -11,7 +11,8 @@
     return serializeValue_({
       app: {
         name: APP_CONFIG.APP_NAME,
-        version: APP_CONFIG.APP_VERSION
+        version: APP_CONFIG.APP_VERSION,
+        spreadsheetUrl: user.role === 'ADMIN' ? getSpreadsheet_().getUrl() : null
       },
       user: user,
       options: {
@@ -229,7 +230,7 @@
       const existing = isNew
         ? new Array(MASTER_HEADERS.length).fill('')
         : sheet.getRange(rowNumber, 1, 1, MASTER_HEADERS.length).getValues()[0];
-      if (!isNew && text_(masterValue_(existing, 'Status Permohonan')) === 'ARCHIVED') {
+      if (!isNew && isArchivedStatus_(text_(masterValue_(existing, 'Status Permohonan')))) {
         throw new Error('Permohonan selesai bersifat hanya-baca dan tidak dapat diubah.');
       }
 
@@ -294,7 +295,7 @@
       setMaster_(row, 'Jabatan Penandatangan', clean.signerRole);
       setMaster_(row, 'Honor', clean.honor);
       setMaster_(row, 'Perjalanan Dinas', clean.travel);
-      setMaster_(row, 'Status Permohonan', clean.status);
+      setMaster_(row, 'Status Permohonan', normalizeStatusToSheet_(clean.status));
       setMaster_(row, 'Diubah Oleh', user.email);
       setMaster_(row, 'Diubah Pada', now);
       setMaster_(row, 'Client Token', clean.clientToken);
@@ -359,7 +360,7 @@
       if (Number(revision) !== currentRevision) {
         throw new Error('Revision tidak cocok. Muat ulang data.');
       }
-      if (text_(masterValue_(row, 'Status Permohonan')) !== 'READY') {
+      if (normalizeStatusFromSheet_(text_(masterValue_(row, 'Status Permohonan'))) !== 'READY') {
         throw new Error('Hanya permohonan berstatus Siap Diproses yang dapat ditandai selesai.');
       }
       const progress = summarizeDocumentWorkflow_(getDocumentsByRequest_(id), 'READY');
@@ -367,7 +368,7 @@
         throw new Error('Seluruh dokumen harus berhasil dibuat dan seluruh draft email harus tersedia sebelum permohonan ditandai selesai.');
       }
 
-      setMaster_(row, 'Status Permohonan', 'ARCHIVED');
+      setMaster_(row, 'Status Permohonan', normalizeStatusToSheet_('ARCHIVED'));
       setMaster_(row, 'Diubah Oleh', user.email);
       setMaster_(row, 'Diubah Pada', new Date());
       setMaster_(row, 'Revision', currentRevision + 1);
@@ -406,7 +407,7 @@
     validateRequestPayload_(clean);
 
     const nextRevision = Number(request.revision || 0) + 1;
-    setMaster_(row, 'Status Permohonan', 'READY');
+    setMaster_(row, 'Status Permohonan', normalizeStatusToSheet_('READY'));
     setMaster_(row, 'Diubah Oleh', user.email);
     setMaster_(row, 'Diubah Pada', new Date());
     setMaster_(row, 'Revision', nextRevision);
@@ -684,7 +685,7 @@
       emailCc: masterValue_(row, 'Email CC'),
       emailNote: emailNote,
       emailStatus: masterValue_(row, 'Email Status'),
-      status: masterValue_(row, 'Status Permohonan') || 'DRAFT',
+      status: normalizeStatusFromSheet_(masterValue_(row, 'Status Permohonan')),
       createdBy: masterValue_(row, 'Dibuat Oleh'),
       createdAt: serializeValue_(masterValue_(row, 'Dibuat Pada')),
       updatedBy: masterValue_(row, 'Diubah Oleh'),

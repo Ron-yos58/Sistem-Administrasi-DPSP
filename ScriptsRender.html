@@ -46,7 +46,7 @@ App.renderDashboard = function (summary, requests) {
             document.getElementById('metricGrid').innerHTML = metrics.map(function (item) { return "\n        <article class=\"metric-card\">\n          <span class=\"metric-label\">".concat(_this.escape(item[0]), "</span>\n          <strong>").concat(Number(item[1] || 0), "</strong>\n          <span>").concat(_this.escape(item[2]), "</span>\n        </article>\n      "); }).join('');
             var html = '';
             if (requests.length > 0) {
-                html += "\n            <div class=\"request-row request-row-header\">\n              <div>Kegiatan / Mitra</div>\n              <div>Tanggal / Tipe</div>\n              <div>Status</div>\n              <div></div>\n            </div>\n            ";
+                html += "\n            <div class=\"request-row request-row-header\">\n              <div>Kegiatan / Mitra</div>\n              <div>Tanggal Kegiatan / Tipe</div>\n              <div>Status</div>\n              <div></div>\n            </div>\n            ";
                 html += requests.slice(0, 6).map(function (item) { return "\n            <div class=\"request-row\">\n              <div><strong>".concat(_this.escape(item.activityName || item.id), "</strong><small>").concat(_this.escape(item.id), " \u00B7 ").concat(_this.escape(item.partnerName), "</small></div>\n              <div><span>").concat(_this.escape(item.dateDisplay || '-'), "</span><small>").concat(_this.escape(item.activityType), "</small></div>\n              <div class=\"status-stack\">").concat(_this.requestWorkflowBadges_(item), "</div>\n              <button class=\"button button-secondary button-small\" data-request-id=\"").concat(_this.escape(item.id), "\">Detail</button>\n            </div>\n          "); }).join('');
             }
             else {
@@ -199,14 +199,14 @@ App.documentProgressBadge_ = function (progress) {
                 GENERATED: ['generated', 'Doc & PDF Dibuat'],
                 DRAFTED: ['drafted', 'Draft Email Dibuat'],
                 ERROR: ['error', 'Gagal Generate'],
-                COMPLETE: ['archived', 'Selesai / Diarsipkan']
+                COMPLETE: ['archived', 'Selesai']
             }[clean] || ['pending', clean];
             return this.statusPill_(meta[0], meta[1]);
         }
 
 App.documentStatusBadge_ = function (document, requestStatus) {
             if (String(requestStatus || '').toUpperCase() === 'ARCHIVED') {
-                return this.statusPill_('archived', 'Selesai / Diarsipkan');
+                return this.statusPill_('archived', 'Selesai');
             }
             if (String(document.status || '').toUpperCase() === 'ERROR') {
                 return this.statusPill_('error', 'Gagal Generate');

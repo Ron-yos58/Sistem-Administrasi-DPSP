@@ -139,7 +139,7 @@ Semua sesi dalam satu pengajuan memakai satu `ID Permohonan`, daftar orang, doku
 - `Siap Diproses`: data sudah tervalidasi. Status ini tidak berarti dokumen atau draft email sudah dibuat.
 - `Selesai`: seluruh Doc/PDF dan draft Gmail sudah tersedia, lalu operator menutup permohonan secara manual. Permohonan menjadi hanya-baca.
 
-Progres dokumen ditampilkan terpisah dari status permohonan: `Belum Dibuat`, `Doc & PDF Dibuat`, `Draft Email Dibuat`, `Gagal Generate`, atau `Selesai / Diarsipkan`. Aplikasi membuat draft Gmail, tetapi tidak dapat memastikan email benar-benar sudah dikirim oleh operator.
+Progres dokumen ditampilkan terpisah dari status permohonan: `Belum Dibuat`, `Doc & PDF Dibuat`, `Draft Email Dibuat`, `Gagal Generate`, atau `Selesai`. Aplikasi membuat draft Gmail, tetapi tidak dapat memastikan email benar-benar sudah dikirim oleh operator.
 
 ## 9. Batas Google Apps Script
 

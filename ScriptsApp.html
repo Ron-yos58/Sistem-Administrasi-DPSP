@@ -164,11 +164,11 @@ App.server = function (method) {
                 'generateAndExportFinance': 'Mengekspor data honor...',
                 'addReferenceCC': 'Menambahkan CC email...',
                 'setupSystem': 'Menyiapkan sistem...',
+                'archivePreviousYearData': 'Memindahkan data ke arsip tahunan...',
                 'migrateLegacyData': 'Memigrasikan data...',
                 'cleanupMigratedAutocratColumns': 'Membersihkan kolom...',
                 'repairMigratedMasterIds': 'Memperbaiki ID Master...',
-                'repairMigratedEmployeeIds': 'Memperbaiki ID Pegawai...',
-                'deleteGeneratedSheets': 'Menghapus sheet...'
+                'repairMigratedEmployeeIds': 'Memperbaiki ID Pegawai...'
             };
             var isMutating = mutatingMethods.hasOwnProperty(method);
             if (isMutating) {
@@ -216,6 +216,16 @@ App.hydrateUser = function (data) {
             document.getElementById('userEmail').textContent = email;
             document.getElementById('appVersion').textContent = 'v' + data.app.version;
             document.body.classList.toggle('is-admin', role === 'ADMIN');
+
+            var linkEl = document.getElementById('adminSpreadsheetLink');
+            if (linkEl) {
+                if (role === 'ADMIN' && data.app.spreadsheetUrl) {
+                    linkEl.href = data.app.spreadsheetUrl;
+                    linkEl.style.display = 'inline-flex';
+                } else {
+                    linkEl.style.display = 'none';
+                }
+            }
         }
 
 App.switchView = function (view) {
@@ -276,7 +286,7 @@ App.refreshAll = function () {
                     switch (_a.label) {
                         case 0:
                             button = document.getElementById('refreshButton');
-                            this.setBusy(button, true, 'Memuat...');
+                            this.setBusy(button, true, 'Memuat...', !showToast);
                             if (showToast) this.showRefreshProgress_(5);
                             _a.label = 1;
                         case 1:
@@ -304,13 +314,13 @@ App.refreshAll = function () {
                             if (showToast) this.showRefreshProgress_(90);
                             this.renderReferences(data.references);
                             if (showToast) this.showRefreshProgress_(100, true, false);
-                            this.setBusy(button, false);
+                            this.setBusy(button, false, undefined, !showToast);
                             return [3 /*break*/, 8];
                         case 6:
                             error_11 = _a.sent();
                             if (showToast) this.showRefreshProgress_(100, true, true);
                             this.toast(error_11.message, true);
-                            this.setBusy(button, false);
+                            this.setBusy(button, false, undefined, !showToast);
                             return [3 /*break*/, 8];
                         case 7:
                             return [7 /*endfinally*/];

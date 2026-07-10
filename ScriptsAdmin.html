@@ -43,135 +43,99 @@ App.addReferenceCC = function () {
             });
         }
 
-App.handleAdminAction = function (button) {
-            return __awaiter(this, void 0, void 0, function () {
-                var action, result, result, result, confirmation, result, result, result, result, result, selected, result, error_12;
-                return __generator(this, function (_a) {
-                    switch (_a.label) {
-                        case 0:
-                            if (!document.body.classList.contains('is-admin')) {
-                                this.toast('Aksi ini hanya untuk Admin.', true);
-                                return [2 /*return*/];
-                            }
-                            action = button.dataset.adminAction;
-                            this.setBusy(button, true, 'Memproses...');
-                            _a.label = 1;
-                        case 1:
-                            _a.trys.push([1, 22, 23, 24]);
-                            if (!(action === 'system-status')) return [3 /*break*/, 3];
-                            return [4 /*yield*/, this.server('getSystemStatus')];
-                        case 2:
-                            result = _a.sent();
-                            this.renderAdminObject('Status sistem', result);
-                            _a.label = 3;
-                        case 3:
-                            if (!(action === 'setup-system')) return [3 /*break*/, 5];
-                            if (!confirm('Jalankan setupSystem? Header sheet dan konfigurasi dasar akan diperiksa/dilengkapi.'))
-                                return [2 /*return*/];
-                            return [4 /*yield*/, this.server('setupSystem')];
-                        case 4:
-                            result = _a.sent();
-                            this.renderAdminObject('Setup struktur', result);
-                            _a.label = 5;
-                        case 5:
-                            if (!(action === 'preview-migration')) return [3 /*break*/, 7];
-                            return [4 /*yield*/, this.server('previewLegacyMigration')];
-                        case 6:
-                            result = _a.sent();
-                            this.renderAdminObject('Preview migrasi', result);
-                            _a.label = 7;
-                        case 7:
-                            if (!(action === 'run-migration')) return [3 /*break*/, 10];
-                            confirmation = prompt('Migrasi akan membuat backup dan mengubah struktur data. Ketik MIGRATE untuk melanjutkan.');
-                            if (confirmation === null)
-                                return [2 /*return*/];
-                            if (confirmation.trim() !== 'MIGRATE') {
-                                throw new Error('Migrasi dibatalkan. Konfirmasi harus tepat: MIGRATE');
-                            }
-                            return [4 /*yield*/, this.server('migrateLegacyData', confirmation.trim())];
-                        case 8:
-                            result = _a.sent();
-                            this.renderAdminObject('Hasil migrasi', result);
-                            this.toast('Migrasi selesai.');
-                            return [4 /*yield*/, this.refreshAll(false)];
-                        case 9:
-                            _a.sent();
-                            _a.label = 10;
-                        case 10:
-                            if (!(action === 'cleanup-autocrat')) return [3 /*break*/, 13];
-                            if (!confirm('Hapus kolom Autocrat AM-BV dari Master Permohonan? Backup tersembunyi akan dibuat terlebih dahulu.'))
-                                return [2 /*return*/];
-                            return [4 /*yield*/, this.server('cleanupMigratedAutocratColumns')];
-                        case 11:
-                            result = _a.sent();
-                            this.renderAdminObject('Cleanup kolom Autocrat', result);
-                            this.toast(result.message || 'Kolom Autocrat berhasil dibersihkan.');
-                            return [4 /*yield*/, this.refreshAll(false)];
-                        case 12:
-                            _a.sent();
-                            _a.label = 13;
-                        case 13:
-                            if (!(action === 'repair-master')) return [3 /*break*/, 15];
-                            if (!confirm('Repair ID Master kosong? Jalankan hanya saat dibutuhkan.'))
-                                return [2 /*return*/];
-                            return [4 /*yield*/, this.server('repairMigratedMasterIds')];
-                        case 14:
-                            result = _a.sent();
-                            this.renderAdminObject('Repair ID Master', result);
-                            _a.label = 15;
-                        case 15:
-                            if (!(action === 'repair-employee')) return [3 /*break*/, 17];
-                            if (!confirm('Repair ID Pegawai hasil migrasi? Jalankan hanya saat dibutuhkan.'))
-                                return [2 /*return*/];
-                            return [4 /*yield*/, this.server('repairMigratedEmployeeIds')];
-                        case 16:
-                            result = _a.sent();
-                            this.renderAdminObject('Repair ID Pegawai', result);
-                            _a.label = 17;
-                        case 17:
-                            if (!(action === 'preview-cleanup')) return [3 /*break*/, 19];
-                            return [4 /*yield*/, this.server('previewGeneratedSheetCleanup')];
-                        case 18:
-                            result = _a.sent();
-                            this.renderGeneratedSheetCleanup(result || []);
-                            _a.label = 19;
-                        case 19:
-                            if (!(action === 'delete-generated')) return [3 /*break*/, 21];
-                            selected = Array.from(document.querySelectorAll('[data-generated-sheet]:checked'))
-                                .map(function (input) { return input.value; });
-                            if (!selected.length)
-                                throw new Error('Pilih minimal satu sheet generate dari hasil tinjauan.');
-                            if (!confirm('Hapus sheet generate terpilih? Data di sheet tersebut akan hilang dari spreadsheet.'))
-                                return [2 /*return*/];
-                            return [4 /*yield*/, this.server('deleteGeneratedSheets', selected)];
-                        case 20:
-                            result = _a.sent();
-                            this.renderAdminObject('Hapus sheet generate', result);
-                            this.setBusy(button, false);
-                            return [3 /*break*/, 24];
-                        case 21:
-                            this.setBusy(button, false);
-                            return [3 /*break*/, 24];
-                        case 22:
-                            error_12 = _a.sent();
-                            this.toast(error_12.message, true);
-                            this.setBusy(button, false);
-                            return [3 /*break*/, 24];
-                        case 23:
-                            return [7 /*endfinally*/];
-                        case 24: return [2 /*return*/];
+App.handleAdminAction = async function (button) {
+            var action, archiveYear, archiveConfirmation, confirmation, result;
+            if (!document.body.classList.contains('is-admin')) {
+                this.toast('Aksi ini hanya untuk Admin.', true);
+                return;
+            }
+            action = button.dataset.adminAction;
+            this.setBusy(button, true, 'Memproses...');
+            try {
+                if (action === 'system-status') {
+                    result = await this.server('getSystemStatus');
+                    this.renderAdminObject('Status sistem', result);
+                    return;
+                }
+                if (action === 'setup-system') {
+                    if (!confirm('Jalankan setupSystem? Header sheet dan konfigurasi dasar akan diperiksa/dilengkapi.'))
+                        return;
+                    result = await this.server('setupSystem');
+                    this.renderAdminObject('Setup struktur', result);
+                    return;
+                }
+                if (action === 'preview-yearly-archive') {
+                    archiveYear = new Date().getFullYear() - 1;
+                    result = await this.server('previewYearlyArchive', archiveYear);
+                    this.renderAdminObject('Preview arsip tahun ' + archiveYear, result);
+                    return;
+                }
+                if (action === 'run-yearly-archive') {
+                    archiveYear = new Date().getFullYear() - 1;
+                    archiveConfirmation = prompt('Arsip akan memindahkan permohonan Selesai tahun ' + archiveYear + ' ke spreadsheet arsip. Ketik ARCHIVE-' + archiveYear + ' untuk melanjutkan.');
+                    if (archiveConfirmation === null)
+                        return;
+                    if (archiveConfirmation.trim() !== 'ARCHIVE-' + archiveYear) {
+                        throw new Error('Arsip dibatalkan. Konfirmasi harus tepat: ARCHIVE-' + archiveYear);
                     }
-                });
-            });
+                    result = await this.server('archivePreviousYearData', archiveYear, archiveConfirmation.trim());
+                    this.renderAdminObject('Hasil arsip tahun ' + archiveYear, result);
+                    this.toast(result.message || 'Arsip tahunan selesai.');
+                    await this.refreshAll(false);
+                    return;
+                }
+                if (action === 'preview-migration') {
+                    result = await this.server('previewLegacyMigration');
+                    this.renderAdminObject('Preview migrasi', result);
+                    return;
+                }
+                if (action === 'run-migration') {
+                    confirmation = prompt('Migrasi akan membuat backup dan mengubah struktur data. Ketik MIGRATE untuk melanjutkan.');
+                    if (confirmation === null)
+                        return;
+                    if (confirmation.trim() !== 'MIGRATE') {
+                        throw new Error('Migrasi dibatalkan. Konfirmasi harus tepat: MIGRATE');
+                    }
+                    result = await this.server('migrateLegacyData', confirmation.trim());
+                    this.renderAdminObject('Hasil migrasi', result);
+                    this.toast('Migrasi selesai.');
+                    await this.refreshAll(false);
+                    return;
+                }
+                if (action === 'cleanup-autocrat') {
+                    if (!confirm('Hapus kolom Autocrat AM-BV dari Master Permohonan? Backup tersembunyi akan dibuat terlebih dahulu.'))
+                        return;
+                    result = await this.server('cleanupMigratedAutocratColumns');
+                    this.renderAdminObject('Cleanup kolom Autocrat', result);
+                    this.toast(result.message || 'Kolom Autocrat berhasil dibersihkan.');
+                    await this.refreshAll(false);
+                    return;
+                }
+                if (action === 'repair-master') {
+                    if (!confirm('Repair ID Master kosong? Jalankan hanya saat dibutuhkan.'))
+                        return;
+                    result = await this.server('repairMigratedMasterIds');
+                    this.renderAdminObject('Repair ID Master', result);
+                    return;
+                }
+                if (action === 'repair-employee') {
+                    if (!confirm('Repair ID Pegawai hasil migrasi? Jalankan hanya saat dibutuhkan.'))
+                        return;
+                    result = await this.server('repairMigratedEmployeeIds');
+                    this.renderAdminObject('Repair ID Pegawai', result);
+                    return;
+                }
+            }
+            catch (error_12) {
+                this.toast(error_12.message, true);
+            }
+            finally {
+                this.setBusy(button, false);
+            }
         }
 
 App.renderAdminObject = function (title, result) {
             document.getElementById('adminResult').innerHTML = "\n        <div class=\"admin-output\">\n          <h2>".concat(this.escape(title), "</h2>\n          <pre>").concat(this.escape(JSON.stringify(result, null, 2)), "</pre>\n        </div>\n      ");
-        }
-
-App.renderGeneratedSheetCleanup = function (items) {
-            var _this = this;
-            document.getElementById('adminResult').innerHTML = "\n        <div class=\"admin-output\">\n          <h2>Sheet generate</h2>\n          ".concat(items.length ? items.map(function (item) { return "\n            <label class=\"cleanup-item\">\n              <input type=\"checkbox\" data-generated-sheet value=\"".concat(_this.escape(item.name), "\">\n              <span>").concat(_this.escape(item.name), "</span>\n            </label>\n          "); }).join('') : '<p class="helper-text">Tidak ada sheet generate yang bisa dibersihkan.</p>', "\n        </div>\n      ");
         }
 
 </script>

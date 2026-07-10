@@ -296,7 +296,7 @@ function migrateLegacyData(confirmText) {
       setMaster_(row, 'Jenis Surat', uniqueTextList_(documentTypes)[0] || '');
       setMaster_(row, 'ID Permohonan', id);
       setMaster_(row, 'Nomor Surat', documentNumbers.join('\n'));
-      setMaster_(row, 'Status Permohonan', 'DRAFT');
+      setMaster_(row, 'Status Permohonan', normalizeStatusToSheet_('DRAFT'));
       setMaster_(row, 'Dibuat Oleh', user.email);
       setMaster_(row, 'Dibuat Pada', now);
       setMaster_(row, 'Diubah Oleh', user.email);

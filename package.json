@@ -3,6 +3,16 @@
   "private": true,
   "scripts": {
     "test": "npm run check",
-    "check": "node tools/check-syntax.js && node tools/test-pure.js"
+    "check": "node tools/check-syntax.js && node tools/test-pure.js",
+    "dev": "tsx server.ts",
+    "build": "esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "tsx": "^4.23.0"
   }
 }

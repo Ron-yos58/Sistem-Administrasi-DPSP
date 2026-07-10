@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Administrasi DPSP",
+  "description": "Sistem Administrasi Surat dan Laporan Keuangan DPSP Universitas Katolik Parahyangan",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
