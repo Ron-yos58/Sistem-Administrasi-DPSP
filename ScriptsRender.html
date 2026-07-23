@@ -37,11 +37,17 @@ App.renderSignerOptions = function (signers) {
 
 App.renderDashboard = function (summary, requests) {
             var _this = this;
+            var pendingFollowUp = Number(summary.pendingFollowUp || 0);
+            var completedCount = this.asArray(requests).filter(function (item) {
+                return String(item.status || '').toUpperCase() === 'ARCHIVED';
+            }).length;
             var metrics = [
-                ['Permohonan aktif', summary.total, 'Belum ditandai selesai'],
-                ['Draft', summary.drafts, 'Masih dapat diubah'],
-                ['Siap diproses', summary.ready, 'Data sudah tervalidasi'],
-                ['Perlu tindak lanjut', summary.pendingFollowUp || 0, 'Dokumen atau email belum tuntas']
+                ['Permohonan Aktif / Draft', summary.total,
+                    String(summary.drafts || 0) + ' masih draft dan dapat diubah'],
+                ['Siap Diproses / Perlu Tindak Lanjut', summary.ready, pendingFollowUp > 0
+                    ? String(pendingFollowUp) + ' permohonan masih butuh aksi dokumen/email'
+                    : 'Tidak ada tindak lanjut; semua READY sudah tuntas'],
+                ['Selesai', completedCount, 'Permohonan sudah ditutup dan bersifat arsip']
             ];
             document.getElementById('metricGrid').innerHTML = metrics.map(function (item) { return "\n        <article class=\"metric-card\">\n          <span class=\"metric-label\">".concat(_this.escape(item[0]), "</span>\n          <strong>").concat(Number(item[1] || 0), "</strong>\n          <span>").concat(_this.escape(item[2]), "</span>\n        </article>\n      "); }).join('');
             var html = '';
