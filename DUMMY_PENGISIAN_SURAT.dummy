@@ -1,0 +1,286 @@
+DUMMY PENGISIAN FORM PER TIPE SURAT
+Versi: 2026-07-18
+
+Catatan umum:
+- Semua data di bawah data latihan, bukan data produksi.
+- Format tanggal: YYYY-MM-DD.
+- Untuk sub-tipe non-Surat Tugas, block Petugas/Narasumber dan Keuangan disembunyikan.
+
+==================================================
+1) SURAT TUGAS (Campus Visit)
+==================================================
+activityType: Campus Visit
+subType: Surat Tugas
+condition: -
+
+Form utama:
+- activityName: Campus Visit SMA Bina Bangsa
+- partnerName: SMA Bina Bangsa Bandung
+- partnerEmail: humas@smabinabangsa.sch.id
+- partnerAddress: Jl. Pendidikan No. 10, Bandung
+- nomorSurat: 001/ST-CV/VI/2026
+- incomingNumber: 017/CV-SMA/VI/2026
+- incomingDate: 2026-07-10
+- incomingSender: SMA Bina Bangsa Bandung
+- incomingSubject: Permohonan kunjungan kampus
+- letterDate: 2026-07-18
+- signerName: Dr. Maria Agnes
+- signerId: 198712102015042001
+- signerRole: Direktur DPSP
+
+Jadwal:
+- sesi1.startDate: 2026-08-05
+- sesi1.endDate: 2026-08-05
+- sesi1.startTime: 09:00
+- sesi1.endTime: 12:00
+- sesi1.place: Kampus Unpar - Gedung 9
+
+Petugas/Narasumber (WAJIB):
+- orang1.name: Andi Pratama
+- orang1.identifier: 198901012020121001
+- orang1.email: andi.pratama@unpar.ac.id
+- orang1.role: Staf Promosi
+- orang1.unit: Fakultas Teknik
+- orang1.rank: Penanggung Jawab Lapangan
+- orang1.category: Internal
+
+Keuangan:
+- honor: Tidak
+- travel: Ya
+
+==================================================
+2) SURAT BALASAN CAMPUS VISIT
+==================================================
+activityType: Campus Visit
+subType: Surat Balasan Campus Visit
+condition: -
+
+Form utama:
+- activityName: Balasan Campus Visit SMA Bina Bangsa
+- partnerName: SMA Bina Bangsa Bandung
+- partnerEmail: humas@smabinabangsa.sch.id
+- partnerAddress: Jl. Pendidikan No. 10, Bandung
+- nomorSurat: 002/BALASAN-CV/VI/2026
+- incomingNumber: 018/CV-SMA/VI/2026
+- incomingDate: 2026-07-11
+- incomingSender: SMA Bina Bangsa Bandung
+- incomingSubject: Konfirmasi jadwal kunjungan
+- letterDate: 2026-07-18
+- signerName: Dr. Maria Agnes
+- signerId: 198712102015042001
+- signerRole: Direktur DPSP
+
+Jadwal:
+- sesi1.startDate: 2026-08-07
+- sesi1.endDate: 2026-08-07
+- sesi1.startTime: 10:00
+- sesi1.endTime: 12:00
+- sesi1.place: Kampus Unpar - Aula
+
+Petugas/Narasumber: DISEMBUNYIKAN
+Keuangan: DISEMBUNYIKAN
+
+==================================================
+3) SURAT IZIN PIMPINAN - CAMPUS VISIT
+==================================================
+activityType: Campus Visit
+subType: Surat izin pimpinan - Campus Visit
+condition: -
+
+Form utama:
+- activityName: Izin Pimpinan Campus Visit SMA Cerdas Bangsa
+- partnerName: SMA Cerdas Bangsa
+- partnerEmail: tatausaha@smacerdas.sch.id
+- partnerAddress: Jl. Melati No. 21, Cimahi
+- nomorSurat: 003/IZIN-CV/VII/2026
+- incomingNumber: 022/CV-CB/VII/2026
+- incomingDate: 2026-07-12
+- incomingSender: SMA Cerdas Bangsa
+- incomingSubject: Permohonan izin pelaksanaan kunjungan
+- letterDate: 2026-07-18
+- signerName: Dr. Maria Agnes
+- signerId: 198712102015042001
+- signerRole: Direktur DPSP
+
+Jadwal:
+- sesi1.startDate: 2026-08-12
+- sesi1.endDate: 2026-08-12
+- sesi1.startTime: 08:30
+- sesi1.endTime: 11:30
+- sesi1.place: Kampus Unpar - Ruang Seminar
+
+Petugas/Narasumber: DISEMBUNYIKAN
+Keuangan: DISEMBUNYIKAN
+
+==================================================
+4) SURAT REKOMENDASI CAMPUS VISIT - SU
+==================================================
+activityType: Campus Visit
+subType: Surat Rekomendasi Campus Visit - SU
+condition: -
+
+Form utama:
+- activityName: Rekomendasi Campus Visit SMA Global Mandiri
+- partnerName: SMA Global Mandiri
+- partnerEmail: info@smagm.sch.id
+- partnerAddress: Jl. Merdeka No. 3, Bandung
+- nomorSurat: 004/REK-CV-SU/VII/2026
+- incomingNumber: 025/CV-GM/VII/2026
+- incomingDate: 2026-07-13
+- incomingSender: SMA Global Mandiri
+- incomingSubject: Permohonan rekomendasi ke Sekretaris Universitas
+- letterDate: 2026-07-18
+- signerName: Dr. Maria Agnes
+- signerId: 198712102015042001
+- signerRole: Direktur DPSP
+
+Jadwal:
+- sesi1.startDate: 2026-08-15
+- sesi1.endDate: 2026-08-15
+- sesi1.startTime: 13:00
+- sesi1.endTime: 15:00
+- sesi1.place: Kampus Unpar - Auditorium
+
+Petugas/Narasumber: DISEMBUNYIKAN
+Keuangan: DISEMBUNYIKAN
+
+==================================================
+5) SURAT PERMOHONAN NARASUMBER KEPADA DEKAN
+==================================================
+activityType: Penugasan Narasumber
+subType: Surat Permohonan Narasumber kepada Dekan
+condition: Dicarikan atau Tidak Dicarikan
+
+Varian A (Dicarikan):
+- activityName: Permohonan Narasumber Seminar AI
+- partnerName: SMA Harapan Jaya
+- partnerEmail: kesiswaan@smhj.sch.id
+- partnerAddress: Jl. Anggrek No. 8, Bandung
+- nomorSurat: 005/NS-SMHJ/VII/2026
+- incomingNumber: 030/NS-SMHJ/VII/2026
+- incomingDate: 2026-07-14
+- incomingSender: SMA Harapan Jaya
+- incomingSubject: Permohonan narasumber seminar
+- letterDate: 2026-07-18
+- signerName: Dr. Maria Agnes
+- signerId: 198712102015042001
+- signerRole: Direktur DPSP
+- faculties: Fakultas Teknik; Fakultas Sains
+
+Varian B (Tidak Dicarikan):
+- activityName: Permohonan Narasumber Workshop Branding
+- partnerName: SMA Pelita Nusantara
+- partnerEmail: humas@smapelita.sch.id
+- partnerAddress: Jl. Raya Barat No. 5, Bandung
+- nomorSurat: 005/NS-SPN/VII/2026
+- incomingNumber: 031/NS-SPN/VII/2026
+- incomingDate: 2026-07-15
+- incomingSender: SMA Pelita Nusantara
+- incomingSubject: Penugasan narasumber internal
+- letterDate: 2026-07-18
+- signerName: Dr. Maria Agnes
+- signerId: 198712102015042001
+- signerRole: Direktur DPSP
+- faculties: Fakultas Ekonomi
+
+Jadwal (contoh):
+- sesi1.startDate: 2026-08-20
+- sesi1.endDate: 2026-08-20
+- sesi1.startTime: 09:00
+- sesi1.endTime: 11:00
+- sesi1.place: Online (Zoom)
+
+Petugas/Narasumber: DISEMBUNYIKAN
+Keuangan: DISEMBUNYIKAN
+
+==================================================
+6) SURAT TUGAS - EDU FAIR
+==================================================
+activityType: Edu Fair
+subType: Surat Tugas
+condition: -
+
+Form utama:
+- activityName: Surat Tugas Edu Fair SMA Harapan Bangsa
+- partnerName: SMA Harapan Bangsa
+- partnerEmail: humas@smaharapanbangsa.sch.id
+- partnerAddress: Jl. Merdeka No. 12, Bandung
+- nomorSurat: 006/ST-EF/VII/2026
+- incomingNumber: 032/EF-HB/VII/2026
+- incomingDate: 2026-07-16
+- incomingSender: SMA Harapan Bangsa
+- incomingSubject: Permohonan penugasan panitia Edu Fair
+- letterDate: 2026-07-18
+- signerName: Dr. Maria Agnes
+- signerId: 198712102015042001
+- signerRole: Direktur DPSP
+
+Jadwal:
+- sesi1.startDate: 2026-08-22
+- sesi1.endDate: 2026-08-22
+- sesi1.startTime: 08:00
+- sesi1.endTime: 16:00
+- sesi1.place: Kampus Unpar - Hall Utama
+
+Petugas/Narasumber (WAJIB):
+- orang1.name: Budi Santoso
+- orang1.identifier: 197912152005011001
+- orang1.email: budi.santoso@unpar.ac.id
+- orang1.role: Koordinator Acara
+- orang1.unit: Direktorat DPSP
+- orang1.rank: Penanggung Jawab Lapangan
+- orang1.category: Internal
+
+Keuangan:
+- honor: Tidak
+- travel: Ya
+
+==================================================
+7) SURAT TUGAS - CAMPUS VISIT
+==================================================
+activityType: Campus Visit
+subType: Surat Tugas
+condition: -
+
+Form utama:
+- activityName: Surat Tugas Campus Visit SMA Nusantara
+- partnerName: SMA Nusantara
+- partnerEmail: humas@smanusantara.sch.id
+- partnerAddress: Jl. Pahlawan No. 7, Cimahi
+- nomorSurat: 007/ST-CV/VII/2026
+- incomingNumber: 033/CV-SN/VII/2026
+- incomingDate: 2026-07-17
+- incomingSender: SMA Nusantara
+- incomingSubject: Permohonan penugasan kunjungan kampus
+- letterDate: 2026-07-18
+- signerName: Dr. Maria Agnes
+- signerId: 198712102015042001
+- signerRole: Direktur DPSP
+
+Jadwal:
+- sesi1.startDate: 2026-08-26
+- sesi1.endDate: 2026-08-26
+- sesi1.startTime: 09:30
+- sesi1.endTime: 12:30
+- sesi1.place: Kampus Unpar - Gedung Serba Guna
+
+Petugas/Narasumber (WAJIB):
+- orang1.name:  
+- orang1.identifier: 198901012020121001
+- orang1.email: andi.pratama@unpar.ac.id
+- orang1.role: Staf Promosi
+- orang1.unit: Fakultas Teknik
+- orang1.rank: Penanggung Jawab Lapangan
+- orang1.category: Internal
+
+Keuangan:
+- honor: Tidak
+- travel: Ya
+
+==================================================
+Checklist cepat validasi UI
+==================================================
+- Surat Tugas: block Petugas/Narasumber + Keuangan muncul.
+- Contoh Surat Tugas Edu Fair dan Surat Tugas Campus Visit tersedia bersama nomor suratnya.
+- 4 sub-tipe non-Surat Tugas: block Petugas/Narasumber + Keuangan hilang.
+- Save DRAFT dan READY sukses tanpa error required field untuk sub-tipe non-Surat Tugas.

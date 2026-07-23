@@ -57,11 +57,73 @@
         return types.map(function (typeName) { return ({ type: typeName, description: descriptions[typeName] }); });
     }
 
+    App.normalizeDocumentTypeKey_ = function (value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    App.getCurrentDocumentSubType_ = function () {
+        var requestId = document.getElementById('requestId').value;
+        if (requestId) {
+            var editDoc = document.querySelector('[data-edit-document]');
+            return editDoc ? String(editDoc.dataset.documentType || '') : '';
+        }
+        return document.getElementById('requestSubType').value;
+    }
+
+    App.getCurrentDocumentCondition_ = function () {
+        var requestId = document.getElementById('requestId').value;
+        if (requestId) {
+            var editDoc = document.querySelector('[data-edit-document]');
+            if (!editDoc)
+                return '-';
+            return String(editDoc.dataset.speakerStatus || editDoc.dataset.speakerSubtype || '-');
+        }
+        var conditionSelect = document.getElementById('requestCondition');
+        return conditionSelect ? String(conditionSelect.value || '-') : '-';
+    }
+
+    App.shouldHideTaskOnlySections_ = function (subType, condition) {
+        var key = this.normalizeDocumentTypeKey_(subType);
+        var conditionKey = this.normalizeDocumentTypeKey_(condition);
+        if (!key)
+            return false;
+        if (key === 'surat permohonan narasumber kepada dekan') {
+            return conditionKey !== 'tidak dicarikan';
+        }
+        return [
+            'surat balasan campus visit',
+            'surat izin pimpinan - campus visit',
+            'surat izin pimpinan-campus visit',
+            'surat rekomendasi campus visit - su',
+            'surat permohonan narasumber kepada dekan',
+            'surat permohohonan narasumber kepada dekan'
+        ].includes(key);
+    }
+
+    App.shouldRequireAssignmentFields_ = function (activityType, subType) {
+        var type = activityType || document.getElementById('activityType').value;
+        var currentSubType = typeof subType === 'string' ? subType : this.getCurrentDocumentSubType_();
+        if (type === 'Edu Fair')
+            return true;
+        if (type === 'Campus Visit' || type === 'Penugasan Narasumber')
+            return !this.shouldHideTaskOnlySections_(currentSubType, this.getCurrentDocumentCondition_());
+        return false;
+    }
+
     App.updateFormVisibility = function () {
         var type = document.getElementById('activityType').value;
         var requestId = document.getElementById('requestId').value;
         var isEdit = Boolean(requestId);
         var currentStatus = String((document.getElementById('requestCurrentStatus') || {}).value || '').toUpperCase();
+        var currentSubType = this.getCurrentDocumentSubType_();
+        var currentCondition = this.getCurrentDocumentCondition_();
+        var hideTaskOnlySections = this.shouldHideTaskOnlySections_(currentSubType, currentCondition);
+        var isSpeakerRequestNoSearch = type === 'Penugasan Narasumber' &&
+            this.normalizeDocumentTypeKey_(currentSubType) === 'surat permohonan narasumber kepada dekan' &&
+            this.normalizeDocumentTypeKey_(currentCondition) === 'tidak dicarikan';
 
         document.getElementById('mainLetterSelectionContainer').classList.toggle('is-hidden', isEdit);
         document.getElementById('requestDocumentsEditor').classList.toggle('is-hidden', !isEdit);
@@ -84,6 +146,12 @@
         document.querySelectorAll('.speaker-request-only').forEach(function (item) { return item.classList.toggle('is-hidden', !hasSpeakerRequest); });
         var needsIncoming = type === 'Campus Visit' || type === 'Penugasan Narasumber';
         document.getElementById('incomingFields').classList.toggle('is-hidden', !needsIncoming);
+        var employeeSection = document.getElementById('employeeSectionCard');
+        if (employeeSection)
+            employeeSection.classList.toggle('is-hidden', hideTaskOnlySections);
+        var financeSection = document.getElementById('financeSectionCard');
+        if (financeSection)
+            financeSection.classList.toggle('is-hidden', hideTaskOnlySections || (isEdit && isSpeakerRequestNoSearch));
         this.updateEmployeeRequirements_();
         this.updateReview();
     }
@@ -382,10 +450,8 @@
 
     App.updateEmployeeRequirements_ = function () {
         var type = document.getElementById('activityType').value;
-        var speakerStatusInput = document.querySelector('input[name="speakerStatus"]:checked');
-        var speakerStatus = speakerStatusInput ? speakerStatusInput.value : '';
-        // General check: if activity type is Edu Fair, Campus Visit, or Penugasan Narasumber, we need people
-        var needsPeople = type === 'Edu Fair' || type === 'Campus Visit' || type === 'Penugasan Narasumber';
+        var currentSubType = this.getCurrentDocumentSubType_();
+        var needsPeople = this.shouldRequireAssignmentFields_(type, currentSubType);
         document.querySelectorAll('.employee-card').forEach(function (card) {
             var hasValue = Array.from(card.querySelectorAll('[data-employee-field]')).some(function (input) {
                 return input.dataset.employeeField !== 'participantKey' && input.value.trim();
@@ -731,7 +797,8 @@
             }
         });
 
-        var needsPeople = payload.activityType === 'Edu Fair' || payload.activityType === 'Campus Visit' || payload.activityType === 'Penugasan Narasumber';
+        var selectedSubType = payload.documents.length ? String(payload.documents[0].type || '') : this.getCurrentDocumentSubType_();
+        var needsPeople = this.shouldRequireAssignmentFields_(payload.activityType, selectedSubType);
         if (needsPeople && !payload.employees.length)
             errors.push('Minimal satu pegawai/narasumber wajib diisi.');
         payload.employees.forEach(function (employee, index) {

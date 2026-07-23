@@ -4,7 +4,13 @@ var App = typeof App !== "undefined" ? App : {};
 App.bindEvents = function () {
             var _this = this;
             document.querySelectorAll('[data-view], [data-view-target]').forEach(function (button) {
-                button.addEventListener('click', function () { return _this.switchView(button.dataset.view || button.dataset.viewTarget); });
+                button.addEventListener('click', function () {
+                    var targetView = button.dataset.view || button.dataset.viewTarget;
+                    if (targetView === 'form') {
+                        _this.resetForm();
+                    }
+                    return _this.switchView(targetView);
+                });
             });
             document.getElementById('menuToggle').addEventListener('click', function () { return _this.toggleSidebar(); });
             document.getElementById('sidebarClose').addEventListener('click', function () { return _this.setSidebarOpen(false, true); });
@@ -90,6 +96,7 @@ App.bindEvents = function () {
             });
             document.getElementById('requestSubType').addEventListener('change', function () {
                 _this.onRequestSubTypeChange();
+                _this.updateFormVisibility();
             });
             document.getElementById('facultyChoices').addEventListener('change', function () {
                 _this.updateCheckDropdownLabel_('facultyChoices', 'Pilih fakultas...');
