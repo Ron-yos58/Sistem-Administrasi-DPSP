@@ -534,7 +534,7 @@ function trackCachedRequestId_(requestId) {
 
 /**
  * Membuat nilai placeholder join pegawai/narasumber untuk template dokumen dan email.
- * Mendukung placeholder baru ({textJoinNomor}) dan placeholder lama Autocrat
+ * Mendukung placeholder baru ({textJoinNomor}) dan format placeholder sebelumnya
  * (<<Text Join Nomor>>, <<Text Join Nama>>, dst.).
  */
 function buildEmployeeJoinPlaceholders_(employees) {

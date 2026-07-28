@@ -612,33 +612,11 @@
                   Buka Spreadsheet Utama
                 </a>
               </div>
-              <p class="helper-text" style="margin: 0 0 16px;">
-                Gunakan <strong>Preview migrasi</strong> lalu <strong>Jalankan migrasi utama</strong> untuk alur standar.
-                Cleanup Autocrat dan repair ID hanya dipakai saat pemulihan data lama atau hasil migrasi parsial.
-              </p>
               <div class="admin-actions">
                 <button class="button button-primary" data-admin-action="system-status">Periksa sistem</button>
                 <button class="button button-secondary" data-admin-action="setup-system">Setup struktur</button>
                 <button class="button button-secondary" data-admin-action="preview-yearly-archive">Preview arsip tahun lalu</button>
                 <button class="button button-accent" data-admin-action="run-yearly-archive">Arsipkan tahun lalu</button>
-                <button class="button button-secondary" data-admin-action="preview-migration">Preview migrasi</button>
-                <button class="button button-accent" data-admin-action="run-migration">Jalankan migrasi utama</button>
-              </div>
-              <details class="panel" style="margin-top: 16px;">
-                <summary style="cursor: pointer; font-weight: 700; color: var(--green-900);">Perbaikan lanjutan pasca-migrasi</summary>
-                <p class="helper-text" style="margin: 12px 0 16px;">
-                  Tombol berikut tidak diperlukan untuk migrasi normal. Pakai hanya jika Master lama belum bersih,
-                  atau ada ID kosong/tidak sinkron setelah migrasi atau cleanup manual.
-                </p>
-                <div class="admin-actions">
-                  <button class="button button-secondary" data-admin-action="cleanup-autocrat">Bersihkan kolom Autocrat</button>
-                  <button class="button button-secondary" data-admin-action="repair-master">Repair ID Master</button>
-                  <button class="button button-secondary" data-admin-action="repair-employee">Repair ID Pegawai</button>
-                </div>
-              </details>
-              <div class="helper-text" style="margin-top: 16px;">
-                Migrasi utama sudah mencakup penulisan ulang Master, Dokumen, Jadwal, pembersihan kolom Autocrat,
-                dan remap awal ID pegawai hasil migrasi.
               </div>
               <div class="admin-result" id="adminResult">
                 <div class="empty-state"><strong>Belum ada pemeriksaan</strong><span>Pilih salah satu aksi admin.</span>
@@ -649,7 +627,7 @@
               <p class="eyebrow">BATAS AKSES</p>
               <h2>Admin vs Operator</h2>
               <ul class="info-list">
-                <li><strong>Admin</strong><span>Setup, migrasi, arsip tahunan, recovery data, dan semua pekerjaan operator.</span>
+                <li><strong>Admin</strong><span>Setup struktur, arsip tahunan, dan semua pekerjaan operator.</span>
                 </li>
                 <li><strong>Operator</strong><span>Input/edit permohonan, generate dokumen, draft email, honor, dan
                     perjadin.</span></li>

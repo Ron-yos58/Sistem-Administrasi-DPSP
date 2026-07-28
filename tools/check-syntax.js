@@ -180,7 +180,7 @@ if (saveMethodSource.includes('openRequestDetail(')) {
 
 const requiredFiles = [
   'appsscript.json', 'Code.gs', 'Config.gs', 'Utils.gs', 'Setup.gs',
-  'DataService.gs', 'Migration.gs', 'DocumentService.gs', 'EmailService.gs',
+  'DataService.gs', 'DocumentService.gs', 'EmailService.gs',
   'FinanceService.gs', 'ExportService.gs', 'Index.html', 'Styles.html', 'Scripts.html'
 ];
 for (const file of requiredFiles) {

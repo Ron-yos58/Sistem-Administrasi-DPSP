@@ -11,7 +11,7 @@ Mengganti proses batch Spreadsheet menjadi web app Apps Script yang aman dan dap
 3. Implementasi CRUD dan akses.
 4. Implementasi Docs, PDF, dan draft Gmail.
 5. Implementasi frontend responsif.
-6. Implementasi migrasi dan dokumentasi deployment.
+6. Dokumentasi deployment.
 7. Static check.
 
 ## Kriteria Sukses
@@ -21,4 +21,4 @@ Mengganti proses batch Spreadsheet menjadi web app Apps Script yang aman dan dap
 - Perjadin memakai key stabil.
 - Draft/file idempotent.
 - UI desktop/mobile.
-- Deployment dan migrasi terdokumentasi.
+- Deployment terdokumentasi.

@@ -67,14 +67,45 @@ Status dan log pelacakan disimpan pada sheet-sheet berikut di Google Spreadsheet
 
 ## 🛠️ Panduan Struktur Codebase
 
-* [Config.gs](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Config.gs): Mengatur konfigurasi global aplikasi, daftar ID template Google Docs, jenis surat, daftar unit/fakultas, dan header-header kolom spreadsheet.
-* [DataService.gs](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/DataService.gs): Logika CRUD data permohonan, validasi, penguncian data, dan kalkulasi *fingerprint* perubahan data.
-* [DocumentService.gs](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/DocumentService.gs): Layanan pembuatan dokumen Google Docs, konversi ke PDF, dan penyimpanan file ke Google Drive.
-* [EmailService.gs](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/EmailService.gs): Logika penyusunan template email dan pembuatan otomatis draft Gmail untuk penerima (*To*, *CC*, *BCC*).
-* [FinanceService.gs](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/FinanceService.gs): Logika perhitungan honorarium narasumber dan nominal perjalanan dinas (perjadin).
-* [Index.html](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Index.html): Struktur markup HTML dari antarmuka dasbor.
-* [Scripts.html](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Scripts.html): Logika JavaScript interaktif di sisi klien (frontend), penanganan state dasbor, tombol aksi, dan pemanggilan fungsi Apps Script (*Google Server Callback*).
-* [Styles.html](file:///c:/Users/Ronald_FTI/OneDrive/Documents/Dashbor%20Surat%20DPSP/Styles.html): Gaya tampilan CSS modern dasbor, termasuk pendefinisian warna badge untuk masing-masing status.
+* [Config.gs](Config.gs): Konfigurasi global, ID template Google Docs, jenis surat, unit/fakultas, dan header spreadsheet.
+* [Setup.gs](Setup.gs): Menyiapkan sheet dan konfigurasi dasar pada spreadsheet utama.
+* [DataService.gs](DataService.gs): CRUD permohonan, validasi, penguncian data, serta kalkulasi *fingerprint* perubahan data.
+* [DocumentService.gs](DocumentService.gs): Pembuatan Google Docs, PDF, dan penyimpanan file di Google Drive.
+* [EmailService.gs](EmailService.gs): Penyusunan template serta pembuatan draft Gmail untuk penerima *To*, *CC*, dan *BCC*.
+* [FinanceService.gs](FinanceService.gs): Pembuatan sheet honor/perjadin dan ekspor output keuangan.
+* [ArchiveService.gs](ArchiveService.gs): Preview dan pemindahan permohonan berstatus `Selesai` tahun sebelumnya ke spreadsheet arsip terpisah.
+* [Index.html](Index.html), [Styles.html](Styles.html), dan [Scripts.html](Scripts.html): Struktur, gaya, serta bootstrap antarmuka web. Script frontend dipisah lagi ke file `Scripts*.html` menurut tanggung jawabnya.
+
+---
+
+## 👤 Akses Admin dan Arsip Tahunan
+
+Menu **Admin** hanya tersedia bagi pengguna dengan role `ADMIN`. Aksi yang tersedia:
+
+1. **Periksa sistem** untuk melihat status konfigurasi dan spreadsheet utama.
+2. **Setup struktur** untuk membuat atau melengkapi sheet dan konfigurasi dasar.
+3. **Preview arsip tahun lalu** untuk memeriksa permohonan berstatus `Selesai` dari tahun sebelumnya yang memenuhi syarat arsip.
+4. **Arsipkan tahun lalu** untuk menyalin data terkait ke spreadsheet arsip khusus, memverifikasi salinan, lalu menghapus data sumber yang telah berhasil diarsipkan.
+5. **Buka Spreadsheet Utama** untuk membuka basis data aplikasi.
+
+Arsip tahunan memerlukan konfirmasi `ARCHIVE-YYYY`, dengan `YYYY` sebagai tahun yang akan diarsipkan. Fitur migrasi data lama tidak disediakan oleh aplikasi ini.
+
+---
+
+## 🚀 Setup dan Validasi Lokal
+
+1. Atur nilai spreadsheet, folder output, dan template pada [Config.gs](Config.gs).
+2. Deploy sebagai web app Apps Script dengan eksekusi **User accessing the web app**.
+3. Jalankan `setupSystem` sekali dengan akun yang memiliki akses spreadsheet. Akun tersebut akan menjadi Admin awal bila sheet akses masih kosong.
+4. Atur pengguna lain pada sheet `Config_Access` dengan role `ADMIN` atau `OPERATOR`.
+
+Jalankan pemeriksaan lokal sebelum deploy:
+
+```powershell
+npm test
+```
+
+Perintah ini memeriksa sintaks Apps Script dan bundle frontend, lalu menjalankan pengujian perilaku murni.
 
 
 ---

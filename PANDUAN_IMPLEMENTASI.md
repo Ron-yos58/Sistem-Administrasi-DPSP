@@ -3,7 +3,7 @@
 ## 1. Backup
 
 1. Buka Google Sheet sumber.
-2. Buat salinan penuh sebelum menjalankan setup atau migrasi.
+2. Buat salinan penuh sebelum menjalankan setup.
 3. Pastikan akun implementasi memiliki akses ke spreadsheet, semua template Docs, dan folder output.
 
 ## 2. File yang Diunggah
@@ -16,14 +16,13 @@ Unggah file berikut ke satu project Google Apps Script:
 4. `Utils.gs`
 5. `Setup.gs`
 6. `DataService.gs`
-7. `Migration.gs`
-8. `DocumentService.gs`
-9. `EmailService.gs`
-10. `FinanceService.gs`
-11. `ExportService.gs`
-12. `Index.html`
-13. `Styles.html`
-14. `Scripts.html`
+7. `DocumentService.gs`
+8. `EmailService.gs`
+9. `FinanceService.gs`
+10. `ExportService.gs`
+11. `Index.html`
+12. `Styles.html`
+13. `Scripts.html`
 
 Jangan unggah script legacy. `.claspignore` sudah mengecualikannya.
 
@@ -58,37 +57,9 @@ Placeholder lain terdapat pada `buildDocumentPlaceholders_()` di `DocumentServic
 
 Role yang didukung: `ADMIN` dan `OPERATOR`.
 
-`ADMIN` dipakai untuk setup, migrasi, repair, dan pembersihan artefak sistem. `OPERATOR` dipakai untuk input permohonan, generate dokumen, draft email, dan ekspor laporan.
+`ADMIN` dipakai untuk setup, arsip tahunan, dan seluruh pekerjaan operator. `OPERATOR` dipakai untuk input permohonan, generate dokumen, draft email, dan ekspor laporan.
 
-## 5. Migrasi Data Lama
-
-Jalankan migrasi hanya bila `Master Permohonan` sudah berisi data lama.
-
-1. Jalankan `previewLegacyMigration`.
-2. Baca execution log.
-3. Pastikan `ready: true`.
-4. Jalankan `migrateLegacyDataConfirmed` dari menu Run (wrapper tanpa parameter), atau panggil `migrateLegacyData('MIGRATE')` dari eksekusi terprogram.
-
-Jika data lama sudah terlanjur dimigrasi saat kolom `ID Permohonan` masih kosong, jalankan `repairMigratedMasterIds` sekali untuk mengisi ID pada `Master Permohonan` agar data muncul di Ringkasan/Permohonan.
-
-Jika `Data Pegawai` hasil migrasi tidak tampil di UI karena masih memakai ID lama yang berbeda dengan `Master Permohonan`, jalankan `repairMigratedEmployeeIds` sekali. Utility ini memakai sheet backup `Backup Master ...` terbaru untuk meremap `Data Pegawai` ke ID permohonan hasil migrasi.
-
-Migrasi:
-
-- membuat backup tersembunyi untuk Master, Pegawai, Perjadin, Dokumen, dan Jadwal,
-- menggabungkan ID duplikat menjadi satu permohonan,
-- membuat `LEGACY-xxxx` otomatis bila kolom ID Permohonan lama kosong,
-- memindahkan artefak Autocrat ke `Dokumen Permohonan`, lalu menghapus kolom AM-BV dari `Master Permohonan` setelah backup tersembunyi berhasil dibuat,
-- menyediakan aksi Admin `Bersihkan kolom Autocrat` untuk instalasi yang sudah dimigrasikan sebelum cleanup AM-BV tersedia,
-- menyediakan tombol Admin `Jalankan migrasi` dengan konfirmasi teks `MIGRATE`,
-- memindahkan setiap surat ke `Dokumen Permohonan`,
-- membuat tanggal ISO dan `Participant Key`,
-- meremap `Data Pegawai` ke ID hasil migrasi bila ID lama berubah,
-- mempertahankan link Doc lama yang dapat dikenali.
-
-Migrasi menolak berjalan bila `Dokumen Permohonan` sudah berisi data.
-
-## 6. Uji Sebelum Deploy
+## 5. Uji Sebelum Deploy
 
 1. Buat masing-masing satu permohonan Edu Fair, Campus Visit, Narasumber Workshop, dan Narasumber Promosi.
 2. Periksa preview To/CC setiap dokumen.

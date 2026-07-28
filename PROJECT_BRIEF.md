@@ -38,7 +38,6 @@ Google Sheets / Docs / Drive / Gmail
 - `Config.gs`: ID, enum, header
 - `Setup.gs`: bootstrap sheet
 - `DataService.gs`: CRUD dan routing
-- `Migration.gs`: konsolidasi data lama
 - `DocumentService.gs`: Docs dan PDF
 - `EmailService.gs`: preview dan draft
 - `FinanceService.gs`: perjadin dan sheet keuangan

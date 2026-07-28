@@ -764,7 +764,6 @@ function buildVMContext() {
     'Config.gs',
     'Utils.gs',
     'DataService.gs',
-    'Migration.gs',
     'DocumentService.gs',
     'EmailService.gs',
     'ExportService.gs',
@@ -836,8 +835,7 @@ function getEvaluatedHtml(): string {
                   'saveRequest', 'addDocument', 'saveDocumentDetails', 'generateDocument',
                   'generateGoogleDoc', 'generatePdf', 'createEmailDraft', 'deleteDocument',
                   'archiveRequest', 'processRequest', 'generateFinanceSheet', 'generateAndExportFinance',
-                  'addReferenceCC', 'setupSystem', 'migrateLegacyData', 'cleanupMigratedAutocratColumns',
-                  'repairMigratedMasterIds', 'repairMigratedEmployeeIds'
+                  'addReferenceCC', 'setupSystem'
                 ];
                 var isMutating = mutatingMethods.indexOf(prop) !== -1;
                 if (isMutating && window.App && typeof App.showOverlay === 'function') {

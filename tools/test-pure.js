@@ -37,7 +37,7 @@ const context = {
 };
 vm.createContext(context);
 
-for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'Migration.gs', 'DocumentService.gs', 'FinanceService.gs']) {
+for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'DocumentService.gs', 'FinanceService.gs']) {
   vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
 }
 const scriptFiles = [
@@ -369,101 +369,6 @@ test('promotion template mapping', () => {
     speakerSubtype: 'Promosi',
     speakerStatus: ''
   }), 'SPEAKER_PROMOTION_TASK');
-});
-
-test('legacy date range parsing', () => {
-  equal(
-    JSON.parse(JSON.stringify(context.parseLegacyDateRange_('31 Mei - 2 Juni 2026'))),
-    { start: '2026-05-31', end: '2026-06-02' }
-  );
-  equal(
-    JSON.parse(JSON.stringify(context.parseLegacyDateRange_('25 Juni 2026 - 27 Juni 2026'))),
-    { start: '2026-06-25', end: '2026-06-27' }
-  );
-  equal(
-    JSON.parse(JSON.stringify(context.parseLegacyDateRange_('25 Juni 2026 s/d 27 Juni 2026'))),
-    { start: '2026-06-25', end: '2026-06-27' }
-  );
-  equal(
-    JSON.parse(JSON.stringify(context.parseLegacyDateRange_('25 sampai 27 Juni 2026'))),
-    { start: '2026-06-25', end: '2026-06-27' }
-  );
-});
-
-test('legacy Master compacts without Autocrat columns', () => {
-  const masterHeaders = vm.runInContext('MASTER_HEADERS.slice()', context);
-  const legacyHeaders = vm.runInContext('LEGACY_MASTER_HEADERS.slice()', context);
-  const autocratHeaders = vm.runInContext('AUTOCRAT_HEADERS.slice()', context);
-  const legacyRow = legacyHeaders.map(header => `value:${header}`);
-  const compacted = context.compactLegacyMasterRow_(legacyRow);
-
-  equal(masterHeaders.length, 49);
-  equal(legacyHeaders.length, 85);
-  equal(autocratHeaders.length, 36);
-  equal(compacted.length, masterHeaders.length);
-  equal(compacted[masterHeaders.indexOf('Email Status')], 'value:Email Status');
-  if (masterHeaders.some(header => autocratHeaders.includes(header))) {
-    throw new Error('active Master still contains an Autocrat header');
-  }
-});
-
-test('migration deletes only Autocrat AM-BV columns', () => {
-  const autocratHeaders = vm.runInContext('AUTOCRAT_HEADERS.slice()', context);
-  let deletedColumns = null;
-  const sheet = {
-    getMaxColumns: () => 84,
-    getRange: (row, column, rowCount, columnCount) => ({
-      getDisplayValues: () => [autocratHeaders.slice(0, columnCount)]
-    }),
-    deleteColumns: (startColumn, columnCount) => {
-      deletedColumns = [startColumn, columnCount];
-    }
-  };
-
-  equal(context.removeLegacyAutocratColumns_(sheet), 36);
-  equal(deletedColumns, [39, 36]);
-});
-
-test('migration refuses unexpected Autocrat headers', () => {
-  const autocratHeaders = vm.runInContext('AUTOCRAT_HEADERS.slice()', context);
-  autocratHeaders[4] = 'Header lain';
-  let deleted = false;
-  const sheet = {
-    getMaxColumns: () => 84,
-    getRange: () => ({
-      getDisplayValues: () => [autocratHeaders]
-    }),
-    deleteColumns: () => {
-      deleted = true;
-    }
-  };
-
-  let rejected = false;
-  try {
-    context.removeLegacyAutocratColumns_(sheet);
-  } catch (error) {
-    rejected = /Header Autocrat tidak cocok/.test(error.message);
-  }
-  if (!rejected) throw new Error('unexpected headers were accepted');
-  if (deleted) throw new Error('columns were deleted after failed validation');
-});
-
-test('Master schema inspection recognizes legacy and active layouts', () => {
-  const masterHeaders = vm.runInContext('MASTER_HEADERS.slice()', context);
-  const legacyHeaders = vm.runInContext('LEGACY_MASTER_HEADERS.slice()', context);
-  const makeSheet = headers => ({
-    getMaxColumns: () => headers.length,
-    getRange: (row, column, rowCount, columnCount) => ({
-      getDisplayValues: () => [headers.slice(column - 1, column - 1 + columnCount)]
-    })
-  });
-
-  equal(context.inspectMasterSchema_(makeSheet(legacyHeaders)), 'LEGACY');
-  equal(context.inspectMasterSchema_(makeSheet(masterHeaders)), 'ACTIVE');
-
-  const unexpectedHeaders = legacyHeaders.slice();
-  unexpectedHeaders[38] = 'Header tidak dikenal';
-  equal(context.inspectMasterSchema_(makeSheet(unexpectedHeaders)), 'UNKNOWN');
 });
 
 test('incomplete draft remains valid', () => {
@@ -985,66 +890,6 @@ test('syncTravelDataInternal preserves archived travel rows during full sync', (
     context.rewriteDataRows_ = previousRewriteDataRows;
     context.getDocumentsByRequest_ = previousGetDocuments;
   }
-});
-
-test('legacy migration handles unnormalized activity and document types', () => {
-  const d1 = context.normalizeDocumentDescriptor_({
-    activityType: 'penugasan narasumber ',
-    type: 'surat tugas',
-    speakerSubtype: '',
-    speakerStatus: ''
-  });
-  equal(d1.activityType, 'Penugasan Narasumber');
-  equal(d1.type, 'Surat Tugas');
-
-  const d2 = context.normalizeDocumentDescriptor_({
-    activityType: 'narasumber',
-    type: 'surat permohonan narasumber kepada dekan',
-    speakerSubtype: '',
-    speakerStatus: ''
-  });
-  equal(d2.activityType, 'Penugasan Narasumber');
-  equal(d2.type, 'Surat Permohonan Narasumber kepada Dekan');
-  equal(d2.speakerStatus, 'Tidak Dicarikan');
-});
-
-test('legacy migration infers subtype correctly even with casing variations', () => {
-  const row = new Array(84).fill('');
-  row[1] = 'penugasan narasumber ';
-  row[2] = 'surat tugas';
-  row[3] = '';
-  row[42] = '';
-  row[46] = 'DOC-PROMO-123';
-
-  const descriptor = context.normalizeDocumentDescriptor_({
-    activityType: row[1],
-    type: row[2],
-    speakerSubtype: row[3],
-    speakerStatus: row[4]
-  });
-  if (descriptor.activityType === 'Penugasan Narasumber' && descriptor.type === 'Surat Tugas' && !descriptor.speakerSubtype) {
-    const workshopDocId = context.text_(row[42]);
-    const promotionDocId = context.text_(row[46]);
-    if (promotionDocId && !workshopDocId) {
-      descriptor.speakerSubtype = 'Promosi';
-    } else {
-      descriptor.speakerSubtype = 'Workshop';
-    }
-  }
-
-  equal(descriptor.activityType, 'Penugasan Narasumber');
-  equal(descriptor.type, 'Surat Tugas');
-  equal(descriptor.speakerSubtype, 'Promosi');
-});
-
-test('legacy migration parses non-contiguous range with dan into multiple list items', () => {
-  const result = context.parseLegacyDateRange_('25 dan 30 Agustus 2025');
-  equal(result.start, '2025-08-25');
-  equal(result.end, '2025-08-30');
-  equal(result.list.length, 2);
-  equal(result.list[0].start, '2025-08-25');
-  equal(result.list[0].end, '2025-08-25');
-  equal(result.list[1].start, '2025-08-30');
 });
 
 test('client-side sorting logic', () => {

@@ -117,45 +117,6 @@ const OFFICIAL_LETTER_MAPPING = Object.freeze([
   }
 ]);
 
-const AUTOCRAT_HEADERS = Object.freeze([
-  'Merged Doc ID - Penugasan Edu Fair',
-  'Merged Doc URL - Penugasan Edu Fair',
-  'Link to merged Doc - Penugasan Edu Fair',
-  'Document Merge Status - Penugasan Edu Fair',
-  'Merged Doc ID - Penugasan Narasumber',
-  'Merged Doc URL - Penugasan Narasumber',
-  'Link to merged Doc - Penugasan Narasumber',
-  'Document Merge Status - Penugasan Narasumber',
-  'Merged Doc ID - Penugasan Narasumber (Promosi)',
-  'Merged Doc URL - Penugasan Narasumber (Promosi)',
-  'Link to merged Doc - Penugasan Narasumber (Promosi)',
-  'Document Merge Status - Penugasan Narasumber (Promosi)',
-  'Merged Doc ID - Penugasan Campus Visit',
-  'Merged Doc URL - Penugasan Campus Visit',
-  'Link to merged Doc - Penugasan Campus Visit',
-  'Document Merge Status - Penugasan Campus Visit',
-  'Merged Doc ID - Surat izin pimpinan - Campus Visit',
-  'Merged Doc URL - Surat izin pimpinan - Campus Visit',
-  'Link to merged Doc - Surat izin pimpinan - Campus Visit',
-  'Document Merge Status - Surat izin pimpinan - Campus Visit',
-  'Merged Doc ID - Surat Rekomendasi Campus Visit - SU',
-  'Merged Doc URL - Surat Rekomendasi Campus Visit - SU',
-  'Link to merged Doc - Surat Rekomendasi Campus Visit - SU',
-  'Document Merge Status - Surat Rekomendasi Campus Visit - SU',
-  'Merged Doc ID - Surat Balasan Campus Visit',
-  'Merged Doc URL - Surat Balasan Campus Visit',
-  'Link to merged Doc - Surat Balasan Campus Visit',
-  'Document Merge Status - Surat Balasan Campus Visit',
-  'Merged Doc ID - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
-  'Merged Doc URL - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
-  'Link to merged Doc - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
-  'Document Merge Status - Permohonan Narasumber kepada Dekan (Belum ada Narasumber)',
-  'Merged Doc ID - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
-  'Merged Doc URL - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
-  'Link to merged Doc - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)',
-  'Document Merge Status - Permohonan Narasumber kepada Dekan (Sudah Ada Narasumber)'
-]);
-
 const MASTER_HEADERS = Object.freeze([
   'ID Permohonan',
   'Tipe Kegiatan',
@@ -207,12 +168,6 @@ const MASTER_HEADERS = Object.freeze([
   'Revision',
   'Manual Recipients'
 ]);
-
-const LEGACY_MASTER_HEADERS = Object.freeze(
-  MASTER_HEADERS.slice(0, 38)
-    .concat(AUTOCRAT_HEADERS)
-    .concat(MASTER_HEADERS.slice(38))
-);
 
 const EMPLOYEE_HEADERS = Object.freeze([
   'ID Permohonan',

@@ -44,7 +44,7 @@ App.addReferenceCC = function () {
         }
 
 App.handleAdminAction = async function (button) {
-            var action, archiveYear, archiveConfirmation, confirmation, result;
+            var action, archiveYear, archiveConfirmation, result;
             if (!document.body.classList.contains('is-admin')) {
                 this.toast('Aksi ini hanya untuk Admin.', true);
                 return;
@@ -82,47 +82,6 @@ App.handleAdminAction = async function (button) {
                     this.renderAdminObject('Hasil arsip tahun ' + archiveYear, result);
                     this.toast(result.message || 'Arsip tahunan selesai.');
                     await this.refreshAll(false);
-                    return;
-                }
-                if (action === 'preview-migration') {
-                    result = await this.server('previewLegacyMigration');
-                    this.renderAdminObject('Preview migrasi', result);
-                    return;
-                }
-                if (action === 'run-migration') {
-                    confirmation = prompt('Migrasi akan membuat backup dan mengubah struktur data. Ketik MIGRATE untuk melanjutkan.');
-                    if (confirmation === null)
-                        return;
-                    if (confirmation.trim() !== 'MIGRATE') {
-                        throw new Error('Migrasi dibatalkan. Konfirmasi harus tepat: MIGRATE');
-                    }
-                    result = await this.server('migrateLegacyData', confirmation.trim());
-                    this.renderAdminObject('Hasil migrasi', result);
-                    this.toast('Migrasi selesai.');
-                    await this.refreshAll(false);
-                    return;
-                }
-                if (action === 'cleanup-autocrat') {
-                    if (!confirm('Hapus kolom Autocrat AM-BV dari Master Permohonan? Backup tersembunyi akan dibuat terlebih dahulu.'))
-                        return;
-                    result = await this.server('cleanupMigratedAutocratColumns');
-                    this.renderAdminObject('Cleanup kolom Autocrat', result);
-                    this.toast(result.message || 'Kolom Autocrat berhasil dibersihkan.');
-                    await this.refreshAll(false);
-                    return;
-                }
-                if (action === 'repair-master') {
-                    if (!confirm('Repair ID Master kosong? Jalankan hanya saat dibutuhkan.'))
-                        return;
-                    result = await this.server('repairMigratedMasterIds');
-                    this.renderAdminObject('Repair ID Master', result);
-                    return;
-                }
-                if (action === 'repair-employee') {
-                    if (!confirm('Repair ID Pegawai hasil migrasi? Jalankan hanya saat dibutuhkan.'))
-                        return;
-                    result = await this.server('repairMigratedEmployeeIds');
-                    this.renderAdminObject('Repair ID Pegawai', result);
                     return;
                 }
             }
