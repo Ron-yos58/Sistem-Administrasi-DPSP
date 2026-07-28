@@ -189,6 +189,7 @@ function openArchiveSpreadsheet_(year) {
     const spreadsheet = SpreadsheetApp.openById(file.getId());
     if (!parent || fileIsInsideFolder_(file, parent.getId())) {
       ensureArchiveStructure_(spreadsheet);
+      grantArchiveDomainViewAccess_(file);
       return spreadsheet;
     }
   }
@@ -202,7 +203,19 @@ function openArchiveSpreadsheet_(year) {
     } catch (error) {}
   }
   ensureArchiveStructure_(spreadsheet);
+  grantArchiveDomainViewAccess_(file);
   return spreadsheet;
+}
+
+function grantArchiveDomainViewAccess_(file) {
+  try {
+    file.setSharing(DriveApp.Access.DOMAIN, DriveApp.Permission.VIEW);
+  } catch (error) {
+    throw new Error(
+      'Spreadsheet arsip tidak dapat dibagikan untuk seluruh domain organisasi: ' +
+      text_(error && error.message ? error.message : error)
+    );
+  }
 }
 
 function ensureArchiveStructure_(spreadsheet) {

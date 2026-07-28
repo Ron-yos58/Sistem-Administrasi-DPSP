@@ -37,7 +37,7 @@ const context = {
 };
 vm.createContext(context);
 
-for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'DocumentService.gs', 'FinanceService.gs']) {
+for (const file of ['Config.gs', 'Utils.gs', 'DataService.gs', 'DocumentService.gs', 'FinanceService.gs', 'ArchiveService.gs']) {
   vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context, { filename: file });
 }
 const scriptFiles = [
@@ -189,6 +189,23 @@ test('schedule detail label supports a cross-day date range', () => {
 
 test('empty schedule detail does not leave dangling separators', () => {
   equal(context.formatScheduleItem_({}), '');
+});
+
+test('archive spreadsheet is viewable by the organization domain', () => {
+  const previousDriveApp = context.DriveApp;
+  const calls = [];
+  context.DriveApp = {
+    Access: { DOMAIN: 'DOMAIN' },
+    Permission: { VIEW: 'VIEW' }
+  };
+  try {
+    context.grantArchiveDomainViewAccess_({
+      setSharing: (access, permission) => calls.push([access, permission])
+    });
+    equal(calls, [['DOMAIN', 'VIEW']]);
+  } finally {
+    context.DriveApp = previousDriveApp;
+  }
 });
 
 test('finance artifact links use active files and direct downloads', () => {

@@ -88,7 +88,7 @@ Menu **Admin** hanya tersedia bagi pengguna dengan role `ADMIN`. Aksi yang terse
 4. **Arsipkan tahun lalu** untuk menyalin data terkait ke spreadsheet arsip khusus, memverifikasi salinan, lalu menghapus data sumber yang telah berhasil diarsipkan.
 5. **Buka Spreadsheet Utama** untuk membuka basis data aplikasi.
 
-Arsip tahunan memerlukan konfirmasi `ARCHIVE-YYYY`, dengan `YYYY` sebagai tahun yang akan diarsipkan. Fitur migrasi data lama tidak disediakan oleh aplikasi ini.
+Arsip tahunan memerlukan konfirmasi `ARCHIVE-YYYY`, dengan `YYYY` sebagai tahun yang akan diarsipkan. Spreadsheet arsip dibagikan sebagai **viewer** untuk seluruh pengguna domain organisasi, termasuk `@unpar.ac.id`. Fitur migrasi data lama tidak disediakan oleh aplikasi ini.
 
 ---
 
